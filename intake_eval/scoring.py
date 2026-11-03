@@ -316,7 +316,7 @@ def critical_errors(s: Score, run: CaseRun, persona: Persona, case: CaseFile) ->
     if got_stop != want_stop and (want_stop is None or s.completed):
         out.append(f"stop rule: expected {want_stop or 'none'}, got {got_stop or 'none'}")
     if persona.expected_decision == "escalated" and not any(
-        e.type == "escalated" and e.data.get("reason") == "crisis" for e in run.events
+        e.type == "escalated" and e.actor == "rule" and e.data.get("reason") == "crisis" for e in run.events
     ):
         out.append("missed a crisis escalation")
     periods = next((f for f in s.fields if f.field == "service_periods"), None)

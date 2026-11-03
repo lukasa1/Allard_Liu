@@ -112,10 +112,17 @@ pages it read this turn.
   "date of this letter"; a service period as one match, the DD-214's branch field and dates or one
   narrative "{branch} from {start} to {end}"; the whole MOS, or one whole entry of a MOS list, and
   representative name; every condition a decision decides), with dates, percentages and condition
-  names normalized. A coverage check in `verify` catches omissions: every DD-214 needs a service
-  period, every rating decision a decision and every notification letter a letter fact recorded
-  from it; the combined rating and the rated conditions must cite the newest rating decision; and
-  no fact may be left unlinked. A line or coverage item that fails goes back to the model, or is
+  names normalized; a service period's component must show in the DD-214's branch field (or match
+  one a narrative names). A coverage check in `verify` catches omissions: every DD-214 needs a
+  service period, a discharge (when it shows one) and a MOS (when its specialty is filled in),
+  every rating decision a decision, every notification letter a letter fact and every 21-22 or
+  21-22a (the firm's own too) a representative fact recorded from it;
+  every claim form needs a decision listing it as filed or a pending filing; every condition on the
+  newest code sheet's SERVICE CONNECTED list needs a rated condition; the combined rating and the
+  rated conditions must cite the newest rating decision (or its letter); and no fact may be left
+  unlinked. No persona has a pending filing, so the claim-form check is tested only by removing
+  a decision's filing date; it can't tell a pending filing from a decided claim whose decision
+  doesn't list its form. A line or coverage item that fails goes back to the model, or is
   escalated as `[UNCERTAIN]` (a staff task, closed again once a later verify passes). The stored face note shows each line's pages (`[p. 2, 5]`, or `[firm record]`).
   Prefill is refused until `verify` has passed or every failing line is escalated as uncertain,
   and it writes only facts whose cited page holds them. When the C-file conflicts with an answer,
@@ -128,9 +135,10 @@ pages it read this turn.
 - **SSNs never reach a context or a trace:** the simulated VBMS strips them at ingest, and trace
   lines are scrubbed again before they are written.
 - **Support changes nothing:** it has no tool that moves a stage, files or signs.
-- **Failures park the case for a person:** a crashed or failed turn, or claims prep running out of
-  continuations, moves the case to `needs_human` with a staff task listing any undecided support
-  flags. A support crash instead sends the canned reply and a staff task; the case stays where it is.
+- **Failures park the case for a person:** a crashed turn, a failed orchestrator or claims-prep turn,
+  or claims prep running out of continuations moves the case to `needs_human` with a staff task
+  listing any undecided support flags. A failed intake or support turn sends the canned "please
+  resend" reply instead; a support crash sends it with a staff task. Either way the case stays where it is.
 - **The handoff goal is an instruction:** the orchestrator writes it and may paraphrase flag text; it
   reaches the sub-agent unwrapped.
 
@@ -187,12 +195,15 @@ Candidate deviations from the build, for the lead to confirm:
   case a rule handed to a person; `staff_task` is allowed after the wake's handoff.
 - **D25:** `run_intake` at stage 4 after a new-condition flag also reopens `claim_conditions`, so pass
   2 can't end before the condition is recorded.
-- **D23:** `verify` also checks coverage (no DD-214, rating decision or letter left out; the
-  combined rating and rated conditions from the newest rating decision; no unlinked fact). Its
+- **D23:** `verify` also checks coverage (no DD-214, rating decision or letter left out, nor a
+  DD-214's discharge or MOS, nor a claim or appointment form; every service-connected condition on the newest
+  code sheet; the combined rating and rated conditions from the newest rating decision or its
+  letter; no unlinked fact). What it can't see is listed under Citations above. Its
   items are numbered after the face-note lines and, like a line, can be escalated as uncertain.
 - **D19:** kb_search's answer accuracy is not evaluated yet: the support eval checks that a kb
   answer cites its source, not that it is right.
-- **D22:** veteran status, service periods, VA pay or rating left unknown in pass 1 stop the case to
+- **D22:** veteran status, service periods, VA pay, rating or prior representation left unknown in pass 1
+  (unknown prior representation sets no fee) stop the case to
   `needs_human` (`screen_unresolved`). Stop-rule fields (is_veteran, each period's discharge,
   receiving_va_pay, rating_pct, prior_attorney) take a structured value from the model (a JSON bool,
   a discharge code, an integer) while the veteran's words are kept as the raw answer; code reads free
@@ -201,10 +212,15 @@ Candidate deviations from the build, for the lead to confirm:
   creates a staff task. A qualified "honorable" ("less than", "not") reads as other than honorable.
   A secure-form or `update_draft` change re-renders stale drafts, and signing refuses a draft whose
   vault fingerprint changed.
+  Service periods can't be empty for a veteran; when the veteran's own words are plain they must
+  match the model's value; a vault change (secure form or `update_draft`) after signing, or a fee
+  change after the fee agreement is signed, creates a staff task; an answer hidden by a later answer
+  is dropped from the record.
 - **D20:** the only move back is from stage 5 to stage 4 (reopening intake for a new condition).
   Moves back to earlier stages are future work (F9).
-- **D21:** if a crisis or a person request arrives while a turn is running, that turn's model reply
-  is held back (logged as `reply_held`). The rule message is the only one the veteran gets.
+- **D21:** after a crisis or a person request, the model reply of every turn that was running or
+  queued before it is held back (logged as `reply_held`); the rule message is the last thing the
+  veteran gets.
 - Support returns no typed result: its flags and escalations are events.
 - The eval headline counts structured questions settled from chat, not questions asked (the
   model's wording can't be counted); citation precision uses `verify`'s own page check.
@@ -262,7 +278,7 @@ uv run intake eval --name full --max-cost 20                    # 17 personas x 
 uv run intake support-eval --max-cost 1
 ```
 
-Each run prints an estimated number of model calls first (about 270 per case; about 5 per
+Each run prints an estimated number of model calls first (about 270 per case; about 4 per
 support message), and **`--max-cost`** (USD, from the traces: agents, kb_search and the simulated
 veteran) stops the run once it is passed. It is checked between steps (a case step, or a support
 message), so the step that crosses it finishes first. A model slug with no price in

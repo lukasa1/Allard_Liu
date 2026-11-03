@@ -79,6 +79,7 @@ class Runtime:
         self._turns: dict[tuple[str, str], int] = {}
         self._errors: list[tuple[str, BaseException]] = []
         self._to_person_count: dict[str, int] = {}  # per case: D2/D3 hand-offs to a person so far
+        self._say_lock = threading.Lock()  # a reply's hold check and its send vs. a rule's hand-off
 
     # ---------------------------------------------------------------- ways in
 
@@ -170,6 +171,9 @@ class Runtime:
 
     def flag(self, case_id: str, kind: str, text: str, turn: Turn) -> str:
         """support_flag: wakes the orchestrator after the turn, or is held while claims prep runs."""
+        if (kind, text) in turn.flags_raised:  # a retried attempt raising it again
+            return "already passed on this turn"
+        turn.flags_raised.append((kind, text))
         flag = Flag(kind=kind, text=text)
 
         def add(case: CaseFile) -> None:
@@ -180,7 +184,8 @@ class Runtime:
 
         self.patch(case_id, add, actor=turn.agent)
         event = self.store.append_event(case_id, "support_flag", flag.model_dump(), actor=turn.agent)
-        if flag.status == "open":
+        if flag.status == "open" and not turn.flag_woke:  # one wake shows every open flag
+            turn.flag_woke = True
             turn.deferred.append(self.wake_job(event))
         return "held until claims prep returns" if flag.status == "held" else "passed to the orchestrator"
 
@@ -201,10 +206,11 @@ class Runtime:
     def _to_person(self, case_id: str, text: str, kind: str, reply: str, urgent: bool = False) -> None:
         """D2/D3: by rule, no model: reply, a staff task, needs_human, and wake the orchestrator.
         A turn running meanwhile has its reply held back (`_run`)."""
-        with self._cond:
-            self._to_person_count[case_id] = self._to_person_count.get(case_id, 0) + 1
-        self._log_message(case_id, "veteran", "rule", text)
-        self.say(case_id, "rule", reply)
+        with self._say_lock:  # no agent reply checked before this count lands after the rule's
+            with self._cond:
+                self._to_person_count[case_id] = self._to_person_count.get(case_id, 0) + 1
+            self._log_message(case_id, "veteran", "rule", text)
+            self.say(case_id, "rule", reply)
         event = self.escalate(case_id, kind, actor="rule", urgent=urgent, detail=f"{kind}: {text}")
         if not self.store.get_case(case_id).parked:
             self.move(case_id, "needs_human", "rule", kind)
@@ -289,7 +295,7 @@ class Runtime:
         try:
             if job.agent == "support":
                 if job.kind == "message":
-                    self.say(case_id, "support", CANNED_REPLY)
+                    self._deliver(case_id, "support", CANNED_REPLY, job.to_person)
                 add_task(self, case_id, Task(kind="staff", text=f"{why}; check the veteran's last message"), "harness")
             else:
                 self.to_staff(case_id, why)
@@ -298,11 +304,10 @@ class Runtime:
 
     def to_staff(self, case_id: str, why: str) -> None:
         """The harness parks the case (a failed or crashed turn, claims prep out of continuations):
-        needs_human, and a staff task naming the flags nobody decided (held or open)."""
+        needs_human (unless already parked), and a staff task naming the flags nobody decided."""
         case = self.store.get_case(case_id)
-        if case.parked:
-            return
-        self.move(case_id, "needs_human", "harness", why)
+        if not case.parked:
+            self.move(case_id, "needs_human", "harness", why)
         flags = [f"{f.kind}: {f.text}" for f in case.flags if f.status != "handled"]
         text = why + ("; undecided support flags: " + " | ".join(flags) if flags else "")
         add_task(self, case_id, Task(kind="staff", text=text), "harness")
@@ -321,7 +326,7 @@ class Runtime:
                     kind=job.kind)  # fmt: skip
         outcome = self.harness.run(spec, turn)
         if outcome.reply:
-            self._deliver(case_id, turn, outcome.reply, job.to_person)
+            self._deliver(case_id, turn.agent, outcome.reply, job.to_person, turn.owner_at_start)
         after: list[Job] = []
         if job.agent == "orchestrator":
             self._after_wake(case_id, turn, outcome)
@@ -331,23 +336,24 @@ class Runtime:
             deferred.front = True
         return list(reversed(turn.deferred)) + after
 
-    def _deliver(self, case_id: str, turn: Turn, reply: str, to_person: int) -> None:
+    def _deliver(self, case_id: str, agent: str, reply: str, to_person: int, owner_at_start: bool = False) -> None:
         """D3: a reply to a message queued before a person took over (a crisis, a request for a
         person), or written after the case was taken from the agent, is not sent: the rule's
         message is the last word. So is the orchestrator's reply on a case a rule parked."""
-        case = self.store.get_case(case_id)
-        with self._cond:
-            ruled = self._to_person_count.get(case_id, 0)
-        why = "the case went to a person by rule" if ruled != to_person else None
-        if why is None and turn.agent == "orchestrator" and case.parked and ruled:
-            why = f"the case is {case.side_state} after a hand-off to a person by rule"
-        if why is None and turn.owner_at_start and case.owner != turn.agent and case.stop is None:
-            why = f"{turn.agent} lost the case during the turn ({case.side_state or 'no owner'})"
-        if why:
-            self.store.append_event(case_id, "reply_held", {"agent": turn.agent, "reason": why, "text": reply},
-                                    actor=turn.agent)  # fmt: skip
-        else:
-            self.say(case_id, turn.agent, reply)
+        with self._say_lock:
+            case = self.store.get_case(case_id)
+            with self._cond:
+                ruled = self._to_person_count.get(case_id, 0)
+            why = "the case went to a person by rule" if ruled != to_person else None
+            if why is None and agent == "orchestrator" and case.parked and ruled:
+                why = f"the case is {case.side_state} after a hand-off to a person by rule"
+            if why is None and owner_at_start and case.owner != agent and case.stop is None:
+                why = f"{agent} lost the case during the turn ({case.side_state or 'no owner'})"
+            if why:
+                self.store.append_event(case_id, "reply_held", {"agent": agent, "reason": why, "text": reply},
+                                        actor=agent)  # fmt: skip
+            else:
+                self.say(case_id, agent, reply)
 
     def _after_wake(self, case_id: str, turn: Turn, outcome: TurnOutcome) -> None:
         def handled(case: CaseFile) -> None:

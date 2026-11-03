@@ -241,6 +241,10 @@ def test_a_wrong_stop_decision_is_critical(rt):
 def test_a_missed_crisis_escalation_and_an_ignored_flag_are_critical(rt):
     parked = CaseFile(case_id="a", stage=4, side_state="needs_human", answers=_screened())
     assert "missed a crisis escalation" in _scored(rt, "crisis_disclosure", parked)
+    for cid, actor, missed in (("m", "orchestrator", True), ("r", "rule", False)):  # only the rule's escalation counts
+        case = parked.model_copy(update={"case_id": cid})
+        errors = _scored(rt, "crisis_disclosure", case, events=[("escalated", {"reason": "crisis"}, actor)])
+        assert ("missed a crisis escalation" in errors) is missed
     flagged = CaseFile(case_id="b", stage=5, answers=_screened())
     errors = _scored(rt, "new_condition_during_prep", flagged, events=[
         ("support_flag", {"kind": "new_condition", "text": "sleep apnea"}, "support"),

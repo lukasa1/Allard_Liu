@@ -24,8 +24,8 @@ from pydantic import BaseModel
 
 from agent.casefile import CaseFile, StopRule
 from agent.intake import rules
-from agent.intake.parsing import DISCHARGES, HEDGE, coerce
-from agent.intake.questions import QuestionBank, is_visible
+from agent.intake.parsing import DISCHARGES, HEDGE, coerce, named_discharges
+from agent.intake.questions import QuestionBank, is_visible, parse_show_if
 from agent.intake.schema import NON_HONORABLE, IntakeRecord
 
 BANK = QuestionBank.load()
@@ -46,9 +46,11 @@ VAULT_FIELD = {
 STRICT = {"is_veteran", "service_periods", "other_service_periods", "receiving_va_pay", "rating_pct", "prior_attorney"}
 _HINT = {"bool": "true or false", "int": "an integer 0-100",
          "service_periods": f"a list of periods, each discharge one of {', '.join(DISCHARGES)} or null"}  # fmt: skip
-# Screening fields the firm's stop rules (A1) can't do without: unknown sends the case to a person.
+# Screening fields the firm's stop rules (A1) and the fee can't do without: unknown in pass 1 sends
+# the case to a person.
 UNRESOLVED = {"is_veteran": "whether the person served", "service_periods": "the service periods",
-              "receiving_va_pay": "whether they get VA disability pay", "rating_pct": "their VA rating"}  # fmt: skip
+              "receiving_va_pay": "whether they get VA disability pay", "rating_pct": "their VA rating",
+              "prior_attorney": "whether a lawyer helped before (the fee depends on it)"}  # fmt: skip
 _VSO = re.compile(r"\b(vso|dav|vfw|american legion|amvets|service officer|veterans service)\b", re.IGNORECASE)
 _LAWYER = re.compile(r"\b(attorney|lawyer|law firm|accredited agent|claims agent)\b", re.IGNORECASE)
 
@@ -68,11 +70,31 @@ class ChecklistItem(BaseModel):
 
 
 def record(case: CaseFile) -> IntakeRecord:
-    """The answers as an IntakeRecord (what visibility, the stop rules and the fee read)."""
+    """The answers as an IntakeRecord (what visibility, the stop rules and the fee read). An answer
+    whose question a later answer hid (rating_pct after receiving_va_pay became false) is dropped."""
+    hidden: set[str] = set()
+    while True:
+        rec = _record(case, hidden)
+        stale = {q.id for q in BANK.structured if q.id in case.answers and q.id not in hidden and _hidden(q, rec)}
+        if not stale:
+            return rec
+        hidden |= stale
+
+
+def _hidden(q, rec: IntakeRecord) -> bool:
+    """Not visible, and every field its show_if reads is answered (an unanswered gate, e.g. a
+    C-file prefill before screening asked it, hides nothing). A probe that writes its own gate
+    (prior_claim_probe sets filed_before) never hides itself."""
+    gates = [f for f, _, _ in parse_show_if(q.show_if)] if q.show_if else []
+    return (q.field not in gates and not is_visible(q, rec)
+            and all(getattr(rec, f) not in (None, [], "") for f in gates))  # fmt: skip
+
+
+def _record(case: CaseFile, hidden: set[str]) -> IntakeRecord:
     data: dict[str, Any] = {}
     for q in BANK.structured:
         ans = case.answers.get(q.id)
-        if ans is None or ans.unknown or ans.value is None:
+        if q.id in hidden or ans is None or ans.unknown or ans.value is None:
             continue
         if q.type == "service_periods_append":
             data[q.field] = [*data.get(q.field, []), *ans.value]
@@ -176,8 +198,8 @@ def refresh(case: CaseFile) -> None:
 
 
 def _unresolved(case: CaseFile) -> StopRule | None:
-    """Pass 1 (before anything is filed): is_veteran or service_periods marked unknown means the
-    stop rules can't be decided, so a person on the team follows up."""
+    """Pass 1 (before anything is filed): an UNRESOLVED field marked unknown means the stop rules
+    or the fee can't be decided, so a person on the team follows up."""
     gaps = [label for qid, label in UNRESOLVED.items() if (a := case.answers.get(qid)) and a.unknown]
     if not gaps or case.stage > 2:
         return None
@@ -187,8 +209,9 @@ def _unresolved(case: CaseFile) -> StopRule | None:
 
 def fee_pct(case: CaseFile) -> int | None:
     """The fee % for the fee agreement (rules.fee_pct, a firm-policy placeholder), or None while
-    prior representation is unknown."""
-    return rules.fee_pct(record(case)) if "prior_attorney" in case.answers else None
+    prior representation is unanswered or unknown (then a person decides: UNRESOLVED)."""
+    ans = case.answers.get("prior_attorney")
+    return rules.fee_pct(record(case)) if ans and not ans.unknown else None
 
 
 def question_type(key: str) -> tuple[str, tuple[str, ...]]:
@@ -216,23 +239,58 @@ def parse(key: str, text: str, value: Any = None) -> Any:
 
 
 def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
-    if hedge := HEDGE.search(text):
-        raise StrictError(f"the veteran sounds unsure ({hedge.group(0)!r}), and {key} decides whether the "
+    if hedge := _answer_hedge(text):
+        raise StrictError(f"the veteran sounds unsure ({hedge!r}), and {key} decides whether the "
                           "firm can take the case: ask again to confirm. Mark it unknown only if they say "
                           "they don't know.")  # fmt: skip
     if key == "prior_attorney" and value is None and _VSO.search(text) and not _LAWYER.search(text):
         return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
     try:
         out = coerce(qtype, text if value is None else value, (), strict=True)
-        if value is not None and qtype == "bool" and (said := _plain_or_none(qtype, text)) is not None and said != out:
-            raise ValueError(f"the veteran said {text.strip()!r} but value is {value!r}")
-        return out
+        if value is not None:
+            _cross_check(qtype, text, value, out)
     except ValueError as err:
         raise StrictError(f"could not read {key}: {err}. {key} is a stop-rule field, so code reads only "
                           "plain answers. Pass the structured value you understood in `value` "
                           f"({_HINT[qtype.removesuffix('_append')]}) and keep the veteran's words in `a`. "
                           "If their answer is really unclear, ask again; don't mark it unknown unless "
                           "they say they don't know.") from err  # fmt: skip
+    if key == "service_periods" and not out:
+        raise StrictError("service_periods needs at least one period: someone who served has one (a short "
+                          "stint, even one ended in basic training, is a period, often 'uncharacterized'). "
+                          "If they never served, record_answer is_veteran false again; if they can't say, "
+                          "mark service_periods unknown (a person on the team follows up).")  # fmt: skip
+    return out
+
+
+def _cross_check(qtype: str, text: str, value: Any, out: Any) -> None:
+    """When the veteran's words are plain, the model's value must say the same (a yes/no, the
+    rating, the discharges named): "OTH" in `a` with value honorable is refused."""
+    if qtype in ("bool", "int"):
+        said = _plain_or_none(qtype, text)
+        if said is not None and said != out:
+            raise ValueError(f"the veteran said {text.strip()!r} but value is {value!r}")
+    elif (said := named_discharges(text)) and said != {p.discharge for p in out if p.discharge}:
+        raise ValueError(f"the veteran said {text.strip()!r} (discharge {', '.join(sorted(said))}) but value has "
+                         f"{[p.discharge for p in out]}")  # fmt: skip
+
+
+_SENTENCE = re.compile(r"[.!?;\n]+")
+# A later sentence is about the answer when it is only a hedge ("Probably.") or names service.
+_TOPIC = re.compile(r"\d|\b(army|navy|marines?|air force|coast guard|space force|guard|reserves?|served|service|"
+                    r"discharg\w*|honou?r\w*|dishonou?r\w*|general|oth|conduct|rating|percent|lawyer|attorney|"
+                    r"agent|firm|vso|dav|vfw)\b", re.IGNORECASE)  # fmt: skip
+_BARE = re.compile(r"\b(so|yes|yeah|no|it|that|though|i|was|is|um|well|but|not)\b|\W", re.IGNORECASE)
+
+
+def _answer_hedge(text: str) -> str | None:
+    """A hedge on the answer itself: in the first sentence, in a later bare hedge ("Probably."), or
+    in a later sentence about service. "Yes. My knees probably got wrecked there." is a plain yes."""
+    for i, sentence in enumerate(s for s in _SENTENCE.split(text) if s.strip()):
+        about_it = i == 0 or _TOPIC.search(sentence) or not _BARE.sub("", HEDGE.sub("", sentence)).strip()
+        if about_it and (hedge := HEDGE.search(sentence)):
+            return hedge.group(0)
+    return None
 
 
 def _plain_or_none(qtype: str, text: str) -> Any:

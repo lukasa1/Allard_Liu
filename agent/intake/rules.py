@@ -43,8 +43,9 @@ RULES: dict[str, Rule] = {
         Rule(
             "screen_unresolved",
             "firm_policy",
-            "The veteran couldn't say whether they served, or their service periods: the stop "
-            "rules above can't be decided, so a person on the team follows up (plan A1).",
+            "The veteran couldn't say whether they served, their service periods, their VA pay or "
+            "rating, or whether a lawyer helped before: the stop rules above or the fee can't be "
+            "decided, so a person on the team follows up (plan A1).",
         ),
         Rule(
             "fee_pct",

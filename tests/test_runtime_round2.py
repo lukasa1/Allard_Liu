@@ -6,7 +6,7 @@ import re
 import threading
 import time
 
-from fake_lm import call, final, pause
+from fake_lm import bad, call, final, pause
 from intake_fixtures import prefill_pass2
 from pydantic import BaseModel
 
@@ -203,3 +203,63 @@ def test_an_event_queued_for_the_orchestrator_goes_to_intake_once_intake_owns_th
     assert not rt.busy(cid)
     assert not any("staff_note" in _incoming(p) for p in lm.prompts("orchestrator"))
     assert "[event]" in _incoming(lm.prompts("intake")[-1]) and "staff_note" in _incoming(lm.prompts("intake")[-1])
+
+
+# ------------------------------------------------------------------ round 3 (Reviewer A minors)
+
+def test_a_support_crash_after_a_crisis_holds_the_canned_reply(rt, lm):
+    gate = threading.Event()
+
+    def boom(turn):
+        gate.wait(5)
+        raise RuntimeError("tools broke")
+
+    rt.agents["support"] = dataclasses.replace(rt.agents["support"], tools=boom)
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED)).case_id
+    lm.turn("orchestrator", final())  # the crisis's escalated wake
+    rt.message(cid, "When will I hear back?")
+    _until(lambda: "support" in rt.running(cid))
+    rt.message(cid, "I want to kill myself")
+    gate.set()
+    try:
+        rt.wait_until_idle(cid)
+    except RuntimeError:
+        pass
+    assert _messages(rt, cid)[-1] == ("rule", CRISIS_MESSAGE)
+    assert [e.data["text"] for e in _types(rt, cid, "reply_held")] == [CANNED_REPLY]
+
+
+def test_a_crash_on_a_parked_case_still_leaves_a_staff_task(rt, lm):
+    def boom(turn):
+        raise RuntimeError("tools broke")
+
+    rt.agents["orchestrator"] = dataclasses.replace(rt.agents["orchestrator"], tools=boom)
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED, side_state="needs_human")).case_id
+    rt._enqueue(cid, Job("orchestrator", "[wake] staff_note", "wake"))
+    try:
+        rt.wait_until_idle(cid)
+    except RuntimeError:
+        pass
+    assert any("orchestrator turn crashed" in t.text for t in rt.store.get_case(cid).tasks)
+
+
+def test_two_flags_in_one_support_turn_wake_the_orchestrator_once(rt, lm):
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED)).case_id
+    lm.turn("support", call("flag_orchestrator", kind="contact_change", text="new phone"),
+            call("flag_orchestrator", kind="complaint", text="slow"), final(reply="Passed on."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, "My phone changed and you're slow")
+    rt.wait_until_idle()
+    assert len(lm.prompts("orchestrator")) == 1 and not lm.unused()
+    assert [f.kind for f in rt.store.get_case(cid).flags] == ["contact_change", "complaint"]
+
+
+def test_a_retried_support_attempt_does_not_duplicate_its_flag(rt, lm):
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED)).case_id
+    lm.turn("support", call("flag_orchestrator", kind="complaint", text="slow"), bad(),
+            call("flag_orchestrator", kind="complaint", text="slow"), final(reply="Passed on."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, "You're slow")
+    rt.wait_until_idle()
+    assert [f.kind for f in rt.store.get_case(cid).flags] == ["complaint"]
+    assert len(_types(rt, cid, "support_flag")) == 1

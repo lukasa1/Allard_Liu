@@ -75,6 +75,8 @@ class Turn:
     handoff: str | None = None  # orchestrator: the one handoff of this wake
     acted: bool = False  # orchestrator: a handoff, move or staff task went through this wake
     flags_shown: list[int] = field(default_factory=list)  # orchestrator: flags its context listed
+    flags_raised: list[tuple[str, str]] = field(default_factory=list)  # support: (kind, text) flagged
+    flag_woke: bool = False  # support: a flag of this turn already queued the orchestrator's wake
 
     @property
     def case(self) -> CaseFile:

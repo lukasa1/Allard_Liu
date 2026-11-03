@@ -60,6 +60,33 @@ def sign_card_open(rt, case_id: str, form: str) -> bool:
     return bool(cards and live) and cards[-1]["type"] == "sign_button" and cards[-1]["document_id"] == live.id
 
 
+def signed_change_task(svc: PoaService, before: dict, keys: list[str], how: str) -> Task | None:
+    """A staff task when a vault change (`keys`, vs. the vault `before` it) touches a document
+    already signed: a signed document never changes, so a person decides whether it is re-signed.
+    Shared by the secure form and update_draft."""
+    after = svc.vault.veteran()
+    changed = [k for k in keys if _dotted(before, k) not in (None, "", _dotted(after, k))]
+    signed = [f for f in FORM_KEYS if changed and (d := svc.live(f)) and d.status != "draft"]
+    if not signed:
+        return None
+    return Task(kind="staff", text=f"The veteran changed {', '.join(changed)} {how} after signing the "
+                f"{' and '.join(signed)}: the signed version still has the old values. Check whether it "
+                "needs a new signature.")  # fmt: skip
+
+
+def fee_change_task(svc: PoaService, case: CaseFile) -> Task | None:
+    """A staff task when the fee the rules give now differs from the signed fee agreement's (prior
+    representation re-recorded after signing). Added once per new fee."""
+    doc = svc.live("fee_agreement")
+    signed, pct = (doc.terms.get("fee_pct") if doc and doc.status != "draft" else None), fee_pct(case)
+    if signed is None or pct == signed:
+        return None
+    text = (f"Fee mismatch: the signed fee agreement says {signed}%, but the firm's rules now give "
+            f"{'no fee yet (prior representation unknown)' if pct is None else f'{pct}%'} after prior "
+            "representation was re-recorded. Decide whether a new fee agreement is needed.")  # fmt: skip
+    return None if any(t.text == text for t in case.tasks) else Task(kind="staff", text=text)
+
+
 def submit_secure_form(rt, case_id: str, request_id: str, values: dict[str, str]) -> dict[str, str]:
     """The veteran submitted a secure form. Values go to the vault; the case file gets only the
     masked contact fields (source "secure form"); live drafts are re-rendered. A value changed after
@@ -69,18 +96,14 @@ def submit_secure_form(rt, case_id: str, request_id: str, values: dict[str, str]
     before = svc.vault.veteran()
     errors = svc.complete_capture_request(request_id, values)
     stored = sorted(k for k in values if k in svc.vault.masked() and k not in errors)
-    after = svc.vault.veteran()
-    changed = [k for k in stored if _dotted(before, k) not in (None, "", _dotted(after, k))]
     refreshed = refresh_drafts(rt, case_id, svc)
-    signed = [f for f in FORM_KEYS if changed and (d := svc.live(f)) and d.status != "draft"]
+    task = signed_change_task(svc, before, stored, "on a secure form")
     answers = masked_answers(svc, stored, "secure form")
 
     def apply(case: CaseFile) -> None:
         answers(case)
-        if signed:  # a signed document never changes: a person decides whether it is re-signed
-            case.tasks.append(Task(kind="staff", text=f"The veteran changed {', '.join(changed)} on a secure "
-                                   f"form after signing the {' and '.join(signed)}: the signed version still "
-                                   "has the old values. Check whether it needs a new signature."))  # fmt: skip
+        if task:
+            case.tasks.append(task)
 
     rt.event(case_id, "secure_form_submitted", {"request_id": request_id, "stored": stored,
              "rejected": sorted(errors), "drafts_refreshed": refreshed}, actor="veteran",

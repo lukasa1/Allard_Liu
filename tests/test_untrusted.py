@@ -50,7 +50,8 @@ def test_an_injected_message_is_wrapped_and_the_filing_guard_still_refuses(rt, l
 def test_c_file_pages_search_hits_and_kb_answers_come_back_wrapped(rt):
     cid = case_at_stage_3(rt, "baseline_clean")
     turn = Turn(rt, cid, "claims_prep", "", 1)
-    first = pull_cfile(turn)["documents"][0]["doc_id"]
+    listing, first = pull_cfile(turn)["documents"], "D1"
+    assert listing.startswith('<untrusted source="C-file index"') and '"doc_id": "D1"' in listing
     page = read_pages(turn, ReadArgs(doc=first))
     assert page.startswith(f'<untrusted source="C-file {first} (') and page.endswith("</untrusted>")
     assert search(turn, SearchArgs(query="honorable"))["hits"].startswith('<untrusted source="C-file search"')

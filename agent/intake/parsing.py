@@ -88,11 +88,12 @@ _DISCHARGE_WORDS = re.compile(
 )
 
 
-def _read_discharge(text: str) -> tuple[str | None, str]:
-    """(the discharge code named in `text` or None, the text left after the discharge phrases)."""
-    low = re.sub(r"\s+", " ", re.sub(r"[-_/()]", " ", text.lower())).strip()
+def _scan_discharges(text: str) -> tuple[set[str] | None, str]:
+    """(the discharge codes named in `text`, or None when one is negated; the text left after the
+    discharge phrases). British spellings ("honourable") read as American."""
+    low = re.sub(r"\s+", " ", re.sub(r"[-_/()]", " ", text.lower().replace("honour", "honor"))).strip()
     if low in DISCHARGES:
-        return low, ""
+        return {low}, ""
     found = set()
     for pattern, code in _DISCHARGE_RES:
         for m in re.finditer(pattern, low):
@@ -100,9 +101,22 @@ def _read_discharge(text: str) -> tuple[str | None, str]:
                 return None, low  # "not dishonorable", "never got a general": unclear, ask again
             found.add(code)
         low = re.sub(pattern, " ", low)
-    if len(found) != 1 or _UNSURE.search(text):
+    return found, low
+
+
+def _read_discharge(text: str) -> tuple[str | None, str]:
+    """(the discharge code named in `text` or None, the text left after the discharge phrases)."""
+    found, low = _scan_discharges(text)
+    if not found or len(found) != 1 or _UNSURE.search(text):
         return None, low
     return found.pop(), low
+
+
+def named_discharges(text: str) -> set[str] | None:
+    """The discharge codes a plain answer names ({} when none); None when it isn't plain (a
+    negation, a hedge or a qualifier), so nothing can be cross-checked against it."""
+    found, rest = _scan_discharges(text)
+    return None if found is None or HEDGE.search(text) or _QUALIFIER.search(rest) else found
 
 
 def parse_discharge(text: str) -> str | None:

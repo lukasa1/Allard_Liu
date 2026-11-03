@@ -17,9 +17,12 @@ must match as one (the DD-214's branch field and its entry and separation dates,
 "{branch} from {start} to {end}"), the MOS and a representative's name must be the whole field
 value, and a decision must list every condition the page decides.
 
-`coverage` catches what a line check can't, omissions: every DD-214 needs a service period,
-every rating decision a decision and every letter a letter fact recorded from it; the combined
-rating and the rated conditions come from the newest rating decision; no fact is left unlinked.
+`coverage` catches what a line check can't, omissions: every DD-214 needs a service period, a
+discharge (if it shows one) and a MOS (if its specialty is filled in), every rating decision a
+decision, every letter a letter fact and every appointment form a representative fact recorded
+from it; every claim form is a decision's filing or a pending filing; every condition on the
+newest code sheet's SERVICE CONNECTED list has a rated_condition; the combined rating and the
+rated conditions cite the newest rating decision (or its letter); no fact is left unlinked.
 Its items come back as lines numbered after the note's, like any other failure.
 """
 
@@ -141,13 +144,25 @@ def _month_re(ym: str) -> str:
                             for f in month_forms(ym)) + ")"  # fmt: skip
 
 
-def _period_gaps(page: str, branch: str, start: str, end: str | None) -> list[str]:
-    """A service period as one: on a DD-214 (one period a form) its branch field and its labeled
-    dates; anywhere else one "{branch} from {start} to {end}", so a narrative listing two periods
-    can't lend one period's dates to the other, or merge them."""
+_COMPONENT = r"active(?: duty)?|reserves?|(?:national )?guard"
+
+
+def _component(text: str | None) -> str | None:
+    m = re.search(rf"\b(?:{_COMPONENT})\b", text or "")
+    return None if m is None else next(c for c in ("active", "reserve", "guard") if c in m.group())
+
+
+def _period_gaps(page: str, branch: str, component: str, start: str, end: str | None) -> list[str]:
+    """A service period as one: on a DD-214 (one period a form) its branch field, which must show
+    the component too, and its labeled dates; anywhere else one "{branch} from {start} to {end}",
+    so a narrative listing two periods can't lend one period's dates to the other, or merge them
+    (a component it names, "Navy Reserve from ...", must be the fact's)."""
     b = re.escape(branch.lower())
     if "entered active duty" in page:
-        out = [] if re.search(rf"\bbranch[^:]{{0,5}}:\s*(?:u\.?s\.?\s+)?{b}\b", page) else [f"{branch} as the branch"]
+        field = re.search(rf"\bbranch[^:]{{0,5}}:\s*(?:u\.?s\.?\s+)?{b}\b(.*?){_NEXT}", page)
+        out = [] if field else [f"{branch} as the branch"]
+        if field and _component(field.group(1)) != component:
+            out.append(f"{component} as the component in the branch field")
         if not _has_month(page, start, _START):
             out.append(f"{start} as the entry date")
         if end and not _has_month(page, end, _END):
@@ -157,8 +172,9 @@ def _period_gaps(page: str, branch: str, start: str, end: str | None) -> list[st
         return out
     to = r"\s+(?:to|through|-)\s+"
     tail = f"{to}{_month_re(end)}" if end else rf"(?!{to})"
-    if re.search(rf"(?<![a-z]){b}\s+from\s+{_month_re(start)}{tail}", page):
-        return []
+    m = re.search(rf"(?<![a-z]){b}(?:\s+({_COMPONENT}))?\s+from\s+{_month_re(start)}{tail}", page)
+    if m:
+        return [] if m.group(1) is None or _component(m.group(1)) == component else [f"{component} as the component"]
     return [f"{branch} from {start} to {end or '(no end)'} as one period"]
 
 
@@ -177,7 +193,7 @@ def missing(f: Fact, page_text: str) -> list[str]:
     if f.kind == "dob":
         need(_has_date(page, f.dob, _DOB), f"{f.dob} as the date of birth")
     elif f.kind == "service_period":
-        out += _period_gaps(page, f.branch, f.start, f.end)
+        out += _period_gaps(page, f.branch, f.component, f.start, f.end)
     elif f.kind == "discharge":
         need(f.character in discharges(page), f"discharge {f.character}")
         need(_has_month(page, f.period_start, _START), f"the period starting {f.period_start}")
@@ -228,7 +244,29 @@ def missing(f: Fact, page_text: str) -> list[str]:
     return out
 
 
-_NEEDS = {"dd214": "service_period", "rating_decision": "decision", "notification_letter": "notification_letter"}
+_NEEDS = {"dd214": "service_period", "rating_decision": "decision", "notification_letter": "notification_letter",
+          "poa_form": "prior_representative"}  # the firm's own 21-22a too
+_SPECIALTY = re.compile(r"specialty[^:]{0,20}:\s*(?!\d{1,2}[a-z]?\.\s)[a-z0-9]")
+_SC_LIST = re.compile(r"(?<!not )\bservice connected:\s*(.*?)(?=\s+(?:not service connected|combined)\b|$)")
+
+
+def _needs(d) -> set[str]:
+    """The fact kinds a document needs recorded from it."""
+    text = _norm(" ".join(d.pages))
+    out = {_NEEDS[d.type]} if d.type in _NEEDS else set()
+    if d.type == "dd214":
+        out |= {"discharge"} if discharges(text) else set()
+        out |= {"mos"} if _SPECIALTY.search(text) else set()
+    return out
+
+
+def _sc_list(d) -> list[str]:
+    """The conditions a rating decision's code sheet lists as service connected."""
+    names = []
+    for page in map(_norm, d.pages):
+        for listed in _SC_LIST.findall(page):
+            names += [re.sub(r"\s*\d{1,3}\s*(?:%|percent).*$", "", e).strip() for e in listed.split(";")]
+    return [normalize_condition(n) for n in names if n]
 
 
 def coverage(table: list[Fact], cfile: CFile) -> list[tuple[str, str]]:
@@ -236,8 +274,12 @@ def coverage(table: list[Fact], cfile: CFile) -> list[tuple[str, str]]:
     kinds: dict[str, set[str]] = {}
     for f in table:
         kinds.setdefault(f.cite.doc_id, set()).add(f.kind)
-    out = [(f"{d.type} {d.doc_id}", f"no {_NEEDS[d.type]} fact is recorded from it: read it and record it")
-           for d in cfile.docs if d.type in _NEEDS and _NEEDS[d.type] not in kinds.get(d.doc_id, set())]  # fmt: skip
+    out = [(f"{d.type} {d.doc_id}", f"no {kind} fact is recorded from it: read it and record it")
+           for d in cfile.docs for kind in sorted(_needs(d)) if kind not in kinds.get(d.doc_id, set())]  # fmt: skip
+    filed = {f.filed for f in table if f.kind == "decision"}
+    unfiled = "no decision lists it as filed and no pending_filing fact is recorded from it: read it and record it"
+    out += [(f"claim_form {d.doc_id}", unfiled) for d in cfile.docs if d.type == "claim_form"
+            and d.date not in filed and "pending_filing" not in kinds.get(d.doc_id, set())]  # fmt: skip
     decisions = [d for d in cfile.docs if d.type == "rating_decision"]
     if decisions:
         newest = max(decisions, key=lambda d: d.date or "")
@@ -245,9 +287,14 @@ def coverage(table: list[Fact], cfile: CFile) -> list[tuple[str, str]]:
         if not combined:
             out.append(("combined rating", f"no combined_rating fact: record it from {newest.doc_id}'s code sheet"))
         rated = list({f.condition: f for f in table if f.kind == "rated_condition"}.values())
+        out += [(f"{c}, rated on the {newest.doc_id} code sheet", f"no rated_condition fact: record it from {newest.doc_id}")
+                for c in _sc_list(newest) if c not in {f.condition for f in rated}]  # fmt: skip
+        # its notification letter may state the same ratings
+        allowed = {newest.doc_id} | {f.cite.doc_id for f in table
+                                     if f.kind == "notification_letter" and f.decision_date == newest.date}  # fmt: skip
         for f in combined[-1:] + rated:
-            if f.cite.doc_id != newest.doc_id:
-                why = f"cites {f.cite.doc_id}, not the newest rating decision {newest.doc_id} ({newest.date})"
+            if f.cite.doc_id not in allowed:
+                why = f"cites {f.cite.doc_id}, not the newest rating decision {newest.doc_id} ({newest.date}) or its letter"
                 out.append((f"fact {f.id}", f"{why}: re-record it from {newest.doc_id}'s code sheet"))
     return out + [("fact table", f"{u}: record what it links to, or correct it") for u in unlinked(table)]
 

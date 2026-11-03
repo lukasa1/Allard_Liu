@@ -7,7 +7,8 @@ rebuilt from the case file: the fact table with its cites and the pages already 
 
 Tools: read_skill (harness), pull_cfile, list_docs, read_pages, search, record_facts, prefill,
 render, verify. The C-file comes from the simulated VBMS (agent/cfile/vbms.py) with SSNs already
-stripped; page text and search snippets are wrapped as untrusted data (L6).
+stripped (subjects too); page text, search snippets and the document index are wrapped as
+untrusted data (L6).
 
 Guard (L27), in code: the C-file is read-only and nothing is filed (no tool can do either);
 pull_cfile comes first; a fact may cite only a page that was read; render needs facts, verify a
@@ -107,14 +108,19 @@ def pull_cfile(turn: Turn) -> dict:
         return [{"type": "cfile_pulled", "data": {"documents": len(cf.docs), "pages": cf.page_count}}]
 
     turn.rt.patch(turn.case_id, apply, actor="claims_prep")
-    return {"pages": cf.page_count, "documents": [d.summary() for d in cf.docs]}
+    return {"pages": cf.page_count, "documents": _index(cf.docs)}
 
 
-def list_docs(turn: Turn, a: ListArgs) -> list[dict]:
+def _index(docs) -> str:
+    """The document list; a subject is eFolder text, so the list comes wrapped as untrusted (L6)."""
+    return untrusted("C-file index", "\n".join(json.dumps(d.summary()) for d in docs))
+
+
+def list_docs(turn: Turn, a: ListArgs) -> str:
     docs = [d for d in cfile(turn.case).docs
             if (a.type is None or d.type == a.type) and (a.date is None or (d.date or "").startswith(a.date))]  # fmt: skip
     docs.sort(key=lambda d: d.date or "", reverse=a.newest_first)
-    return [d.summary() for d in docs]
+    return _index(docs) if docs else "no documents match"
 
 
 def _mark_read(turn: Turn, pages: list[int]) -> None:
@@ -343,7 +349,7 @@ def context(turn: Turn) -> str:
     if prep.pulled:
         index = [f"{d.doc_id} {d.type} {d.subject!r} ({d.summary()['pages']})"
                  + (" read" if set(d.page_numbers) <= set(prep.pages_read) else "") for d in cfile(case).docs]  # fmt: skip
-        docs = "\n".join(index)
+        docs = untrusted("C-file index", "\n".join(index))
     else:
         docs = "not pulled yet: call pull_cfile"
     table = factlib.load(prep.facts)

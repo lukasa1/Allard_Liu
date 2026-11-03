@@ -26,7 +26,14 @@ from agent.casefile import STAGE_NAMES, Answer, CaseFile, DocState, Filing, Task
 from agent.harness import AgentSpec, Turn, conversation
 from agent.ingest import redact_chat, untrusted
 from agent.intake import checklist
-from agent.intake.documents import OGC_TASK, masked_answers, refresh_drafts, service
+from agent.intake.documents import (
+    OGC_TASK,
+    fee_change_task,
+    masked_answers,
+    refresh_drafts,
+    service,
+    signed_change_task,
+)
 from agent.kb import kb_tool
 from agent.tools.registry import NoArgs, ToolSpec
 from poa_skill import fee_agreement
@@ -84,7 +91,8 @@ def _post(turn: Turn, card: dict) -> None:
 
 class RecordArgs(BaseModel):
     q: str = Field(description="a checklist id: a question id, confirm:<question id>, or narrative:<condition>:<prompt id>")
-    a: str = Field(description="the veteran's answer in their own words")
+    a: str = Field(description="the veteran's own words that answer this field, and only those (leave out "
+                   "what they said about other things in the same message)")
     value: Any = Field(None, description="the structured value you understood. Required for the stop-rule "
                        "fields: is_veteran / receiving_va_pay / prior_attorney true or false; rating_pct an "
                        "integer; service_periods / other_service_periods a list of {branch, component, start, "
@@ -103,6 +111,7 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
         return {"saved": False, "error": f"could not read {args.a!r} for {key}: {err}. Ask again, or "
                 "pass the value as JSON, or set unknown if the veteran doesn't know."}  # fmt: skip
     answer = Answer(value=value, source=f"veteran, chat {now()[11:16]} UTC", raw=args.a, unknown=args.unknown)
+    svc = _svc(turn) if key == "prior_attorney" else None  # the fee input: check the signed fee agreement
     unsure_confirm = args.q.startswith("confirm:") and args.unknown
 
     def apply(case: CaseFile) -> None:
@@ -116,6 +125,8 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
         for c in open_:
             c.resolved_at = answer.at
         checklist.refresh(case)
+        if svc and (task := fee_change_task(svc, case)):
+            case.tasks.append(task)
 
     case = turn.rt.patch(turn.case_id, apply, actor="intake")
     out: dict[str, Any] = {"saved": key, "value": value, "stage": case.stage}
@@ -186,11 +197,20 @@ def update_draft(turn: Turn, args: DraftArgs) -> dict:
     doc = svc.live(args.form)
     if doc is None:
         return {"error": f"no {args.form} draft: call fill_pdf first"}
+    before = svc.vault.veteran()
     try:
         doc = svc.edit(doc.id, args.changes, actor="intake")
     except WorkflowError as err:
         return {"error": str(err)}
-    turn.rt.patch(turn.case_id, masked_answers(svc, sorted(args.changes), f"veteran, chat {now()[11:16]} UTC"), "intake")
+    answers = masked_answers(svc, sorted(args.changes), f"veteran, chat {now()[11:16]} UTC")
+    task = signed_change_task(svc, before, sorted(args.changes), "in chat (update_draft)")
+
+    def apply(case: CaseFile) -> None:
+        answers(case)
+        if task:
+            case.tasks.append(task)
+
+    turn.rt.patch(turn.case_id, apply, "intake")
     _post(turn, preview_card(svc, doc))
     others = refresh_drafts(turn.rt, turn.case_id, svc)  # the other form's draft shows the change too
     return {**svc.describe(doc), "also_refreshed": others,

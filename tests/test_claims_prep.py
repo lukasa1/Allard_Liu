@@ -239,8 +239,8 @@ def test_verify_normalizes_dates_percentages_conditions_and_discharges():
     assert missing(dob, "DOB: 11/2/2004") == ["2004-01-02 as the date of birth"]
     assert missing(dob, "DATE OF BIRTH (YYYYMMDD): 20040102") == []
     period = FACT.validate_python({"kind": "service_period", "branch": "army", "start": "2004-06", "cite": cite})
-    assert missing(period, "BRANCH: ARMY 12a. DATE ENTERED ACTIVE DUTY: 12/06/2004") == ["2004-06 as the entry date"]
-    assert missing(period, "BRANCH: ARMY 12a. DATE ENTERED ACTIVE DUTY (YYYYMMDD): 20040601") == []
+    assert missing(period, "BRANCH: ARMY - ACTIVE 12a. DATE ENTERED ACTIVE DUTY: 12/06/2004") == ["2004-06 as the entry date"]
+    assert missing(period, "BRANCH: ARMY - ACTIVE 12a. DATE ENTERED ACTIVE DUTY (YYYYMMDD): 20040601") == []
 
 
 def test_a_revoked_prior_rep_reads_no_prior_rep(rt, lm, monkeypatch):
@@ -411,18 +411,60 @@ def test_verify_coverage_catches_omissions():
                  and not (f["kind"] == "notification_letter" and f["decision_date"] == "2026-03-09")]  # fmt: skip
     assert _check("recent_decision", no_recent) == [
         "line 18 'rating_decision D5': no decision fact is recorded from it: read it and record it",
-        "line 19 'notification_letter D6': no notification_letter fact is recorded from it: read it and record it"]  # fmt: skip
+        "line 19 'notification_letter D6': no notification_letter fact is recorded from it: read it and record it",
+        "line 20 'claim_form D7': no decision lists it as filed and no pending_filing fact is recorded from it: read it and record it"]  # fmt: skip
     old = {"doc_id": "D2", "page": 3}
     stale = [f for f in batch if f["kind"] not in ("combined_rating", "rated_condition")]
     stale += [{"kind": "combined_rating", "pct": 30, "cite": old}, {"kind": "rated_condition", "condition": "ptsd", "pct": 30, "cite": old}]
     fails = _check("recent_decision", stale)
-    assert len(fails) == 2 and all("not the newest rating decision D5 (2026-03-09)" in f for f in fails)
+    assert sum("not the newest rating decision D5 (2026-03-09)" in f for f in fails) == 2
     assert any("no combined_rating fact" in f for f in _check("recent_decision", [f for f in batch if f["kind"] != "combined_rating"]))
     two = truth_batch("two_service_periods")
     first = next(f for f in two if f["kind"] == "service_period")["cite"]["doc_id"]
     one = [f for f in two if not (f["kind"] in ("service_period", "discharge", "mos") and f["cite"]["doc_id"] != first)]
     assert _check("two_service_periods", one)[-1].endswith("'dd214 D2': no service_period fact is recorded from it: read it and record it")
 
+
+
+def test_verify_coverage_wants_each_dd214_discharge_and_mos_and_each_code_sheet_condition():
+    """C3-M1: a dropped OTH discharge, second MOS, appointment form, rated condition or claim form fails verify."""
+    for persona in ("oth_only_period", "oth_one_of_two"):
+        batch = truth_batch(persona)
+        oth = next(f for f in batch if f["kind"] == "discharge" and f["character"] == "oth")["cite"]["doc_id"]
+        fails = _check(persona, [f for f in batch if not (f["kind"] == "discharge" and f["character"] == "oth")])
+        assert fails[-1].endswith(f"'dd214 {oth}': no discharge fact is recorded from it: read it and record it")
+    two = truth_batch("two_service_periods")
+    second = [f for f in two if f["kind"] == "mos"][-1]
+    assert _check("two_service_periods", [f for f in two if f is not second]) == [
+        f"line 14 'dd214 {second['cite']['doc_id']}': no mos fact is recorded from it: read it and record it"]
+    reps = truth_batch("prior_attorney")
+    firm = [f for f in reps if f["kind"] == "prior_representative"][-1]
+    assert _check("prior_attorney", [f for f in reps if f is not firm])[-1].endswith(
+        f"'poa_form {firm['cite']['doc_id']}': no prior_representative fact is recorded from it: read it and record it")
+    batch = truth_batch("recent_decision")
+    assert _check("recent_decision", [f for f in batch if f.get("condition") != "tinnitus"])[-1].endswith(
+        "'tinnitus, rated on the D5 code sheet': no rated_condition fact: record it from D5")
+    letter = {"doc_id": "D6", "page": 8}  # the newest decision's letter may state the combined rating
+    moved = [{**f, "cite": letter} if f["kind"] == "combined_rating" else f for f in batch]
+    assert not any("not the newest rating decision" in f for f in _check("recent_decision", moved))
+    unfiled = [{**f, "filed": None} if f["kind"] == "decision" and f["date"] == "2026-03-09" else f for f in batch]
+    assert _check("recent_decision", unfiled)[-1].endswith("'claim_form D7': no decision lists it as filed and no "
+                                                          "pending_filing fact is recorded from it: read it and record it")  # fmt: skip
+
+
+def test_verify_checks_the_service_component():
+    """C3-M2: a DD-214's branch field and a narrative that names one must show the fact's component."""
+    batch = truth_batch("reserve_not_in_records")
+    swapped = [{**f, "component": {"active": "reserve", "reserve": "active"}[f["component"]]}
+               if f["kind"] == "service_period" else f for f in batch]  # fmt: skip
+    fails = _check("reserve_not_in_records", swapped)
+    assert sum("as the component in the branch field" in f for f in fails) >= 2
+    at = {"doc_id": "D1", "page": 1}
+    period = FACT.validate_python({"kind": "service_period", "branch": "navy", "component": "active",
+                                   "start": "2014-01", "end": "2016-12", "cite": at})  # fmt: skip
+    assert missing(period, "served in the Navy from 2014-01 to 2016-12.") == []
+    assert missing(period, "served in the Navy Reserve from 2014-01 to 2016-12.") == ["active as the component"]
+    assert missing(period.model_copy(update={"component": "reserve"}), "the Navy Reserve from 2014-01 to 2016-12") == []
 
 def test_c_file_text_is_plain_and_capped_and_a_mos_list_entry_is_whole():
     """C2-M3 and minor 4: real names pass; markup in names, conditions and forms is refused."""

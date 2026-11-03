@@ -59,8 +59,8 @@ def truth_batch(persona: str) -> list[dict]:
         out += [{"kind": "service_period", "branch": sp.branch, "component": sp.component, "start": sp.start,
                  "end": sp.end, "cite": c},
                 {"kind": "discharge", "period_start": sp.start, "character": sp.discharge, "cite": c}]  # fmt: skip
-        if i < len(t.mos):
-            out.append({"kind": "mos", "mos": t.mos[i], "cite": c})
+        if t.mos:  # every DD-214 shows a specialty (synth reuses the last MOS)
+            out.append({"kind": "mos", "mos": t.mos[min(i, len(t.mos) - 1)], "cite": c})
     for d in t.decisions:
         rd = cite(dated[("rating_decision", d.decision_date)])
         out.append({"kind": "decision", "date": d.decision_date, "form": d.form, "filed": d.filed, "cite": rd,

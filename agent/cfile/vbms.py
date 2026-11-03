@@ -102,6 +102,6 @@ def pull(persona_id: str, firm_rep: tuple[str, str] | None = None) -> CFile:
     for n, (_, subject, pdf) in enumerate(build_documents(persona, facts), 1):
         pages = _pages(pdf)
         dated = _US_DATE.search(subject)
-        docs.append(Document(f"D{n}", triage(pages[0]), subject, _iso(dated.group()) if dated else None, page, pages))
+        docs.append(Document(f"D{n}", triage(pages[0]), strip_ssns(subject), _iso(dated.group()) if dated else None, page, pages))
         page += len(pages)
     return CFile(tuple(docs))

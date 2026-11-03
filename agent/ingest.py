@@ -42,11 +42,11 @@ WITHDRAW_MESSAGE = (
 # A date of birth typed in chat (chat never asks for one; the secure form does). Only next to a
 # birth word, so service dates stay readable ("from 2004-06 to 2010-05"):
 #   "born 03/14/1985", "DOB: 1985-03-14", "born on 1985/03/14", "born March 14th, 1985",
-#   "my birthday is the 14th of March 1985"
+#   "my birthday is the 14th of March 1985", "my birthday's march 4th 1980"
 _MONTH = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
 _DAY = r"\d{1,2}(?:st|nd|rd|th)?"
 _CHAT_DOB = re.compile(
-    r"\b(born|birth ?(?:day|date)|date of birth|d\.?o\.?b\b\.?)\W{0,3}"
+    r"\b(born|birth ?(?:day|date)(?:['’]s)?|date of birth|d\.?o\.?b\b\.?)\W{0,3}"
     r"(?:(?:in|on|was|is|of)\s+)?(?:the\s+)?"
     r"(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}"  # 03/14/1985, 3-14-85
     r"|\d{4}[/.-]\d{1,2}[/.-]\d{1,2}"  # 1985-03-14, 1985/03/14, 1985.03.14
