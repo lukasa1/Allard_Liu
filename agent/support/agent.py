@@ -187,9 +187,10 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
     text = getattr(args, "text", None) or getattr(args, "reason", None)
     if text and redact_chat(text)[1]:
         return "ID numbers and dates of birth never go in the case file; leave them out"
-    if name == "flag_orchestrator":
-        if same := [f.text for f in turn.case.flags if f.kind == args.kind and f.status != "handled"]:
-            return f"a {args.kind} flag is already with the orchestrator ({', '.join(same)}); don't flag it again"
+    if name == "flag_orchestrator" and (
+        same := [f.text for f in turn.case.flags if f.kind == args.kind and f.status != "handled"]
+    ):
+        return f"a {args.kind} flag is already with the orchestrator ({', '.join(same)}); don't flag it again"
     return None
 
 

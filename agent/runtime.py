@@ -28,15 +28,11 @@ from typing import Any
 from agent import stages
 from agent.casefile import CaseFile, EvalCondition, Flag, SubagentResult, Task
 from agent.harness import OWNING, AgentSpec, Harness, Turn, TurnOutcome
-from agent.ingest import ingest, wants_withdraw
-from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE, QATool
+from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE, ingest, wants_withdraw
+from agent.qa import QATool
 from agent.store import Event, Store
 from agent.traces import TraceLog
 
-WITHDRAW_MESSAGE = (
-    "I've passed your request to our team. A person will contact you to confirm before anything "
-    "about your representation changes."
-)
 MAX_CONTINUATIONS = 3  # claims prep turns that end before the stop rule (max_iters, early) are continued
 CHAT_EVENT_TYPES = ("message",)  # never in the orchestrator's memory block (no transcripts)
 
@@ -300,13 +296,13 @@ def make_runtime(data_dir: Path, lm, kb: QATool | None = None) -> Runtime:
     from agent import orchestrator
     from agent.claims_prep import agent as claims_prep
     from agent.intake import agent as intake
-    from agent.qa import make_qa
+    from agent.qa import WebSearchQA
     from agent.support import agent as support
 
     harness = Harness(lm, TraceLog(Path(data_dir) / "traces.jsonl"))
     agents = {"orchestrator": orchestrator.spec(), "intake": intake.spec(), "claims_prep": claims_prep.spec(),
               "support": support.spec()}  # fmt: skip
-    return Runtime(Store(Path(data_dir) / "cases.sqlite"), harness, agents, kb=kb or make_qa("openrouter"))
+    return Runtime(Store(Path(data_dir) / "cases.sqlite"), harness, agents, kb=kb or WebSearchQA())
 
 
 def route(case: CaseFile) -> str:

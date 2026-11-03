@@ -58,10 +58,7 @@ behaviour says to.
 
 
 def persona_brief(persona: Persona) -> str:
-    truth = persona.truth.model_dump(
-        exclude={"narratives", "narrative_summaries", "questions_for_team", "qa_log", "provenance"},
-        exclude_none=True,
-    )
+    truth = persona.truth.model_dump(exclude_none=True)
     return SIM_BRIEF.format(
         truth=json.dumps(truth, indent=2),
         stories=json.dumps(persona.stories, indent=2),

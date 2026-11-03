@@ -11,4 +11,3 @@ truth:
 expected:
   decision: eligible
   fee_pct: 30
-  flags: [multiple_service_periods]

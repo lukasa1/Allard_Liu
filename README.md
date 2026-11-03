@@ -1,425 +1,255 @@
-# Veteran intake agent
+# VA claims agent
 
-CS329Z class project: an **AI intake agent for a law firm that represents veterans before VA**.
-An orchestrator keeps each veteran's case moving and hands it to one subagent at a time. The design
-follows the project's architecture (orchestrator + intake, claims preparation, claims
-investigation, customer support); claims investigation is not built yet.
-- an **intake subagent** that runs twice: pass 1 screens the veteran and gets VA Form 21-22a
-  signed (the POA skill); after the attorney countersigns, the firm files it and the intent to
-  file, claims prep reads the C-file, and pass 2 asks only what the C-file and VA's records
-  didn't settle;
-- **claims prep** (C-file → cited facts → face note), which also pre-fills pass 2 and lists what
-  the C-file contradicts;
-- **VA Lighthouse API tools**, so service history, ratings and claims come from VA instead of
-  questions;
-- **web-search QA** for the veteran's questions;
-- a read-only **customer-support subagent** that answers once the case is parked (status, questions)
-  and flags anything that would change the case for a person;
+A CS329Z class project: an AI system that helps a law firm (called "the law firm" here) represent
+veterans before VA. An **orchestrator** keeps each case moving and hands it to one sub-agent at a
+time:
 
-**Everything runs offline with no API key** (rule-based agent, stubbed VA APIs, synthetic
-C-files). Add an OpenRouter key to switch the agents to an LLM (DSPy). **Synthetic data only.**
+| Sub-agent | What it does | Status |
+|---|---|---|
+| **Intake** (`agent/intake/`) | Pass 1: screens the veteran, gets VA Form 21-22a and the fee agreement signed, files them after the attorney countersigns. Pass 2: asks only what the C-file didn't settle. | built |
+| **Claims prep** (`agent/claims_prep/`) | Reads the C-file, records typed facts with page citations, prefills intake, writes and verifies the face note. | built |
+| **Customer support** (`agent/support/`) | Answers the veteran while nobody else is talking to them; read-only; flags changes to the orchestrator. | built |
+| **Claims investigation** | 526EZ / 0995 / 0996 / 4142, attorney-approved filing. | not built (after the midpoint) |
 
-| Status | Piece |
-|---|---|
-| ✅ | **Orchestrator** (`agent/orchestrator.py`): stage table (gates) + a policy (DSPy or deterministic) that picks among the allowed actions; one subagent handoff per wake |
-| ✅ | **Intake subagent** (`agent/intake/`): 36 firm questions + 16 narrative prompts per condition, two stages around the 21-22a |
-| ✅ | **POA skill** (`poa_skill/`): VA Form 21-22a, secure capture, click-to-sign (described below) |
-| ✅ | **Lighthouse tools** (`agent/lighthouse/`): VSHE + Benefits Claims, stub / recorded / sandbox |
-| ✅ | **QA** (`agent/qa.py`): OpenRouter web search limited to official sites; offline FAQ |
-| ✅ | **Customer support** (`agent/support/`): read-only agent loop; status, kb_search, flags to the orchestrator |
-| ✅ | **Memory**: the case and every subagent's working memory saved each turn; `CaseSession.resume` continues after a restart |
-| ✅ prototype | **C-file → face note** (`agent/cfile/`): Benefits Documents stub, extraction, the firm's template |
-| ✅ | **Evaluation** (`intake_eval/`): simulated veterans through whole cases on the runtime, 3 conditions, scored per agent |
-| ⏳ | Live sandbox credentials, real sample C-files, OAuth login flow, live-model eval runs |
-| ⏳ later | Claims investigation (526EZ / 0995 / 0996 / 4142, attorney-approved filing), fee agreement + eFax to VA's OGC |
+Every agent runs on **Claude Haiku 5.5 through OpenRouter** (`openrouter/anthropic/claude-haiku-5.5`).
+VA, filing, eFax and the attorney are simulated. **Synthetic data only**: every veteran, C-file
+and number in the repo is made up, and `config/representative.json` holds placeholders.
 
-## Quick start (no keys needed)
+## Quick start
 
 ```bash
 uv sync
-uv run intake serve              # web demo: http://localhost:8000 (needs OPENROUTER_API_KEY)
-uv run pytest                    # all offline, with a scripted fake model
-uv run intake eval --name smoke --personas baseline_clean --conditions cfile  # needs the key; see Evaluation
+uv run pytest -q                 # 203 tests, no key, no network (scripted fake model)
+cp .env.example .env             # set OPENROUTER_API_KEY for anything live
+uv run intake serve              # the web demo: http://localhost:8000
+uv run intake --help             # serve | simulate | eval | support-eval | personas
 ```
 
-With an LLM: `cp .env.example .env`, set `OPENROUTER_API_KEY`, and run the same commands. The
-agents switch to DSPy on `openrouter/openai/gpt-6-luna` (change it with `DSPY_MODEL`). Every
-setting is documented in `.env.example`. **With a key, everything runs live and costs money**
-(gpt-6-luna is $0.10 / $0.50 per million tokens; QA web search about $0.007 per question). Start
-small: `uv run intake simulate --persona baseline_clean --max-cost 1` before a full eval run
-(see Evaluation).
+Without `OPENROUTER_API_KEY` the server still starts and the page says to set it; `simulate`,
+`eval` and `support-eval` exit with the same message. There are no offline agents (D7).
 
-## Try the demo
+## Architecture
 
-The demo runs the real agents (orchestrator, intake, claims prep, support) on Claude Haiku 5.5
-through OpenRouter, so it **needs `OPENROUTER_API_KEY`** (in your shell or in `.env`) and every
-case costs money. There is no offline mode for the agents (tests use a scripted fake model). Without
-the key the server still starts, and the page says to set it.
+```
+web chat / cards / staff panel ──▶ runtime (agent/runtime.py) ──▶ code checks on every message
+                                     │                               (redact, crisis, a person, withdraw)
+                                     ├─ route (D1): intake if it owns the case, else support
+                                     ├─ wakes ──▶ orchestrator ── run_intake / run_prep / move_stage / staff_task
+                                     └─ queued turns: one worker per case (+ a background worker for claims prep)
+   every agent turn = one dspy.ReAct run (agent/harness.py), tools via the guarded registry
+   every change ──▶ store.update_case (patch, under a lock) ──▶ stages.settle (derive the stage)
+   every reply and card ──▶ outbox ──▶ the page polls GET /api/cases/<id>/updates?since=<seq>
+```
+
+### Stage table (`agent/stages.py`)
+
+| Stage | Owner | Reached when (checked in code) |
+|---|---|---|
+| 1 Screening (pass 1) | intake | case created |
+| 2 Account opening (pass 1) | intake | every screening field answered or unknown, no stop rule fired |
+| 3 Filed (pass 1 ends) | intake → orchestrator | 21-22a submitted **and** intent to file filed (the fee agreement goes to OGC in the same turn; a 30-day task tracks it) |
+| 4 C-file requested | claims prep, then intake pass 2 | only by the orchestrator's `run_prep` handoff |
+| 5 Gaps closed: **ready for attorney review** (the demo's end) | attorney | claims prep done and every pass-2 field filled or unknown |
+| 6 File review done | — | not reachable yet (needs claims investigation) |
+
+Side states, entered only through the guard: `waiting_on_veteran`, `waiting_on_attorney` (the
+owner keeps the case), `waiting_on_va`, `needs_human` and `closed`. Code derives the stage after
+every tool call and event. Moves inside one owner's stages are automatic; a move to another owner
+only by a handoff; the orchestrator's `move_stage` covers moves back and side states (D11). Every
+refused move is logged and its reason goes back to the model.
+
+### Runtime protocol
+
+- **One turn = one `dspy.ReAct` run** per message or event. A turn's `reply` output is the only
+  way it talks to the veteran (this is `ask_veteran`); `result` (a `SubagentResult`) is kept only
+  when the agent's stop rule holds.
+- **Handoffs are asynchronous** (D9): `run_intake(goal)` / `run_prep(goal)` set the owner and queue
+  the sub-agent's first turn; its result later wakes the orchestrator as a `subagent_result`
+  event. The orchestrator wakes only on `case_opened`, `subagent_result`, `support_flag`,
+  `escalated` and staff events nobody owns; chat messages never wake it.
+- **One case-owning sub-agent at a time** (A3). Support is read-only and may run while claims prep
+  works in the background; a `support_flag` raised in stage 4 is held until prep returns.
+- **Limits per turn**: orchestrator 6 steps / 90 s, intake 8 / 120 s, support 5 / 60 s, claims prep
+  40 / 600 s. A chat turn at its limit sends a canned "please resend"; a claims-prep turn that
+  stops early is continued up to 3 times from the recorded facts, then goes to a person. A
+  malformed model output goes through DSPy's JSON adapter fallback, then one retry of the turn.
+
+### Agents and their tools
+
+| Agent | Tools (all agents also have `read_skill`) |
+|---|---|
+| Orchestrator | `run_intake`, `run_prep`, `move_stage`, `staff_task` |
+| Intake | `kb_search`, `get_case`, `record_answer`, `fill_pdf`, `request_secure_info`, `update_draft`, `get_signature`, `submit_va`, `efax_ogc` |
+| Claims prep | `pull_cfile`, `list_docs`, `read_pages`, `search`, `record_facts`, `prefill`, `render`, `verify` |
+| Support | `kb_search`, `get_case`, `log_event`, `flag_orchestrator`, `escalate` |
+
+Context per turn: the orchestrator sees the case file and the last 10 events (never a transcript
+or the C-file); intake sees its typed checklist of missing fields and its last 12 messages;
+support a read-only snapshot and its last 8 messages; claims prep the fact table so far and the
+pages it read this turn.
+
+### Guards (code, not the model)
+
+- **Every message, every state, before any model:** ID numbers and a typed date of birth are
+  redacted; crisis language sends the Veterans Crisis Line text and an urgent task (D3); a request
+  for a person or to end the representation goes to a person by rule (D2). The rule replies are in
+  `agent/ingest.py`.
+- **The firm's stop rules** (not a veteran, rated 100%, any non-honorable period) run in code
+  (A1): `closed` before filing, `needs_human` after it.
+- **Signing is the veteran's click** in the host; no tool can sign. The SSN goes only through the
+  secure form into the encrypted vault, and the model sees masked values. `submit_va` is refused
+  until the 21-22a is countersigned, `efax_ogc` until the fee agreement is signed and
+  countersigned. One staff action countersigns both; the stamp is saved as a new PDF version, and
+  the version the veteran signed keeps its hash.
+- **Citations:** `render` returns each face-note line with the facts it came from, and `verify`
+  checks every cited page contains the value (dates, percentages and condition names normalized).
+  A line that can't be cited goes back to the model, or is escalated as `[UNCERTAIN]`. Prefill is
+  refused until `verify` passes. When the C-file conflicts with an answer, the DD-214 wins on
+  discharge; any other conflict is recorded for pass 2 and a staff task (A2).
+- **Untrusted text** (the veteran's words, C-file pages, search hits, kb answers) is wrapped as
+  data before it enters a context (`ingest.untrusted`); what a tool may do is still decided by the
+  guards.
+- **SSNs never reach a context or a trace:** the simulated VBMS strips them at ingest, and trace
+  lines are scrubbed again before they are written.
+- **Support changes nothing:** it has no tool that moves a stage, files or signs.
+
+### Skills, memory, traces
+
+- **Skills** (`agent/skills/<agent>/<skill>/SKILL.md`): only the index (name and description) is in
+  a prompt; the model loads one with `read_skill`. Orchestrator: stage-playbook, routing, flags.
+  Intake: screen-veteran, poa-and-fees, intent-to-file, close-gaps. Claims prep: face-note-format,
+  cite-check. Support: answer-questions, case-status, hand-to-a-person.
+- **Memory store** (`agent/store.py`, SQLite): the `cases` table holds the case file as JSON plus
+  flat columns (stage, owner, side state); `events` is the append-only event log; the outbox holds
+  every reply and card. Changes are patches under a per-case lock; no model call holds the lock. A
+  restarted process resumes from the store.
+- **Traces** (`agent/traces.py`): DSPy callbacks write one JSON line per model call and per tool
+  call (case, agent, turn, tokens, cost, the tool's guard decision and result) to `traces.jsonl`.
+  Cost uses the price table in `agent/config.py`.
+
+## How it maps to the lead's design
+
+The structure follows the project lead's architecture: an orchestrator with a guarded stage table
+and typed sub-agent results, the sub-agents with their own tools, skills, context and stop rules,
+a shared harness, a tool registry with a guard hook, an event log and traces. The 21-22a tools wrap
+the lead's POA skill (`poa_skill/`). Where we differ:
+
+| # | Deviation | Reason |
+|---|---|---|
+| D1 | Code routes chat messages (the owner, else support), not the orchestrator's model | The routing rule is fixed; code gets it right every time and saves a call per message |
+| D2 | Ending the representation or asking for a person goes to a person by rule, in every state | It has legal effect and needs an attorney |
+| D3 | The crisis check runs in code on every message, in every stage | A crisis can come up mid-intake, not only in support |
+| D6 | A `waiting_on_attorney` side state and one staff action that countersigns both documents | The demo and the eval need a way to simulate the attorney |
+| D7 | No offline agents: tests use a scripted fake LM through the real code | One implementation; the demo and eval are paid |
+| D8 | Haiku 5.5 through OpenRouter; the KB is our own web search on official sites | The lead's document library stays out of the public repo |
+| D9 | `run_*` starts the sub-agent; its result arrives later as an event | A chat turn waits for the veteran's next HTTP request |
+| D10 | Claims prep keeps every page read within one turn (no stubbing of old reads) | The synthetic C-files are small |
+| D11 | An orchestrator `move_stage(to, reason)` tool | The design allows moves back and side states but has no tool for them |
+| D12 | An extra intake skill, `close-gaps` | Pass 2 needs written directions |
+| D13 | An orchestrator `staff_task(text)` tool | The flag decision "or a staff task" needs a tool |
+
+Candidate deviations from the build, for the lead to confirm:
+- **D14:** "no legal advice beyond the KB" is enforced by instructions and kb_search's hand-off,
+  not by code: the reply is a model output a guard can't inspect.
+- **D15:** a prior representative is any 21-22 or 21-22a in the C-file without revocation details,
+  VSOs included (the firm's SOP rule).
+- Support returns no typed result: its flags and escalations are events.
+- The eval headline counts structured questions settled from chat, not questions asked (the
+  model's wording can't be counted); citation precision uses `verify`'s own page check.
+
+Answers to the lead's open design questions (not deviations): **A1** the firm's stop rules are
+enforced in code; **A2** a C-file conflict: the DD-214 wins on discharge, everything else is asked
+in pass 2 and becomes a staff task; **A3** at most one case-owning sub-agent at a time, with
+read-only support alongside.
+
+## The demo
+
+`uv run intake serve` (needs the key), then http://localhost:8000:
+
+1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
+   **Start case**. You type as the veteran, or press **Autoplay** to have the eval's simulated
+   veteran draft the next reply (you still press Send).
+2. Intake screens you, then shows the **secure form** for the ID numbers, the **21-22a preview**, a
+   signature pad and a **Sign** card, then the **fee agreement** preview and its Sign card.
+3. You also play the attorney: **Countersign both documents** in the staff box (refused at any
+   other time). Intake files the 21-22a and the intent to file and faxes the fee agreement to OGC;
+   the chat shows the simulated confirmation numbers.
+4. Claims prep reads the C-file in the background while support answers your messages. Pass 2
+   then asks only the gaps, a confirmation of each C-file conflict, and the narrative prompts. The
+   case ends at stage 5, ready for attorney review.
+5. The case panel shows the stage and owner, the orchestrator's decisions (refused moves
+   included), filings, tasks, flags, every answer with its source, the face note, the documents,
+   the event log and the cost per agent.
+
+## Evaluation (`intake_eval/`)
+
+Synthetic veterans (`agent/data/personas/`, 17) go through **whole cases on the same runtime** the
+demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
+secure form, signs, countersigns as the attorney and waits for the runtime to go idle between
+steps (`runner.py`).
+
+- **Conditions** (`--conditions`): `ask_no_probes` (no verification probes, no C-file prefill),
+  `ask` (probes, no prefill), `cfile` (probes, prefill from the C-file and a confirmation of each
+  conflict: the default and the demo's flow). The agents never see the condition.
+- **Metrics** (`scoring.py`), per agent: intake (fields vs the answer key, structured questions
+  settled from chat as the headline, the share prefilled, turns to a signed 21-22a, kb calls);
+  orchestrator (scenario pass rate, flag decisions, refused moves); claims prep (face-note line
+  accuracy, `verify` passed, citation precision); cost and latency per agent from the traces;
+  pass^k with `--trials`. **Critical errors** (a wrong end state or stop decision, a missed
+  service period, prior claim, crisis or DOB mismatch, a wrong fee, unfinished prep, a new
+  condition never sent back to intake, a crashed or stalled run) void the headline.
+- **Customer support** (`support_eval.py`): 81 labeled messages through the real runtime: flags,
+  hand-offs to a person, status answers, no promised dates, cited kb answers, every crisis
+  caught, the case unchanged. `--luke` selects the 50-message subset matching the lead's set.
 
 ```bash
-cp .env.example .env              # then set OPENROUTER_API_KEY
-uv run intake serve               # http://localhost:8000
-# or: uv run uvicorn demo.app:app --port 8000
-```
-
-1. Pick a **test veteran**. Each is a synthetic persona with its own synthetic C-file (the one
-   claims prep pulls from the simulated VBMS). Then press **Start case**.
-2. You play the veteran in the chat. Intake screens you, then opens a **secure form** for the ID
-   numbers, shows the **21-22a preview**, a **signature pad** and a **Sign** card, then the **fee
-   agreement** preview and its Sign card. The page polls the outbox every 1.5 s
-   (`GET /api/cases/<id>/updates?since=<seq>`), so replies from background turns appear by
-   themselves.
-3. You also play the attorney. When both documents are signed, the **Staff** box in the case panel
-   enables **Countersign both documents** (one action; it is refused at any other time). Intake
-   then files the 21-22a and the intent to file and faxes the fee agreement to VA OGC. All three
-   are simulated, and the chat shows their confirmation numbers.
-4. Claims prep then reads the C-file in the background. Chat meanwhile and customer support
-   answers. When it is done, intake's pass 2 asks only what is still missing, and the case ends
-   at stage 5, ready for attorney review.
-5. The right panel shows the **Case** (stage, owner, side state, the orchestrator's decisions
-   including refused moves, filings, tasks, support's log, flags and escalations, the cost per
-   agent from the traces, and every answer with its source), the **Face note** (lines verify
-   couldn't cite are marked `[UNCERTAIN]`), the **Documents** (the latest PDF of each, the
-   countersigned version after the countersign) and the **Event log**.
-
-Command-line equivalents:
-
-```bash
-uv run intake personas                                   # the test veterans
-uv run intake simulate --persona recent_decision         # one whole case, printed
-uv run intake simulate --persona reserve_not_in_records --condition fetch
-uv run intake facenote --persona recent_decision         # just the C-file -> face note step
-uv run intake facenote --cfile path/to/pdfs --provider dspy   # on a folder of C-file PDFs
-```
-
-## How a case flows
-
-```
- every event (a chat message, a card, the attorney's countersign, "C-file ready") wakes the orchestrator:
-   allowed = stage table(case)  →  policy picks one  →  execute  →  … until one subagent handoff, or wait
-
- new ─▶ va_sign_in ─▶ screening ─▶ poa ─▶ attorney_signoff ─▶ case_prep ─▶ intake ─▶ attorney_review
-        Lighthouse     intake       POA skill:  attorney          C-file arrives   intake
-        VSHE + Claims  pass 1       secure form, countersigns,    (its own event); pass 2: only
-        prefill        (eligibility, sign 21-22a then POST 2122  claims prep:     the gaps, a check
-                       stop rules,               + ITF 0966      facts → face     of what the C-file
-                       fee)                                       note, prefill,   contradicts, the
-                                                                  conflicts        narratives
- terminal: closed (not a veteran, already 100%) · human_handoff (crisis, attorney review, no C-file, ...)
- while no subagent is talking with the veteran (attorney_signoff, case_prep, terminal), the read-only
- support subagent answers
-```
-
-With VA, the C-file comes weeks after signing (VA must record the 21-22a first); in the demo the
-stub returns it at once, and the memory below is what lets a real case wait that long.
-
-- **Code decides what may happen; the agents decide how.** The orchestrator only sees the actions
-  the case's state allows (nothing filed before the attorney countersigns; no C-file before the
-  21-22a and the intent to file are in; no pass 2 before claims prep; after a crisis, only the
-  hand-off), so a model mistake can't skip a gate. Honestly put, the orchestrator is a gated
-  workflow with model tie-breaking: most of the time exactly one action is allowed (the eval
-  reports how often), and the open-ended work happens in the subagents. Every decision is logged on the case with its options and
-  reason. Firm rules (fee %, who to stop with) are plain code in `agent/intake/rules.py`, each
-  labelled `law` or `firm_policy`.
-- **Collect once.** VA's records answer the history questions in pass 1; the C-file answers more
-  before pass 2 (rated conditions, MOS, an earlier representative) and catches what the veteran
-  forgot (a second service period, an old claim); the POA skill's secure form collects name and
-  contact details; chat asks only the rest. Each answer records its source
-  (chat | va_records | cfile | secure_form).
-- **Subagents return typed results** (`SubagentResult`: status, the event it raises, what it
-  wrote, what it needs next); the orchestrator reads those, never a transcript.
-- **Trace log.** Every turn appends one JSON line to `.data/traces/<case>.jsonl`: the (redacted)
-  input, the orchestrator's decisions with their options, the events and results, and the model
-  calls, tokens and cost. Case totals are in `case.usage`.
-- **Flags are the orchestrator's decision.** Support only reports them (`case.open_flags`); the
-  orchestrator chooses `reopen_intake_for_new_condition` (intake asks which condition, then its
-  narrative prompts, and the case returns to attorney review) or `pass_flags_to_staff`. A
-  withdrawal or a request for a person is never a choice: it is escalated by rule, so nothing is
-  filed (e.g. "cancel my power of attorney" before the countersign stops the filing). A stop found
-  after filing (rated 100% discovered in pass 2) goes to a person, not to "closed".
-- **Skills** (`agent/skills/<agent>/<skill>/SKILL.md`, plus `poa_skill`): only the index (name +
-  description) is in a prompt; the DSPy orchestrator calls `read_skill` to load one. For the
-  rule-based parts the skill is the spec the code implements (a test checks the stage playbook
-  names every action).
-- **Who answers the veteran.** While the intake subagent or the POA step is working the case, it
-  answers questions itself (it has the conversation). Once the case is parked (with the attorney,
-  handed off, closed), the **support subagent** answers from a read-only snapshot of the case: the
-  status in plain words (never a promised VA date) and general questions through QA. Anything
-  that would change the case (a new condition, ending representation, a new address, a
-  complaint, a request for a person) comes back as a flag and becomes a staff task. Crisis
-  language is checked first in every phase.
-- **Memory.** A case lasts months, so nothing lives only in a running process: after every turn
-  the case file (state, event log, decisions, staff tasks) is saved with each subagent's working
-  memory (the pending question, answers and transcript; the POA step's position). After a
-  restart, `CaseSession.resume(case_id)` continues mid-conversation, and the web demo resumes the
-  case for the same browser.
-- **PII:** the model never sees an SSN or DOB from the secure form (POA skill design), SSNs
-  typed in chat are redacted, and SSNs are stripped from C-file text before extraction. The
-  case file never holds an SSN; the DOB appears only inside the face note (the firm's template).
-
-## Evaluation
-
-The eval (`intake_eval/`) runs synthetic veterans through **whole cases on the runtime** the demo
-uses (`agent/runtime.py`), scores every agent (plan L32) and writes `results/<name>/report.md`
-plus `summary.json`, one transcript per case and each case's traces. It needs
-`OPENROUTER_API_KEY` (D7): the agents and the simulated veteran run on Claude Haiku 5.5. The
-tests drive the same runner with the scripted fake model (`tests/test_eval.py`).
-
-How a case runs (`intake_eval/runner.py`): an LLM plays the persona from its hidden record,
-behaviours and style (`intake_eval/simulator.py`) and answers the agents' chat messages; the
-runner uses the cards for it through the host actions (secure form, signature, Sign), a
-simulated attorney countersigns both documents, and the runner waits for the runtime to go idle
-(claims prep's background turn included) before each step. The orchestrator scenario
-(`new_condition_during_prep`) messages support while claims prep runs.
-
-Conditions (`--conditions`; `CaseFile.eval_condition`, read by intake's checklist and claims
-prep's prefill): `ask_no_probes` (no verification probes for a second service period or an old
-claim, no C-file prefill), `ask` (probes, no prefill), **`cfile`** (probes, prefill from the
-C-file and a confirmation of each conflict: the default and the demo's flow).
-
-Scored per agent (`intake_eval/scoring.py`):
-- **Intake:** fields against the persona's answer key; **structured questions settled in chat
-  (the headline**, read only with zero critical errors and field accuracy held); clarifications;
-  the share prefilled from the C-file; turns to a signed 21-22a; kb_search calls and sourced
-  answers (intake's KB questions are unlabelled: support-eval scores answer accuracy).
-- **Orchestrator:** scenario pass rate (the case ended where the persona's decision says),
-  flag decisions against the scenario's label, refused moves and tool calls per agent.
-- **Claims prep:** face-note accuracy line by line against the note rendered from the ground
-  truth, fact-group checks, `verify` passed, citation precision (each fact's cited page shows it).
-- **Cost and latency per agent** from the traces (prices in `agent/config.py`), plus the
-  simulated veteran; pass^k with `--trials`.
-- **Critical errors:** a wrong end state or stop decision, a missed service period, a missed
-  prior claim, a wrong fee, a missed crisis escalation, a missed DOB mismatch, claims prep not
-  finishing, wrong decision lines on the face note, a new condition never sent back to intake, or
-  a run that crashed, stalled, gave up or hit the step limit.
-
-```bash
-uv run intake simulate --persona baseline_clean --max-cost 1     # one case, printed
+uv run intake simulate --persona baseline_clean --max-cost 1    # one case, printed
 uv run intake eval --personas baseline_clean --conditions cfile --name smoke --max-cost 1
-uv run intake eval --name full --max-cost 20                     # 17 personas x 3 conditions
+uv run intake eval --name full --max-cost 20                    # 17 personas x 3 conditions
+uv run intake support-eval
 ```
 
-Both print an estimated number of model calls first; `--max-cost` (USD, from the traces) stops
-the run once it is passed. No live run has been made yet, so there are no numbers here.
+Each run prints an estimated number of model calls first (about 270 per case), and **`--max-cost`**
+(USD, from the traces, agents plus the simulated veteran) stops the run once it is passed. Output:
+`results/<name>/report.md`, `summary.json`, transcripts and each case's traces.
 
-**Customer support** (`uv run intake support-eval [--luke]`): 81 labeled messages through the
-real runtime to cases nobody is working on (`intake_eval/support_eval.py`): flags, hand-offs to a
-person, status answers, no promised dates, cited KB answers, every crisis caught, the case left
-unchanged. It needs the key too.
+## Tests
 
-## The POA skill
+`uv run pytest -q`: 203 tests in about 40 s, no key and no network. `tests/fake_lm.py` scripts
+each agent's tool calls through the real harness, registry and guards; `tests/fake_kb.py` stands in
+for web search. They pin the guards and stage moves, stop rules, citations and `verify`, crisis /
+withdraw / a person by rule, signing and countersign integrity, SSNs never in a context or trace,
+untrusted wrapping, end-to-end flows (runtime, HTTP demo, eval) and the eval's scoring.
 
-The POA skill completes one task: getting a veteran's **VA Form 21-22a** (*Appointment of
-Individual as Claimant's Representative*) filled and signed so the firm's attorney can represent
-them before VA. The agent decides *when* the task applies. The skill handles *how*:
+## Pending the live key
 
-1. Capture the veteran's identity details, including SSN, through a secure form the model
-   never sees.
-2. Fill the 21-22a from those details plus the firm's details.
-3. Let the veteran review and edit the draft.
-4. Sign on one click, placing the veteran's saved signature.
+Nothing has run against the real model yet. Waiting on the key: a smoke test of each agent,
+checking that `reasoning_effort` reaches OpenRouter (L9) and that the model slug and prices are
+right, cost and latency per agent, and the full eval. The README has no eval numbers until then.
 
-## How the POA skill works
+## The POA skill (`poa_skill/`)
 
-### The three parts
-
-| Part | What it is | Where |
-|---|---|---|
-| **Skill instructions** | `SKILL.md`: when to use the skill, the steps, and the rules. The host loads it into the model's context. | `poa_skill/skills/poa_21_22a/SKILL.md` |
-| **Tools** | Six tools the model calls. They return masked data plus **cards** (UI the host renders). | `poa_skill/tools.py` |
-| **Service** | The workflow and storage behind the tools, plus the host-only actions: storing secure-form data, saving a signature, signing. | `poa_skill/service.py` |
-
-### One run through the task
-
-```
-veteran       host app (UI + server)         model (host agent)          poa_skill
-   |                 |                              |                         |
-   |  "I want to work with the firm"                |                         |
-   |---------------->|--- redact(), send ---------->|                         |
-   |                 |                              |-- get_intake_status --->|  masked data, what's missing
-   |                 |                              |-- request_secure_info ->|  creates request -> secure_form card
-   |  secure form (rendered by host, outside chat)  |                         |
-   |---------------->|--- PoaService.complete_capture_request() ------------->|  encrypted vault
-   |                 |--- notify("form submitted")->|                         |
-   |  Item 20? Item 22? (asked in chat)             |                         |
-   |                 |                              |-- prepare_poa_21_22a -->|  fills PDF -> preview card
-   |  edits (chat or the edit panel)                |-- update_poa_draft ---->|  refills -> preview card
-   |                 |                              |-- request_signature_capture -> signature_pad card
-   |  draws signature|--- PoaService.save_signature() ----------------------->|
-   |                 |                              |-- present_for_signature>|  sign_button card
-   |  clicks Sign    |--- PoaService.sign(consent_text, ip, user agent) ----->|  stamps 23A, dates 23B, audit
-   |                 |--- notify("signed") -------->|  "Signed. The firm files it with VA next."
-```
-
-Two kinds of actions:
-- **The model calls tools** (`run_tool`) to look, ask, fill, edit and offer.
-- **The user's actions go straight from the host to `PoaService`**: typing PII, drawing a
-  signature, clicking Sign. They never pass through the model, so the model can't see an SSN
-  and can't sign for anyone.
-
-### Tools
-
-| Tool | What it does | Card it returns |
-|---|---|---|
-| `get_intake_status` | Masked data on file, what the 21-22a still needs, whether a signature is saved, existing documents | none |
-| `request_secure_info` | Opens a secure form for specific fields from the catalog | `secure_form` |
-| `prepare_poa_21_22a` | Fills a draft with the veteran's answers to Item 20 (sensitive records) and Item 22 (address changes) | `document_preview` |
-| `update_poa_draft` | Changes non-secret fields or authorizations on the draft | `document_preview` |
-| `request_signature_capture` | Draw-once signature pad; the signature is saved for reuse | `signature_pad` |
-| `present_for_signature` | Checks the draft is complete, then offers the Sign button | `sign_button` |
-
-There is deliberately **no signing tool**. Tools come in Anthropic format (`skill.tools`) and
-OpenAI/OpenRouter format (`skill.tools_openai`).
-
-### What the model sees
-
-```json
-{"captured": {"first_name": "Jordan", "ssn": "***-**-6789", "date_of_birth": "**/**/1988",
-              "address.line1": "*** ***n St", "address.city": "Milwaukee"},
- "missing_for_21_22a": [], "signature_on_file": true, "documents": [...]}
-```
-
-Field sensitivity lives in `vault.FIELDS`:
-- **secret** fields (SSN, date of birth, VA file number, service number) are masked and can
-  only change through a new secure form.
-- **private** fields (street, ZIP, phone, email) are partly masked.
-- **plain** fields (name, city, state, branch) are shown in full.
-
-## Mounting a skill in the agent
-
-This is the contract the intake agent will use for every skill.
-
-```python
-from poa_skill import PoaService, load_skill, redact
-
-skill = load_skill()
-
-system_prompt = MY_AGENT_PROMPT + "\n\n" + skill.instructions   # or load it only when needed
-tools = MY_TOOLS + skill.tools_openai                           # skill.tools for Anthropic SDK
-
-# Every user chat message, before it goes to the model:
-text, had_pii = redact(text)
-
-# When the model calls a tool:
-if call.name in skill.tool_names:
-    out = skill.run_tool(PoaService(session_id), call.name, args)
-    # out.result -> send back to the model as the tool result
-    # out.cards  -> render in your UI
-```
-
-`demo/host_agent.py` is a working stand-in for the agent: about 110 lines, using an
-OpenAI-compatible client pointed at OpenRouter. Start the real agent from its loop.
-
-### What the host must provide
-
-| Card | The host renders | And calls |
-|---|---|---|
-| `secure_form` | A form with the listed fields (`input_type`: text, ssn, date, select, tel, email) | `PoaService.complete_capture_request(request_id, values)`, then tells the model "form submitted" |
-| `signature_pad` | A drawing pad (export a PNG data URI, trimmed to the ink) | `PoaService.save_signature(data_uri)` |
-| `document_preview` | The PDF (`PoaService.document_pdf(id)`) plus an optional edit panel | `PoaService.edit(id, changes, actor="user")` |
-| `sign_button` | `consent_text` and a Sign button | `PoaService.sign(id, consent_text=..., ip=..., user_agent=...)` |
-
-`demo/server.py` (FastAPI) and `demo/static/index.html` implement all four.
-
-## Run the POA-only demo
-
-The original skill demo (no orchestrator) is still here:
-
-```bash
-uv run uvicorn demo.server:app                   # http://localhost:8000
-```
-
-- **With an agent:** `export OPENROUTER_API_KEY=...`. The model defaults to
-  `anthropic/claude-sonnet-5.5`; set `POA_AGENT_MODEL` for any other OpenRouter model with tool
-  support, or `POA_LLM_BASE_URL` for another OpenAI-compatible endpoint.
-- **Without a key:** the page shows buttons that call the six tools directly, so the whole flow
-  can be clicked through.
-
-Runtime data (vault, PDFs, audit log, key) goes to `.data/`, which is gitignored. Change it with
-`POA_DATA_DIR`, and set the key with `POA_VAULT_KEY`.
+The lead's skill for VA Form 21-22a, generalized here to the fee agreement too: a secure form the
+model never sees (encrypted vault, masked values), the filled PDF and an editable preview, and
+click-to-sign with the exact consent text shown, a stamped signature, and an append-only audit log
+without PII. There is deliberately no signing tool. Its own tests are `tests/test_form.py` and
+`tests/test_workflow.py`. Change the firm and attorney in `config/representative.json`.
 
 ## Code map
 
 ```
-poa_skill/
-  __init__.py         load_skill(): the mounting surface (instructions, tools, run_tool)
-  skills/poa_21_22a/  SKILL.md
-  tools.py            tool definitions (Anthropic + OpenAI formats) and run_tool()
-  service.py          PoaService: capture requests, prepare, edit, sign; ESIGN consent text
-  vault.py            encrypted PII + signature store; field catalog, validation, masking
-  documents.py        encrypted PDF store, document records, append-only audit log
-  form_21_22a.py      field mapping for VA's blank (JUL 2023 edition); render_draft, sign_draft
-  guard.py            redact(): strips SSNs and file numbers from chat
-  pdf/                fill.py (AcroForm fill), sign.py (signature stamping), transforms.py
-  forms/              VA's blank 21-22a
-config/representative.json   the appointed attorney and firm (placeholders)
-demo/                 stand-in host for testing skills: host_agent.py, server.py, static/
-agent/
-  orchestrator.py     the orchestrating agent: action gates, offline + DSPy policies, decision log
-  runtime.py          the runtime: routing, queued turns, the outbox (the demo and the eval)
-  casefile.py, store.py, stages.py   the case file, the SQLite store, the stage table
-  intake/             intake subagent: questions.yaml, controller, rules, brains (offline, DSPy)
-  lighthouse/         VA Lighthouse tools: stub (VA response shapes), recorded, sandbox
-  qa.py               veteran questions: web search on official sites, offline FAQ
-  support/            customer-support sub-agent
-  cfile/              synthetic C-files + Benefits Documents stub, extraction, face-note template
-  personas.py, data/personas/   the synthetic test veterans
-  cli.py              `uv run intake ...`
-intake_eval/          simulator, case runner (on the runtime), scoring, report; support_eval.py + support_messages.yaml
-demo/app.py, demo/static/app.html   the web demo, on agent/runtime.py
-tests/                form mapping, security properties, host-agent loop, HTTP flow, intake,
-                      Lighthouse, C-file, orchestrator, whole cases, LLM paths (scripted models)
+agent/        runtime, harness, orchestrator, stages, casefile, store, traces, ingest, kb, qa
+  intake/       agent.py, checklist.py, documents.py, questions.yaml, parsing, rules
+  claims_prep/  agent.py, facts.py (typed facts + cite map), verify.py, prefill.py
+  support/      agent.py
+  cfile/        vbms.py (simulated VBMS), synth.py (synthetic C-files), facts.py, facenote.py
+  skills/       SKILL.md files per agent
+  data/personas/  the synthetic veterans
+poa_skill/    21-22a and fee agreement: vault, documents, PDF fill and signing
+demo/         app.py (FastAPI) and static/app.html
+intake_eval/  simulator, runner, scoring, report, support eval
+tests/        fake_lm.py, fake_kb.py, fixtures, tests
 ```
 
-## Security model
-
-| Rule | Enforced by |
-|---|---|
-| The model never sees an SSN or date of birth | Secure-form data goes host -> vault. Tools return `vault.masked()` only. A test checks every tool output for raw PII. |
-| PII typed into chat is hidden | `redact()` before the model. Tested. |
-| Only the user can sign | No signing tool. `sign()` requires a complete draft, a saved signature, and the exact consent text the user was shown. |
-| The model can't ask for arbitrary data | Secure forms only use fields in `vault.FIELDS`. A submission only stores the fields its form requested. |
-| Encrypted at rest | The vault and PDFs are Fernet-encrypted. |
-| Auditable | `.data/audit.jsonl` is append-only with no PII: events, field names, hashes of the signature and PDFs, IP and user agent at signing. |
-| Signed forms are frozen | Edits are rejected; changes need a new draft, and the old draft is superseded. |
-
-**Use synthetic data only.** OpenRouter isn't covered by a BAA, and the demo has no login,
-no KMS, and a local file store.
-
-## Building on it
-
-- **The intake agent** lives in `agent/` (see "How a case flows"). It mounts this skill in
-  `agent/poa.py` through `load_skill()`, runs `redact()` on every user message, and returns the
-  skill's cards to the host (`demo/app.py`). Keep skills independent: each one is instructions +
-  tools + its own service, and none of them talks to the model directly.
-
-- **Different firm or attorney:** edit `config/representative.json`. It holds placeholders now
-  (Attorney 1, "Law Firm"). Item 19's staff list is `affiliated_staff`.
-- **Another form** (21-22, 21-4142, ...): add a mapping module like `form_21_22a.py`. Read the
-  field names with `pypdf.PdfReader(blank).get_fields()`, and build with `fill_acroform(...,
-  strict=True)` so a renamed field fails loudly. Then add a prepare tool and a SKILL.md.
-- **New data fields:** add to `vault.FIELDS` with a sensitivity level and a validator. The
-  secure form and masking pick them up automatically.
-- **Production storage:** swap `Vault` and `DocumentStore` for KMS-backed versions with the
-  same methods.
-- **Not covered yet:**
-  - Section II (a claimant other than the veteran: surviving spouse, child or parent).
-  - Item 24 limitations.
-  - The representative's own signature (25A).
-  - Submitting to VA from the skill itself (the orchestrator does it: Lighthouse `POST /forms/2122`, stubbed).
-  - Real authentication. The demo has no login: a case is addressed by its id.
-
-### PDF gotchas already handled
-
-These are in `pdf/fill.py`:
-- **VA forms are XFA hybrids.** The XFA layer is dropped, or Chrome and Acrobat show the blank
-  values.
-- **Radio buttons** need `/V` stored as a name plus each widget's `/AS` set, or they render
-  unselected.
-- **`/NeedAppearances` is set** so filled values print.
-
-## Provenance
-
-`poa_skill/pdf/` and the signature-pad trimming in the demo UI are adapted from the Shire
-claims-prep platform's form engine, written by Lukas Allard. The 21-22a mapping, vault, tools,
-skill and demo are new for this project.
+`poa_skill/pdf/` and the signature-pad trimming are adapted from an earlier form engine by the
+project lead.

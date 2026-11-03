@@ -13,7 +13,7 @@ from .schema import IntakeRecord
 
 FieldType = str  # see data/questions.yaml for the list
 STAGES = ("screen", "post_poa", "reopen")
-SOURCES = ("chat", "va_records", "secure_form")  # a `cfile: true` question may also come from the C-file
+SOURCES = ("chat", "secure_form")  # a `cfile: true` question may also come from the C-file
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,6 @@ class Question:
     options: tuple[str, ...] = ()
     probe: bool = False
     confirms: str | None = None  # probes: the field this question double-checks
-    ask_with_records: str | None = None  # probes: wording when VA's records were fetched
     cfile: bool = False  # claims prep can settle it from the C-file (before pass 2)
     form_q: Any = None  # question number(s) on the firm's intake form
 
@@ -39,40 +38,6 @@ class NarrativePrompt:
     id: str
     ask: str
     auto: bool = False
-
-
-@dataclass(frozen=True)
-class Ask:
-    """One concrete thing to ask: a structured question, or a narrative prompt for one condition.
-
-    `records_text` is set when the question is worded around VA's records ("VA's records list
-    this service: ..."); the controller fills it in, the simulator reads it.
-    """
-
-    question: Question | None = None
-    prompt: NarrativePrompt | None = None
-    condition: str | None = None
-    records_text: str | None = None
-
-    @property
-    def key(self) -> str:
-        if self.question is not None:
-            return self.question.id
-        assert self.prompt is not None and self.condition is not None
-        return f"narrative:{self.condition}:{self.prompt.id}"
-
-    @property
-    def type(self) -> FieldType:
-        return self.question.type if self.question is not None else "narrative"
-
-    @property
-    def text(self) -> str:
-        if self.question is not None:
-            if self.records_text is not None and self.question.ask_with_records:
-                return self.question.ask_with_records.format(va_service=self.records_text)
-            return self.question.ask
-        assert self.prompt is not None
-        return self.prompt.ask.format(condition=self.condition)
 
 
 @dataclass
@@ -110,7 +75,6 @@ class QuestionBank:
                 options=tuple(q.get("options", ())),
                 probe=bool(q.get("probe", False)),
                 confirms=q.get("confirms"),
-                ask_with_records=q.get("ask_with_records"),
                 cfile=bool(q.get("cfile", False)),
                 form_q=q.get("form_q"),
             )

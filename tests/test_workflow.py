@@ -5,6 +5,7 @@ import pypdf
 import pytest
 from conftest import SSN, VETERAN
 
+from poa_skill import load_skill, redact
 from poa_skill.service import ESIGN_CONSENT, WorkflowError
 from poa_skill.tools import TOOLS, run_tool
 
@@ -116,3 +117,29 @@ def test_preparing_again_supersedes_the_old_draft(svc):
     a = svc.prepare({"authorize_7332_records": True, "authorize_address_change": True})
     b = svc.prepare({"authorize_7332_records": True, "authorize_address_change": True})
     assert svc.docs.get(a.id).status == "superseded" and svc.docs.get(b.id).status == "draft"
+
+
+def test_redact_hides_ssns_and_file_numbers_but_not_phones_or_zips():
+    for s in ("my ssn is 123-45-6789", "123 45 6789", "123456789", "file 12345678"):
+        assert redact(s)[1], s
+    for s in ("call 414-555-0100", "zip 53202-1234", "born 04/09/1988"):
+        assert not redact(s)[1], s
+
+
+def test_skill_loads_as_a_mountable_unit():
+    skill = load_skill()
+    assert skill.name == "poa-21-22a"
+    assert "secure form" in skill.instructions and not skill.instructions.startswith("---")
+    assert skill.tool_names == {
+        "get_intake_status",
+        "request_secure_info",
+        "prepare_poa_21_22a",
+        "update_poa_draft",
+        "request_signature_capture",
+        "present_for_signature",
+    }
+    fn = skill.tools_openai[1]["function"]
+    assert fn["name"] == "request_secure_info" and fn["parameters"]["required"] == [
+        "fields",
+        "purpose",
+    ]

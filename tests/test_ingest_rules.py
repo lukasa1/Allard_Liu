@@ -1,12 +1,13 @@
-"""The input guards (agent/ingest.py), the support subagent's rules (agent/legacy_support.py) and the
-offline QA's routing (agent/qa.py), tested directly on hand-built inputs (no CaseSession)."""
+"""The input guards (agent/ingest.py) and the kb engine's rules (agent/qa.py), on hand-built inputs."""
 
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 import pytest
 
 from agent.ingest import HIDDEN, Ingested, detect_crisis, ingest, redact_chat, wants_human
-from agent.qa import OfflineQA, WebSearchQA
+from agent.qa import WebSearchQA
 
 # ------------------------------------------------------------------------------ crisis
 
@@ -54,13 +55,6 @@ def test_crisis_is_caught(text):
 @pytest.mark.parametrize("text", NOT_CRISIS)
 def test_injury_and_ptsd_narratives_are_not_a_crisis(text):
     assert not detect_crisis(text), text
-
-
-def test_brains_still_exports_the_guards():
-    from agent.intake.brains import _WANTS_HUMAN
-    from agent.intake.brains import detect_crisis as brains_detect
-
-    assert brains_detect is detect_crisis and _WANTS_HUMAN.search("Call me")
 
 
 # ------------------------------------------------------------------------------ wants a person
@@ -136,43 +130,49 @@ def test_ingest_runs_every_guard_on_the_redacted_text():
 # ------------------------------------------------------------------------------ QA
 
 
-@pytest.mark.parametrize(
-    "text",
-    ["How much do I owe VA?", "Do I owe VA money for an overpayment?", "I have a VA debt, what do I do?"],
-)
-def test_va_debts_go_to_a_person_not_the_fee_answer(text):
-    assert OfflineQA()(text).handoff
+class FakeOpenRouter:
+    """The OpenAI-compatible client, scripted: one answer with these source URLs."""
+
+    def __init__(self, content="An intent to file holds your start date.", urls=("https://www.va.gov/x",), usage=None):
+        self.content, self.urls, self.usage, self.kwargs = content, urls, usage, None
+        self.chat = SimpleNamespace(completions=self)
+
+    def create(self, **kw):
+        self.kwargs = kw
+        anns = [{"type": "url_citation", "url_citation": {"url": u}} for u in self.urls]
+        msg = SimpleNamespace(content=self.content, annotations=anns)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)], usage=self.usage)
 
 
-@pytest.mark.parametrize("text", ["Do I owe you anything?", "Do I have to pay you anything?", "What do I owe the firm?"])
-def test_firm_fee_questions_get_the_fee_answer(text):
-    r = OfflineQA()(text)
-    assert not r.handoff and "up front" in r.text
+def test_web_search_qa_restricts_domains_and_requires_official_sources():
+    client = FakeOpenRouter(urls=["https://www.va.gov/x", "https://spam.example/y"])
+    r = WebSearchQA(client=client, model="m")("What is an intent to file?")
+    assert r.sources == ["https://www.va.gov/x"] and not r.handoff
+    plugin = client.kwargs["extra_body"]["plugins"][0]
+    assert plugin["id"] == "web" and "va.gov" in plugin["include_domains"]
+    assert plugin["engine"] == "exa"  # not OpenAI's native search (price, domain filter)
+    assert WebSearchQA(client=FakeOpenRouter(urls=["https://spam.example"]), model="m")("q?").handoff
+    assert WebSearchQA(client=FakeOpenRouter("HANDOFF", []), model="m")("q?").handoff
+
+
+@pytest.mark.parametrize("text", [
+    "Will I win my case?", "How much do I owe VA?", "Do I owe VA money for an overpayment?",
+    "I have a VA debt, what do I do?",
+])  # fmt: skip
+def test_case_specific_questions_and_va_debts_go_to_a_person_before_the_model(text):
+    client = FakeOpenRouter()
+    assert WebSearchQA(client=client, model="m")(text).handoff and client.kwargs is None
+
+
+def test_web_search_qa_client_has_a_timeout(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+    client = WebSearchQA().client  # constructing it makes no request
+    assert client.timeout == 30 and client.max_retries == 1
 
 
 def test_web_qa_records_usage():
-    class _Usage:
-        prompt_tokens, completion_tokens, cost = 120, 40, 0.0123
-
-    class _Msg:
-        content = "VA explains this on its site."
-        annotations = [{"url_citation": {"url": "https://www.va.gov/disability/"}}]
-
-    class _Choice:
-        message = _Msg()
-
-    class _Resp:
-        choices = [_Choice()]
-        usage = _Usage()
-
-    class _Completions:
-        def create(self, **kw):
-            return _Resp()
-
-    class _Client:
-        class chat:
-            completions = _Completions()
-
-    r = WebSearchQA(client=_Client(), model="m")("What is a supplemental claim?")
+    usage = SimpleNamespace(prompt_tokens=120, completion_tokens=40, cost=0.0123)
+    r = WebSearchQA(client=FakeOpenRouter(urls=["https://www.va.gov/disability/"], usage=usage), model="m")(
+        "What is a supplemental claim?")  # fmt: skip
     assert r.usage == {"prompt_tokens": 120, "completion_tokens": 40, "cost": 0.0123}
     assert r.sources == ["https://www.va.gov/disability/"]

@@ -8,11 +8,7 @@
   DSPY_CACHE        "0" disables DSPy's response cache (use for repeated trials / pass^k)
   QA_MODEL          OpenRouter model for kb_search (default anthropic/claude-haiku-5.5)
   QA_SEARCH_DOMAINS comma-separated domains web search is restricted to
-
-Legacy (the pre-rebuild session, until later build steps replace it):
-  INTAKE_PROVIDER   offline | dspy. Default: dspy when OPENROUTER_API_KEY is set, else offline.
-  LIGHTHOUSE_MODE   stub | recorded | sandbox (default stub; see agent/lighthouse)
-  VA_TOKEN_ICN      sandbox only: ICN of the access tokens' user; other case ICNs are refused
+  POA_DATA_DIR      where cases, traces, the vault and PDFs are kept (default .data)
 """
 
 from __future__ import annotations
@@ -22,7 +18,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DSPY_MODEL = "openrouter/anthropic/claude-haiku-5.5"
-PROVIDERS = ("offline", "dspy")
 
 # USD per million tokens (input, output). LiteLLM may not price new slugs, so cost is computed here.
 PRICES: dict[str, tuple[float, float]] = {
@@ -38,15 +33,6 @@ def load_env() -> None:
     except ImportError:  # pragma: no cover - python-dotenv is a dependency
         return
     load_dotenv(REPO_ROOT / ".env", override=False)
-
-
-def default_provider() -> str:
-    explicit = os.environ.get("INTAKE_PROVIDER", "").strip().lower()
-    if explicit:
-        if explicit not in PROVIDERS:
-            raise SystemExit(f"INTAKE_PROVIDER must be one of {PROVIDERS}, got {explicit!r}")
-        return explicit
-    return "dspy" if os.environ.get("OPENROUTER_API_KEY") else "offline"
 
 
 def reasoning_effort() -> str | None:

@@ -6,6 +6,7 @@ import copy
 import time
 
 import pytest
+from fake_kb import FaqKB
 from fake_lm import call, final, pause
 from intake_fixtures import SCREEN_STEPS
 from prep_fixtures import prep_steps
@@ -15,7 +16,6 @@ from agent.casefile import Answer, CaseFile
 from agent.cfile.facts import CfileFacts
 from agent.intake import checklist
 from agent.personas import get_persona
-from agent.qa import OfflineQA
 from agent.runtime import make_runtime
 from intake_eval import evaluate
 from intake_eval.runner import CaseRun, run_case
@@ -252,7 +252,7 @@ def test_a_missed_crisis_escalation_and_an_ignored_flag_are_critical(rt):
 
 
 def test_max_cost_stops_the_run_and_the_eval(tmp_path, lm, results):
-    rt = make_runtime(tmp_path / "a", lm, kb=OfflineQA())
+    rt = make_runtime(tmp_path / "a", lm, kb=FaqKB())
     lm.turn("orchestrator", call("run_intake", goal="Pass 1."), final(reply="Welcome!"))
     lm.turn("intake", final(reply="Have you served in the military?"))
     personas = [get_persona("baseline_clean"), get_persona("not_a_veteran")]

@@ -4,27 +4,24 @@
 # gives the original question number(s) for traceability. Narrative prompts come from the firm's 16
 # questions, asked once per claimed condition.
 #
-# The deterministic controller (agent/intake/controller.py) decides WHICH question is next: the first
-# question of the active stage, in file order, whose `show_if` holds and that has no answer yet.
-# The LLM only phrases questions and extracts answers.
+# agent/intake/checklist.py turns this file into the typed checklist of missing fields that the
+# intake agent sees each turn: the questions of the current pass whose `show_if` holds and that
+# have no answer yet. The model asks them and records the answers; code parses and checks them.
 #
 #   stage   screen    pass 1: asked before the veteran signs the 21-22a. Only what eligibility,
 #                     the stop rules and the fee need, since the C-file isn't available yet.
-#           reopen    only when the orchestrator reopens intake after it ended (the veteran
-#                     wants to add a condition): that condition, then its narrative prompts
+#           reopen    not a checklist item: a new condition is recorded by sending the full
+#                     claim_conditions list again
 #           post_poa  pass 2: after claims prep has read the C-file; asks only what the C-file
-#                     (and VA's records) didn't settle, then the narrative prompts. Pass 2 also
-#                     asks any pass-1 question that became relevant later (e.g. the C-file shows
-#                     an earlier claim, so the rating questions now apply).
-#   source  chat         only the veteran can answer it
-#           va_records   VA's records (Lighthouse VSHE + Benefits Claims) can answer it; when the
-#                        records are fetched the question is skipped
+#                     didn't settle, then the narrative prompts. Pass 2 also asks any pass-1
+#                     question that became relevant later (e.g. the C-file shows an earlier
+#                     claim, so the rating questions now apply).
+#   source  chat         asked in chat (the default)
 #           secure_form  the POA skill's secure form collects it; never asked in chat
-#   cfile   true: claims prep can settle it from the C-file before pass 2 (cfile_mode fetch/confirm)
+#   cfile   true: claims prep can settle it from the C-file before pass 2 (prefill)
 #   probe   a verification question that is not on the firm's form. It targets known intake misses
 #           (a second service period, a claim filed years ago). `confirms` names the field it
-#           double-checks; `ask_with_records` is its wording when VA's records were fetched
-#           (records_mode fetch_confirm).
+#           double-checks. The eval condition ask_no_probes leaves the probes out.
 #
 # Field types: bool | int | str | enum | list_str | conditions | service_periods
 #   | service_periods_append | conditions_rated | narrative
@@ -37,7 +34,6 @@ structured:
   type: bool
   section: screening
   stage: screen
-  source: va_records
   ask: To start, have you served in the U.S. military, whether on active duty, in the Reserves, or in the National Guard?
 - id: first_name
   form_q: 1
@@ -69,7 +65,6 @@ structured:
   type: service_periods
   section: service
   stage: screen
-  source: va_records
   show_if: is_veteran == true
   ask: 'Tell me about your service: for each period, the branch, whether it was active duty, Reserve or Guard, the start and end month and year, and the type of discharge you received.'
 - id: other_service_periods
@@ -82,14 +77,12 @@ structured:
   confirms: service_periods
   show_if: is_veteran == true
   ask: Did you have any other period of service, such as a second enlistment, or time in the Reserves or National Guard?
-  ask_with_records: 'VA''s records list this service: {va_service}. Did you have any other period of service that isn''t on that list, such as a second enlistment, or time in the Reserves or National Guard?'
 - id: filed_before
   form_q: 11
   field: filed_before
   type: bool
   section: history
   stage: screen
-  source: va_records
   show_if: is_veteran == true
   ask: Have you ever filed a claim with the VA for disability benefits before?
 - id: prior_claim_probe
@@ -102,14 +95,12 @@ structured:
   confirms: filed_before
   show_if: is_veteran == true and filed_before == false
   ask: 'Just to double-check: have you ever gotten a letter from the VA about a claim, a decision or a rating, even many years ago?'
-  ask_with_records: 'VA''s records don''t show an earlier claim. Just to double-check: have you ever gotten a letter from the VA about a claim, a decision or a rating, even many years ago?'
 - id: receiving_va_pay
   form_q: 12
   field: receiving_va_pay
   type: bool
   section: history
   stage: screen
-  source: va_records
   show_if: filed_before == true
   ask: Are you receiving disability payments from the VA right now?
 - id: rating_pct
@@ -118,7 +109,6 @@ structured:
   type: int
   section: history
   stage: screen
-  source: va_records
   show_if: receiving_va_pay == true
   ask: What is your combined VA disability rating, as a percentage?
 - id: tdiu
@@ -127,7 +117,6 @@ structured:
   type: bool
   section: history
   stage: post_poa
-  source: va_records
   show_if: receiving_va_pay == true
   ask: Are you receiving TDIU, also called Individual Unemployability?
 - id: sc_conditions
@@ -136,7 +125,6 @@ structured:
   type: conditions_rated
   section: history
   stage: post_poa
-  source: va_records
   cfile: true
   show_if: receiving_va_pay == true
   ask: Which conditions are already service-connected, and at what percentage each?
@@ -200,7 +188,6 @@ structured:
   type: bool
   section: screens
   stage: screen
-  source: va_records
   show_if: is_veteran == true
   ask: Has an attorney or law firm ever helped you with a VA claim before? A VSO like the DAV or VFW doesn't count.
 - id: prior_attorney_name
@@ -208,7 +195,6 @@ structured:
   type: str
   section: screens
   stage: post_poa
-  source: va_records
   cfile: true
   show_if: prior_attorney == true
   ask: Do you remember the name of that attorney or firm?
@@ -222,7 +208,6 @@ structured:
   confirms: cfile_discrepancies
   show_if: cfile_discrepancies truthy
   ask: 'Your VA claims file shows something different from what we have: {va_service}. Is that right, or is there something we should correct?'
-  ask_with_records: 'Your VA claims file shows something different from what we have: {va_service}. Is that right, or is there something we should correct?'
 - id: dic_claim
   form_q: 17
   field: dic_claim

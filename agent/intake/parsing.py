@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from itertools import pairwise
 from typing import Any
 
 from .conditions import normalize_condition, normalize_conditions
@@ -166,7 +167,7 @@ def _split_on_branches(chunk: str) -> list[str]:
     if len(starts) < 2 or len(_dates(chunk.lower())) < 4:
         return [chunk]
     cuts = [0] + starts[1:] + [len(chunk)]
-    return [chunk[a:b] for a, b in zip(cuts, cuts[1:])]
+    return [chunk[a:b] for a, b in pairwise(cuts)]
 
 
 def parse_rated_conditions(text: str) -> list[RatedCondition] | None:
@@ -174,7 +175,7 @@ def parse_rated_conditions(text: str) -> list[RatedCondition] | None:
     if not found:
         return [] if _NONE.match(text) else None
     return [  # "No, but tinnitus at 10%": the name is "tinnitus"
-        RatedCondition(name=re.sub(r"^(no\W+)?(but|and)\s+", "", name.strip(), flags=re.I), rating_pct=int(pct))
+        RatedCondition(name=re.sub(r"^(no\W+)?(but|and)\s+", "", name.strip(), flags=re.IGNORECASE), rating_pct=int(pct))
         for name, pct in found
     ]
 
@@ -226,10 +227,9 @@ def parse_text(qtype: str, text: str, options: tuple[str, ...] = ()) -> Any:
     raise ValueError(f"unknown question type {qtype!r}")
 
 
-_FILLER = set(
-    "i im i'm it its it's that this what which else the a to be just really honestly um uh "
-    "sorry maybe so well about any of off top my head exactly rest other others more anything".split()
-)
+_FILLER = {
+    "i", "im", "i'm", "it", "its", "it's", "that", "this", "what", "which", "else", "the", "a", "to", "be", "just", "really", "honestly", "um", "uh", "sorry", "maybe", "so", "well", "about", "any", "of", "off", "top", "my", "head", "exactly", "rest", "other", "others", "more", "anything",
+}
 
 
 def _is_only_unsure(text: str) -> bool:
@@ -273,11 +273,11 @@ def coerce(qtype: str, value: Any, options: tuple[str, ...] = ()) -> Any:
     match qtype:
         case "bool":
             if not isinstance(value, bool):
-                raise ValueError(f"expected a boolean, got {value!r}")
+                raise ValueError(f"expected a boolean, got {value!r}")  # noqa: TRY004 (callers catch ValueError)
             return value
         case "int":
             if isinstance(value, bool):
-                raise ValueError("expected an integer")
+                raise ValueError("expected an integer")  # noqa: TRY004 (callers catch ValueError)
             number = int(value)
             if not 0 <= number <= 100:
                 raise ValueError("rating must be 0-100")

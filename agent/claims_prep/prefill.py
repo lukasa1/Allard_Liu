@@ -18,8 +18,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from agent.casefile import Answer, CaseFile, Conflict, Task
-from agent.cfile.facts import CfileFacts
-from agent.cfile.reconcile import newest_private_rep, same_period
+from agent.cfile.facts import CfileFacts, newest_private_rep, same_period
 from agent.claims_prep.facts import Fact
 from agent.intake import checklist
 from agent.intake.conditions import normalize_condition

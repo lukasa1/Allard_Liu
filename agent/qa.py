@@ -1,25 +1,34 @@
-"""Answer the veteran's questions during intake.
-
-Two engines, the same contract (question -> QAResult(text, sources, handoff)):
+"""kb_search's engine: answer a veteran's general question from official web sources.
 
   WebSearchQA  OpenRouter's web plugin, restricted to official domains (va.gov, ecfr.gov, ...).
                The model answers only from the search results and cites them. About $0.007 per
                search with the Exa engine (pinned), plus tokens.
-  OfflineQA    a small hand-checked FAQ with official sources. Used with no API key.
 
-Both refuse the same things and hand them to a person instead (`handoff=True`): legal advice,
-predictions about this veteran's case, and anything about the firm's own policies beyond the
-basics. The intake controller then tells the veteran the team will answer.
+It refuses some things and hands them to a person instead (`handoff=True`): legal advice,
+predictions about this veteran's case, and money owed to VA; these never reach the model. An
+answer with no official source is not given either. Tests use a fixed FAQ stand-in
+(tests/fake_kb.py) with the same contract.
 """
 
 from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import urlparse
 
-from agent.intake.controller import QAResult
+
+@dataclass
+class QAResult:
+    text: str
+    sources: list[str] = field(default_factory=list)
+    handoff: bool = False  # True: a person on the team should answer (legal advice, case-specific)
+    usage: dict[str, Any] = field(default_factory=dict)  # tokens / cost of the call, if any (trace log)
+
+
+QATool = Callable[[str], QAResult]  # question -> QAResult
 
 DEFAULT_DOMAINS = (
     "va.gov",
@@ -41,77 +50,6 @@ _NEEDS_PERSON = re.compile(
 )
 
 
-@dataclass(frozen=True)
-class FaqEntry:
-    keywords: tuple[str, ...]
-    answer: str
-    source: str
-
-
-FAQ: tuple[FaqEntry, ...] = (
-    FaqEntry(
-        (
-            "fee", "cost", "charge", "pay you", "how much do you", "percent do you", "free",
-            # owing money only to the firm: "How much do I owe VA?" goes to a person (_NEEDS_PERSON)
-            "owe you", "owe the firm", "owe your firm", "pay the firm", "pay your firm",
-        ),
-        "Accredited attorneys can only charge for work done after VA's first decision on a claim, "
-        "and the fee usually comes out of past-due benefits if you win, so there's nothing to pay "
-        "up front. Our team will go over the fee agreement with you before anything is signed.",
-        "https://www.va.gov/ogc/accreditation.asp",
-    ),
-    FaqEntry(
-        ("how long", "timeline", "take", "wait"),
-        "VA publishes its current average processing times for disability claims, and they change "
-        "over time. Our team can tell you what to expect for your situation.",
-        "https://www.va.gov/disability/after-you-file-claim/",
-    ),
-    FaqEntry(
-        ("c-file", "c file", "claims file", "my file", "records"),
-        "Your claims file (C-file) is VA's full record of your claims. Once you sign the form "
-        "appointing our attorney, the firm can request it so we can review your history.",
-        "https://www.va.gov/records/",
-    ),
-    FaqEntry(
-        ("21-22a", "power of attorney", "poa", "representative", "what am i signing"),
-        "VA Form 21-22a appoints an individual attorney or agent to represent you with VA. It lets "
-        "them see your VA records and act for you on your claims. You can revoke it at any time.",
-        "https://www.va.gov/find-forms/about-form-21-22a/",
-    ),
-    FaqEntry(
-        ("intent to file", "effective date", "0966"),
-        "An intent to file holds your potential start date for benefits for up to a year while you "
-        "gather evidence, so you don't lose back pay.",
-        "https://www.va.gov/resources/your-intent-to-file-a-va-claim/",
-    ),
-    FaqEntry(
-        ("appeal", "higher-level review", "supplemental", "board", "denied"),
-        "If you disagree with a VA decision you generally have one year from the decision letter to "
-        "choose a review: a Supplemental Claim, a Higher-Level Review, or a Board appeal.",
-        "https://www.va.gov/decision-reviews/",
-    ),
-    FaqEntry(
-        ("crisis", "988", "suicide", "hotline"),
-        "The Veterans Crisis Line is free and confidential, 24/7: dial 988 and press 1, or text "
-        "838255.",
-        "https://www.veteranscrisisline.net/",
-    ),
-)
-
-
-class OfflineQA:
-    engine = "offline_faq"
-
-    def __call__(self, question: str) -> QAResult:
-        if _NEEDS_PERSON.search(question):
-            return QAResult(text="", handoff=True)
-        low = question.lower()
-        for entry in FAQ:
-            if any(re.search(rf"(?<![a-z]){re.escape(k)}(?![a-z])", low) for k in entry.keywords):
-                return QAResult(text=entry.answer, sources=[entry.source])
-        return QAResult(text="", handoff=True)
-
-
 QA_SYSTEM = """You answer a veteran's question during a law firm's intake chat, using ONLY the web \
 search results you are given (official VA and federal sources). Rules:
 - Two or three plain sentences. No legal jargon, no lists, no em dashes.
@@ -122,8 +60,6 @@ the search results don't answer it, reply with exactly: HANDOFF
 
 
 class WebSearchQA:
-    engine = "openrouter_web"
-
     def __init__(
         self, client=None, model: str | None = None, domains: tuple[str, ...] | None = None
     ) -> None:
@@ -210,8 +146,3 @@ def _allowed(url: str, domains: tuple[str, ...]) -> bool:
     host = (urlparse(url).hostname or "").lower()
     return any(host == d or host.endswith("." + d) for d in domains)
 
-
-def make_qa(provider: str):
-    if provider == "offline" or not os.environ.get("OPENROUTER_API_KEY"):
-        return OfflineQA()
-    return WebSearchQA()

@@ -1,22 +1,15 @@
-"""Generate a synthetic C-file (a folder of PDFs) for a persona, plus the Benefits Documents stub.
+"""Generate a synthetic C-file (a list of PDFs) for a persona; the simulated VBMS serves it.
 
 Real C-files are one large zip of many PDFs pulled from VBMS. This produces a small, readable
 stand-in with the documents a face note is built from (DD-214s, rating decisions with narrative
 and code sheet, notification letters, filing forms, prior 21-22a/21-22) plus one irrelevant
-document, so the pipeline has to pick what matters. Every value is synthetic.
-
-`DocumentsStub` mimics VA's Benefits Documents API (search a veteran's eFolder, download a
-document), which is VA-internal. Once Ben's sample C-files arrive, point `CFILE_DIR` (or
-`intake facenote --cfile DIR`) at a folder of real-shaped PDFs instead.
+document, so claims prep has to pick what matters. Every value is synthetic.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import date
 from io import BytesIO
-from pathlib import Path
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -226,59 +219,3 @@ def build_documents(p: Persona, facts: CfileFacts | None = None) -> list[tuple[s
     ))  # fmt: skip
     return docs
 
-
-class DocumentsStub:
-    """Stand-in for VA's Benefits Documents API (VA-internal): list and download a C-file."""
-
-    mode = "stub"
-
-    def __init__(self, root: Path) -> None:
-        self.root = root
-
-    def _folder(self, icn: str) -> Path:
-        return self.root / icn
-
-    @staticmethod
-    def _spec_hash(p: Persona) -> str:
-        """Everything build_documents reads, so an edited persona doesn't serve a stale C-file."""
-        spec = {
-            "facts": truth_facts(p).model_dump(),
-            "name": [p.truth.first_name, p.truth.last_name],
-            "ssn": p.identity.get("ssn", ""),
-        }
-        return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()
-
-    def ensure(self, p: Persona) -> Path:
-        """Write the persona's synthetic C-file; rewrite it when the persona's spec changes.
-
-        The spec hash sits next to index.json (index.json stays the plain search() listing)."""
-        folder = self._folder(p.icn)
-        index, stamp = folder / "index.json", folder / "spec.sha256"
-        spec_hash = self._spec_hash(p)
-        if index.exists() and stamp.exists() and stamp.read_text() == spec_hash:
-            return folder
-        folder.mkdir(parents=True, exist_ok=True)
-        for old in folder.glob("*.pdf"):  # documents the new spec may no longer have
-            old.unlink()
-        entries = []
-        for n, (doc_type, subject, pdf) in enumerate(build_documents(p), 1):
-            doc_id = hashlib.sha256(f"{p.icn}{n}{subject}".encode()).hexdigest()[:16]
-            (folder / f"{doc_id}.pdf").write_bytes(pdf)
-            entries.append(
-                {"documentId": doc_id, "subject": subject, "docTypeHint": doc_type, "pages": 1}
-            )
-        index.write_text(json.dumps(entries, indent=2))
-        stamp.write_text(spec_hash)
-        return folder
-
-    def search(self, icn: str) -> list[dict]:
-        index = self._folder(icn) / "index.json"
-        if not index.exists():
-            return []
-        return json.loads(index.read_text())
-
-    def download(self, icn: str, document_id: str) -> bytes:
-        path = self._folder(icn) / f"{document_id}.pdf"
-        if not path.exists():
-            raise FileNotFoundError(document_id)
-        return path.read_bytes()

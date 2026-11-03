@@ -23,7 +23,7 @@ hand-off) are recorded, not run; its decisions are scored in the orchestrator's 
              tasks) and, for a by-rule hand-off, the move to needs_human
 
 Live run (needs OPENROUTER_API_KEY; the kb is the web-search QA):
-  uv run python -m intake_eval.support_eval [--luke]
+  uv run intake support-eval [--luke]
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ import yaml
 
 from agent.casefile import Answer, CaseFile, DocState, Filing, PrepState, StopRule
 from agent.harness import Harness
-from agent.intake.controller import CRISIS_MESSAGE
+from agent.ingest import CRISIS_MESSAGE
 from agent.runtime import Job, Runtime
 from agent.store import Store
 from agent.support import agent as support
@@ -164,15 +164,15 @@ def score_one(rt: SupportOnly, m: dict[str, Any]) -> SupportScore:
 def run_support_eval(messages: list[dict[str, Any]] | None = None, lm=None, kb=None,
                      data_dir: Path | None = None) -> list[SupportScore]:  # fmt: skip
     """Score `messages` (default: the whole set). `lm`: default the live model (agent.config);
-    `kb`: default the web-search QA. Tests pass the scripted LM and the offline FAQ."""
+    `kb`: default the web-search QA. Tests pass the scripted LM and a fake kb."""
     from agent.config import load_env, make_lm
-    from agent.qa import make_qa
+    from agent.qa import WebSearchQA
 
     load_env()
     messages = messages if messages is not None else load_messages()
     root = Path(data_dir or tempfile.mkdtemp(prefix="support-eval-"))
     harness = Harness(lm or make_lm(), TraceLog(root / "traces.jsonl"))
-    rt = SupportOnly(Store(root / "cases.sqlite"), harness, kb or make_qa("openrouter"))
+    rt = SupportOnly(Store(root / "cases.sqlite"), harness, kb or WebSearchQA())
     return [score_one(rt, m) for m in messages]
 
 
@@ -210,16 +210,3 @@ def misses(scores: list[SupportScore]) -> list[str]:
             out.append(f"[{s.phase}] {s.text!r}: {', '.join(why)} -> {s.reply[:160]!r}")
     return out
 
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="score the support agent (live model)")
-    parser.add_argument("--luke", action="store_true", help="only Luke's 50-message subset")
-    _scores = run_support_eval(load_messages(luke_only=parser.parse_args().luke))
-    for _k, _v in summarize(_scores).items():
-        print(f"{_k:>20}: {_v}")
-    _missed = misses(_scores)
-    print(f"\n{len(_missed)} label-level misses" + (":" if _missed else ""))
-    for _line in _missed:
-        print("  " + _line)

@@ -29,7 +29,6 @@ BANK = QuestionBank.load()
 # Not asked as questions: C-file conflicts are `confirm:` items, and a new condition is added by
 # recording the full claim_conditions list again.
 SKIP = {"cfile_discrepancy_check", "add_condition"}
-FREE_TEXT = ("str", "narrative")
 # Secure-form questions -> the vault field that answers them.
 VAULT_FIELD = {
     "first_name": "first_name", "last_name": "last_name", "street": "address.line1",

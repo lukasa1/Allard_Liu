@@ -19,8 +19,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from agent.cfile.extract import _branch, _form_id, _iso, _outcome, _pct, _ym
-from agent.cfile.facts import CfileFacts, Decision, Issue, PendingFiling, PriorRep
-from agent.cfile.reconcile import is_firm
+from agent.cfile.facts import CfileFacts, Decision, Issue, PendingFiling, PriorRep, is_firm
 from agent.intake.conditions import normalize_condition
 from agent.intake.schema import Component, Discharge, RatedCondition, ServicePeriod
 

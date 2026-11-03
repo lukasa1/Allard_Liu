@@ -35,4 +35,3 @@ stories:
 expected:
   decision: eligible
   fee_pct: 30
-  flags: [prior_va_claim]

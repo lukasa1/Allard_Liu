@@ -236,7 +236,7 @@ function preview(c) {
   shownDoc = c.form; showTab("docs");  // the panel fetched after this poll loads the new version
 }
 
-// Signature pad: draw only; trimmed to the ink before upload (adapted from demo/static/index.html).
+// Signature pad: draw only; trimmed to the ink before upload.
 function trimmed(canvas) {
   const ctx = canvas.getContext("2d"), {width: w, height: h} = canvas, data = ctx.getImageData(0, 0, w, h).data;
   let minX = w, minY = h, maxX = -1, maxY = -1;

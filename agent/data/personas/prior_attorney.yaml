@@ -16,7 +16,6 @@ truth:
 expected:
   decision: eligible
   fee_pct: 20
-  flags: [prior_va_claim]
 cfile:
   prior_reps:
     - {name: Alan Smith, kind: attorney, signed: "2019-05-14"}

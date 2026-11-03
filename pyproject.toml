@@ -1,7 +1,7 @@
 [project]
 name = "veteran-intake-agent"
 version = "0.1.0"
-description = "Veteran intake agent (CS329Z): orchestrator + intake subagent, POA 21-22a skill, VA Lighthouse tools, C-file to face note."
+description = "VA claims agent (CS329Z): an orchestrator with intake, claims-prep and customer-support sub-agents, and the POA 21-22a skill. Synthetic data only."
 requires-python = ">=3.12"
 dependencies = [
     "pypdf>=5.0",
@@ -14,7 +14,6 @@ dependencies = [
     "dspy>=3.4.1,<3.5",
     "pyyaml>=6.0",
     "python-dotenv>=1.0",
-    "httpx>=0.27",
 ]
 
 [project.scripts]

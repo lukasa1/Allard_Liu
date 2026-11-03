@@ -62,8 +62,9 @@ def lm():
 def rt(tmp_path, lm):
     """The runtime (orchestrator, intake, claims prep, support) on a fresh store,
     driven by the scripted LM. kb_search uses the offline FAQ: no test touches the network."""
-    from agent.qa import OfflineQA
+    from fake_kb import FaqKB
+
     from agent.runtime import make_runtime
 
-    yield make_runtime(tmp_path, lm, kb=OfflineQA())
+    yield make_runtime(tmp_path, lm, kb=FaqKB())
     assert lm.unused() == {}, f"scripted steps never used: {lm.unused()}"

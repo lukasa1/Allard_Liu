@@ -6,13 +6,13 @@ import io
 import pypdf
 import pytest
 from conftest import SSN, VETERAN
+from fake_kb import FaqKB
 from fake_lm import call, final
 from intake_fixtures import SCREEN_STEPS, prefill_pass2
 
 from agent.casefile import Answer, CaseFile, Conflict, Filing, PrepState
 from agent.intake import checklist, documents
 from agent.kb import NO_ANSWER
-from agent.qa import OfflineQA
 from agent.runtime import make_runtime
 from poa_skill.documents import sha256
 from poa_skill.service import FEE_ESIGN_CONSENT
@@ -293,7 +293,7 @@ def test_a_restart_mid_intake_resumes_from_the_store(rt, lm, tmp_path):
     lm.turn("intake", *SCREEN_STEPS[:2], final(reply="Any other period of service?"))
     _say(rt, cid, "Yes, Army 2004-06 to 2010-05, honorable.")
 
-    rt2 = make_runtime(tmp_path, lm, kb=OfflineQA())  # a new process on the same store
+    rt2 = make_runtime(tmp_path, lm, kb=FaqKB())  # a new process on the same store
     lm.turn("intake", *SCREEN_STEPS[2:], final(reply="Thanks, next is the 21-22a."))
     rt2.message(cid, "No other service, never filed, no lawyer.")
     rt2.wait_until_idle()

@@ -3,16 +3,18 @@
 One home for the deterministic checks that run whatever a subagent or model would say:
 
   redact_chat   hide ID numbers (poa_skill.redact) and a date of birth typed next to a birth word
-  detect_crisis crisis language (the session and the intake controller hand off on it)
+  detect_crisis crisis language (the runtime hands the case to a person on it, D3)
   wants_human   a request to talk to a person (not a mention of one)
   wants_withdraw a request to end the firm's representation
   ingest        all three at once, on the redacted text
   untrusted     L6: wraps the veteran's words, C-file text and web text as data before they
                 enter any agent's context (after redaction and the crisis check)
 
+The fixed replies the runtime sends, without a model, when one of these rules fires are here too.
+
 Crisis detection favours recall: when unsure, it flags. It still has to leave ordinary injury and
-PTSD narratives alone ("I hurt myself lifting a crate", "the suicide of my friend"), because the
-intake controller ends the intake on a crisis.
+PTSD narratives alone ("I hurt myself lifting a crate", "the suicide of my friend"), because a
+crisis takes the case out of the agents' hands.
 """
 
 from __future__ import annotations
@@ -23,6 +25,18 @@ from dataclasses import dataclass
 from poa_skill import redact
 
 HIDDEN = "[number hidden for your privacy]"  # poa_skill.guard's placeholder
+
+# The rule replies (D2, D3): sent by code, never by a model.
+CRISIS_MESSAGE = (
+    "I'm really glad you told me. I'm stopping our questions so a person from our team can reach "
+    "you. If you're in crisis or thinking about hurting yourself, please call the Veterans Crisis "
+    "Line now: dial 988 and press 1, or text 838255. If you're in immediate danger, call 911."
+)
+HANDOFF_MESSAGE = "Of course. I'm passing your conversation to a person on our team, and they'll contact you shortly."
+WITHDRAW_MESSAGE = (
+    "I've passed your request to our team. A person will contact you to confirm before anything "
+    "about your representation changes."
+)
 
 # ----------------------------------------------------------------------------- date of birth
 # A date of birth typed in chat (chat never asks for one; the secure form does). Only next to a

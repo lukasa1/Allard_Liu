@@ -11,9 +11,9 @@ from prep_fixtures import case_at_stage_3, fee_agreement, prep_steps
 
 from agent.casefile import CaseFile, Filing, PrepState
 from agent.harness import CANNED_REPLY
+from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
 from agent.intake import checklist
-from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE
-from agent.runtime import WITHDRAW_MESSAGE, route
+from agent.runtime import route
 
 FILED = {"21-22a": Filing(confirmation="A"), "itf": Filing(confirmation="B")}
 

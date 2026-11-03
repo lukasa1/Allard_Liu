@@ -7,15 +7,14 @@ Every persona is made up; none is based on a real client. A persona file
   stories   per condition, what the veteran would say to the narrative prompts
   behaviors scripted habits for the simulated veteran (omit_second_period, ...)
   says      how they name conditions in everyday words
-  expected  decision / fee_pct / flags a correct intake should reach
+  expected  decision / fee_pct (and flag_decision) a correct case should reach
   identity  synthetic DOB, SSN, middle initial (for the POA skill's secure form)
-  va        how VA's records (the Lighthouse stub) differ from the truth, e.g. omit_periods: [1]
   cfile     the synthetic C-file: rating decisions, filings, prior 21-22a (see agent/cfile)
   poa       the veteran's answers to the 21-22a's Item 20 and Item 22
   during_prep  the orchestrator scenario (eval): a message the veteran sends while claims prep
             runs ({message, condition}); support should flag the new condition
 
-The same personas are the "test veterans" you can sign in as in the demo (stub Lighthouse).
+The same personas are the test veterans you can pick in the demo.
 """
 
 from __future__ import annotations
@@ -97,9 +96,8 @@ class Persona:
     behaviors: list[str] = field(default_factory=list)
     says: dict[str, str] = field(default_factory=dict)  # canonical condition -> how they say it
     style: str = ""
-    expected: dict[str, Any] = field(default_factory=dict)  # decision, fee_pct, flags
+    expected: dict[str, Any] = field(default_factory=dict)  # decision, fee_pct, flag_decision
     identity: dict[str, str] = field(default_factory=dict)  # dob, ssn, middle_initial
-    va: dict[str, Any] = field(default_factory=dict)
     cfile: dict[str, Any] = field(default_factory=dict)
     poa: dict[str, bool] = field(default_factory=dict)
     during_prep: dict[str, str] = field(default_factory=dict)  # message, condition
@@ -107,12 +105,6 @@ class Persona:
     @property
     def expected_decision(self) -> str:
         return self.expected.get("decision", "eligible")
-
-    @property
-    def icn(self) -> str:
-        """A fake ICN in VA's format (10 digits, V, 6 digits), stable per persona."""
-        h = int(hashlib.sha256(self.id.encode()).hexdigest(), 16)
-        return f"10{h % 10**8:08d}V{(h // 10**8) % 10**6:06d}"
 
     @property
     def display_name(self) -> str:
@@ -148,7 +140,6 @@ def load_persona(path: Path) -> Persona:
         style=data.get("style", ""),
         expected=dict(data.get("expected", {})),
         identity=identity,
-        va=dict(data.get("va") or {}),
         cfile=dict(data.get("cfile") or {}),
         poa={
             "authorize_7332_records": True,

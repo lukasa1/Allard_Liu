@@ -1,14 +1,16 @@
 """What a face note needs from a C-file, as structured facts.
 
 The same schema is used three ways: the synthetic C-file generator writes documents FROM it
-(ground truth), the extractor reads documents INTO it (offline regex or DSPy), and the renderer
-turns it into the firm's face-note template. Scoring compares extracted facts to the truth.
+(ground truth, `truth_facts`), claims prep's recorded facts are assembled INTO it
+(agent/claims_prep/facts.build), and the renderer turns it into the firm's face-note template.
+Scoring compares the recorded facts to the truth.
 """
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -54,9 +56,34 @@ class CfileFacts(BaseModel):
     decisions: list[Decision] = Field(default_factory=list)
     prior_reps: list[PriorRep] = Field(default_factory=list)
     pending_filings: list[PendingFiling] = Field(default_factory=list)
-    # Documents a person must read: unreadable, or read without their key facts. No dates or
-    # contents, only document labels: these become flags, which reach tasks and prompts.
-    problems: list[str] = Field(default_factory=list)
+
+
+def newest_private_rep(facts: CfileFacts) -> PriorRep | None:
+    """The most recent private attorney or agent: newest by signed date, ties by document order
+    (the same rule as the face note's header)."""
+    private = [r for r in facts.prior_reps if r.kind in ("attorney", "agent")]
+    return max(reversed(private), key=lambda r: r.signed or "") if private else None
+
+
+def is_firm(name: str, rep: dict[str, Any]) -> bool:
+    """Whether a representative's name in the C-file is the firm itself (or its attorney)."""
+    ours = {n.lower() for n in (rep.get("firm_name"), f"{rep.get('first_name', '')} {rep.get('last_name', '')}".strip()) if n}
+    return any(o in name.lower() for o in ours)
+
+
+def _year(ym: str | None) -> int | None:
+    m = re.search(r"(19|20)\d{2}", ym or "")
+    return int(m.group(0)) if m else None
+
+
+def same_period(a: ServicePeriod, b: ServicePeriod) -> bool:
+    """The same enlistment if the branch matches and it starts within a year (people round)."""
+    if (a.branch or "").lower() != (b.branch or "").lower():
+        return False
+    ya, yb = _year(a.start), _year(b.start)
+    if ya is None or yb is None:  # a free-text or missing date: can't tell them apart
+        return True
+    return abs(ya - yb) <= 1
 
 
 def _plus_days(iso: str, days: int) -> str:

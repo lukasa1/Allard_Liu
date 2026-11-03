@@ -1,10 +1,9 @@
 """The intake record: everything the intake subagent collects, as structured data.
 
 This is the contract between the intake subagent and the rest of the system (the orchestrator,
-case prep, the face-note pipeline). Fields map to the firm's 36-question intake form; see
-data/questions.yaml for the question behind each field. `provenance` says where each answer came
-from: the veteran in chat, VA's records (Lighthouse), the POA skill's secure form, or the C-file
-(read by claims prep before intake pass 2).
+claims prep, the face note). Fields map to the firm's 36-question intake form; see
+data/questions.yaml for the question behind each field. The case file keeps each answer with its
+source (agent/casefile.Answer); checklist.record rebuilds this record from those answers.
 """
 
 from __future__ import annotations
@@ -85,39 +84,8 @@ class IntakeRecord(BaseModel):
     heard_about: str | None = None
     internet_source: str | None = None
 
-    # Narrative answers: condition -> prompt id (h01..h16) -> the veteran's answer
-    narratives: dict[str, dict[str, str]] = Field(default_factory=dict)
-    narrative_summaries: dict[str, str] = Field(default_factory=dict)
-
-    # Questions the veteran asked that a person on the team should answer
-    questions_for_team: list[str] = Field(default_factory=list)
-    # Questions the QA tool answered during intake: {question, answer, sources}
-    qa_log: list[dict] = Field(default_factory=list)
-
     # What claims prep found in the C-file that differs from this record (plain words), and the
-    # veteran's answer when pass 2 asked about it (cfile_mode confirm).
+    # veteran's answer when pass 2 asked about it.
     cfile_discrepancies: list[str] = Field(default_factory=list)
     cfile_discrepancy_answer: str | None = None
 
-    # field name -> where the value came from: chat | va_records | secure_form | cfile
-    provenance: dict[str, str] = Field(default_factory=dict)
-
-
-DecisionKind = Literal[
-    "eligible",  # everything collected; the case moves on to case prep
-    "not_veteran",  # stop: the firm only represents veterans
-    "rated_100",  # stop: already at 100%, nothing to increase
-    "attorney_review",  # stop collecting; an attorney decides (e.g. only non-honorable service)
-    "escalated",  # a person must take over now (crisis, refusal, veteran asked for a human)
-    "incomplete",  # the conversation ended before the required fields were collected
-]
-
-
-class Outcome(BaseModel):
-    decision: DecisionKind
-    reasons: list[str] = Field(default_factory=list)
-    # Firm policy: 30% standard, 20% when a prior private attorney or agent represented the veteran.
-    # VA withholds at most 20% from past-due benefits (38 CFR 14.636(h)); at 30% the firm collects
-    # the other 10% from the client directly.
-    fee_pct: int | None = None
-    flags: list[str] = Field(default_factory=list)

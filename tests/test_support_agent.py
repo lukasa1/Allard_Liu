@@ -8,13 +8,12 @@ import time
 from datetime import date
 
 import pytest
+from fake_kb import FaqKB
 from fake_lm import call, final, pause
 from prep_fixtures import case_at_stage_3, reads, truth_batch
 
 from agent.claims_prep.prefill import QUESTIONS
-from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE
-from agent.qa import OfflineQA
-from agent.runtime import WITHDRAW_MESSAGE
+from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
 from agent.support import agent as support
 from intake_eval.support_eval import base_case, misses, run_support_eval, summarize
 
@@ -136,7 +135,7 @@ def test_withdraw_and_a_person_go_to_a_person_by_rule_in_any_state(rt, lm):
 
 def test_a_kb_answer_cites_its_source_and_changes_nothing(rt, lm):
     cid = _stage_5(rt)
-    source = OfflineQA()(ITF_QUESTION).sources[0]
+    source = FaqKB()(ITF_QUESTION).sources[0]
     before = rt.store.get_case(cid).model_dump()
     lm.turn("support", call("kb_search", question=ITF_QUESTION), call("get_case"),
             call("log_event", kind="question", text="asked what an ITF is; answered from the KB"),
@@ -182,7 +181,7 @@ def test_support_has_no_tool_that_changes_the_case():
 
 
 def test_the_eval_scores_support_through_the_real_runtime(tmp_path, lm):
-    source = OfflineQA()(ITF_QUESTION).sources[0]
+    source = FaqKB()(ITF_QUESTION).sources[0]
     messages = [
         {"phase": "attorney_review", "text": "Any news on my file?", "flags": [], "status": True, "person": False},
         {"phase": "attorney_review", "text": ITF_QUESTION, "flags": [], "status": False, "person": False},
@@ -198,13 +197,13 @@ def test_the_eval_scores_support_through_the_real_runtime(tmp_path, lm):
     lm.turn("support", call("kb_search", question=ITF_QUESTION), final(reply=f"It holds your start date. {source}"))
     lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Passed on."))
     lm.turn("support", final(reply="We'll get back to you within 30 days."))  # an unflagged miss
-    scores = run_support_eval(messages, lm=lm, kb=OfflineQA(), data_dir=tmp_path)
+    scores = run_support_eval(messages, lm=lm, kb=FaqKB(), data_dir=tmp_path)
     assert lm.unused() == {}
     summary = summarize(scores)
     assert summary["crisis_caught"] == "1/1" and summary["case_unchanged"] == "6/6"
     assert summary["status_answers"] == "1/1" and summary["kb_answers_cited"] == "1/1"
     assert summary["flag_recall"] == 1.0 and summary["no_promised_dates"] == "5/6"
     assert misses(scores) == [
-        "[human_handoff] 'What is a supplemental claim?': person routing, promised a date -> "
-        "\"We'll get back to you within 30 days.\""
+        ("[human_handoff] 'What is a supplemental claim?': person routing, promised a date -> "
+         "\"We'll get back to you within 30 days.\""),
     ]

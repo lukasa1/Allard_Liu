@@ -43,8 +43,8 @@ def test_the_routing_skill_matches_the_code_rules():
 
 
 def test_the_intake_skills_name_its_tools():
-    from agent.intake import agent as intake
     from agent.harness import Turn
+    from agent.intake import agent as intake
 
     text = "\n".join(s.body for s in load_skills("intake").values())
     names = {t.name for t in intake.tools(Turn(None, "c", "intake", "", 1))} - {"get_case"}

@@ -226,5 +226,4 @@ def render(
         lines += [_sep(WAVE), _sep("OLD CLAIMS"), _sep(WAVE)]
         for k, (cond, i) in enumerate(sorted(old, key=lambda ci: dated(facts.decisions[ci[1]]), reverse=True), 1):
             lines += [Line(f"{k}. {cond_name(cond)} R.D. {_short(dated(facts.decisions[i]))}", decision_src(i)), _sep(WAVE)]
-    flags += facts.problems
     return FaceNote(lines=lines, flags=flags, deadlines=deadlines)

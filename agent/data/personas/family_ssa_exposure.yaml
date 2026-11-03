@@ -19,4 +19,3 @@ truth:
 expected:
   decision: eligible
   fee_pct: 30
-  flags: [refer_social_security, refer_exposure_litigation, possible_tdiu]

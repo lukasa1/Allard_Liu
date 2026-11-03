@@ -1,5 +1,5 @@
 id: reserve_not_in_records
-summary: Active Navy service, then three years in the Navy Reserve that VA's service-history data does not list (synthetic assumption, a Reserve period with no activation). Mentions only the first period unless asked. Trusting the records alone misses the second DD-214; confirming the records with the veteran catches it.
+summary: Active Navy service, then three years in the Navy Reserve (a Reserve period with no activation). Mentions only the first period unless asked, so only the verification probe or the C-file catches the second DD-214.
 behaviors: [omit_second_period]
 truth:
   first_name: Priya
@@ -26,9 +26,6 @@ stories:
     h14: I cancel plans with my family a lot.
     h15: I never had headaches before the Navy.
     h16: No.
-va:
-  omit_periods: [1]
 expected:
   decision: eligible
   fee_pct: 30
-  flags: [multiple_service_periods]
