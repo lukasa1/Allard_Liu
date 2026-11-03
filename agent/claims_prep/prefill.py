@@ -106,6 +106,15 @@ def _periods(case: CaseFile, cfile: list[dict], source: str) -> list[str]:
                 p["discharge"] = match.discharge
                 case.answers[key] = ans.model_copy(update={"source": f"{ans.source}; discharge: DD-214, {source}"})
                 out.append("discharge_from_dd214")
+            # "2004 to May 2010": the veteran gave a year, the DD-214 has the month: take the month
+            dated = [e for e in ("start", "end") if match and (getattr(match, e) or "").startswith(f"{p.get(e)}-")
+                     and len(str(p.get(e) or "")) == 4]  # fmt: skip
+            for e in dated:
+                p[e] = getattr(match, e)
+            if dated:
+                ans = case.answers[key]
+                case.answers[key] = ans.model_copy(update={"source": f"{ans.source}; months: DD-214, {source}"})
+                out.append("months_from_dd214")
     if out:
         _task(case, f"The DD-214 ({source}) shows a different discharge than the veteran gave; the record now follows the DD-214.")
     new = [c.model_dump() for c in c_periods if not any(same_period(c, p) for p in on_file)]
@@ -123,7 +132,8 @@ def apply(case: CaseFile, questions: list[str], cf: CfileFacts, cites: dict[str,
         checklist.refresh(case)
         return {"skipped": list(questions)}
     settled = values(cf, cites)
-    out: dict[str, list[str]] = {"written": [], "kept": [], "conflicts": [], "discharge_from_dd214": [], "no_facts": []}
+    out: dict[str, list[str]] = {"written": [], "kept": [], "conflicts": [], "discharge_from_dd214": [],
+                                 "months_from_dd214": [], "no_facts": []}  # fmt: skip
     for q in questions:
         if q not in settled:
             out["no_facts"].append(q)

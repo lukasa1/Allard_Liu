@@ -482,3 +482,20 @@ def test_a_date_that_does_not_normalize_is_refused_naming_the_fact():
                          "notification_letter.date")):  # fmt: skip
         with pytest.raises(ValueError, match=rf"{field}\n.*is not a date; write YYYY-MM"):
             FACT.validate_python({"cite": at, **fact})
+
+
+def test_prefill_takes_the_dd214_month_where_the_veteran_gave_a_year():
+    """Live run 2: "Army, 2004 to May 2010" stayed "2004" though the DD-214 says 2004-06."""
+    from agent.casefile import CaseFile
+    from agent.claims_prep import prefill
+    from agent.claims_prep.facts import build, load
+
+    said = [{"branch": "army", "component": "active", "start": "2004", "end": "2010-05", "discharge": "honorable"}]
+    case = CaseFile(case_id="c", stage=4, answers={"is_veteran": Answer(value=True, source=VETERAN),
+                    "service_periods": Answer(value=said, source=VETERAN)})  # fmt: skip
+    table = [{**f, "id": f"F{n}"} for n, f in enumerate(truth_batch("baseline_clean"), 1)]
+    cf, cites = build(load(table), {"firm_name": "Law Firm", "first_name": "Attorney", "last_name": "1"})
+    out = prefill.apply(case, ["service_periods"], cf, cites)
+    period = case.answers["service_periods"].value[0]
+    assert (period["start"], period["end"]) == ("2004-06", "2010-05") and "months: DD-214" in case.answers["service_periods"].source
+    assert out["months_from_dd214"] == ["service_periods"]

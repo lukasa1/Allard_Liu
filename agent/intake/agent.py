@@ -115,6 +115,9 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
     except ValueError as err:
         return {"saved": False, "error": f"could not read {args.a!r} for {key}: {err}. Ask again, or "
                 "pass the value as JSON, or set unknown if the veteran doesn't know."}  # fmt: skip
+    if key == "other_conditions" and value:  # "no others, just the tinnitus": the claimed ones aren't "other"
+        claimed = turn.case.answers.get("claim_conditions")
+        value = [c for c in value if not (claimed and claimed.value and c in claimed.value)]
     answer = Answer(value=value, source=f"veteran, chat {now()[11:16]} UTC", raw=args.a, unknown=args.unknown)
     svc = _svc(turn) if key == "prior_attorney" else None  # the fee input: check the signed fee agreement
     unsure_confirm = args.q.startswith("confirm:") and args.unknown

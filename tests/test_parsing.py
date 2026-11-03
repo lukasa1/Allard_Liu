@@ -9,6 +9,7 @@ from agent.intake.parsing import (
     coerce,
     parse_bool,
     parse_discharge,
+    parse_list,
     parse_service_periods,
     parse_text,
 )
@@ -345,3 +346,13 @@ def test_a_date_hedge_doesnt_skip_the_cross_check(a):
 def test_a_qualified_text_is_not_cross_checked():
     assert checklist.parse("service_periods", "x", P)[0]["discharge"] == "honorable"
     assert checklist.parse("service_periods", "Army 2004 to 2008, honorable", P)[0]["discharge"] == "honorable"
+
+
+@pytest.mark.parametrize("a, want", [
+    ("None that I know of. I was in Iraq at Camp Taji, but I don't think any of those apply to me.", []),
+    ("No, but my knees hurt", ["my knees hurt"]),
+    ("Nothing, but I never got checked either", []),
+])  # fmt: skip
+def test_a_negated_but_clause_names_nothing(a, want):
+    """Live run 2: "None ..., but I don't think any of those apply" was saved as an exposure."""
+    assert parse_list(a) == want

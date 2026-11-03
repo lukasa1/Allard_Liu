@@ -356,3 +356,12 @@ def test_the_step_s_skills_are_in_the_context(rt, lm):
         ("screen-veteran",), ("poa-and-fees",), ("close-gaps",)]  # fmt: skip
     opened(rt, lm)
     assert "### screen-veteran\n# " in lm.prompts("intake")[-1] and "## Directions" in lm.prompts("intake")[-1]
+
+
+def test_other_conditions_leave_out_the_claimed_ones(rt):
+    """Live run 2: "No others, just the tinnitus" with value ["tinnitus"] made tinnitus an "other"."""
+    cid = rt.store.create_case(CaseFile(case_id="c1", stage=4, owner="intake", prep=PREP_DONE, filings=FILED,
+                               answers={"claim_conditions": Answer(value=["tinnitus"], source="v")})).case_id  # fmt: skip
+    turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
+    out = record_answer(turn, RecordArgs(q="other_conditions", a="No others, just the tinnitus.", value=["tinnitus"]))
+    assert out["value"] == [] and rt.store.get_case(cid).answers["other_conditions"].value == []

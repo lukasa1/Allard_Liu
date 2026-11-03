@@ -326,3 +326,13 @@ def test_facenote_mos_check_ignores_case_and_spacing():
     want = CfileFacts(mos=["88M Motor Transport Operator"])
     assert facenote_checks(CfileFacts(mos=["88M  MOTOR TRANSPORT OPERATOR"]), want)["mos"]
     assert not facenote_checks(CfileFacts(mos=["11B Infantryman"]), want)["mos"]
+
+
+def test_free_text_fields_score_by_what_they_say():
+    """Live run 2: "my mom, Maria Reyes. Her number is 262-555-0177." is the key's next of kin."""
+    from intake_eval.scoring import _same
+
+    assert _same("Maria Reyes, mother, 262-555-0177", "My next of kin is my mom, Maria Reyes. Her number is 262-555-0177.")
+    assert _same("a friend", "I heard about you guys from a friend.")
+    assert not _same("Maria Reyes, mother, 262-555-0177", "John Smith, brother, 414-555-0100")
+    assert not _same("single", "married") and not _same(True, False)

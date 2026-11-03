@@ -35,6 +35,7 @@ orchestrator never sent back to intake, or a run that crashed, stalled, gave up 
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -142,6 +143,27 @@ def _norm(value: Any) -> Any:
     return " ".join(value.lower().replace(".", "").split()) if isinstance(value, str) else value
 
 
+_KIN = {"mom": "mother", "mum": "mother", "dad": "father", "wife": "spouse", "husband": "spouse"}
+_STOP = {"the", "and", "from", "her", "his", "is", "my", "a", "an", "of", "you", "guys"}
+
+
+def _words(text: str) -> set[str]:
+    text = re.sub(r"(?<=\d)[-. ()](?=\d)", "", text.lower())  # 262-555-0177 -> 2625550177
+    return {_KIN.get(w, w) for w in re.findall(r"[a-z0-9']+", text) if w not in _STOP}
+
+
+def _same(expected: Any, actual: Any) -> bool:
+    """Free text is right when it says what the key says, in the veteran's own words: two thirds
+    of the key's words ("Maria Reyes, mother, 262-555-0177" vs "my mom, Maria Reyes. Her number is
+    262-555-0177."). Anything else must match exactly."""
+    if isinstance(expected, str) and isinstance(actual, str):
+        if _norm(expected) == _norm(actual):
+            return True
+        key = _words(expected)
+        return bool(key) and len(key & _words(actual)) * 3 >= len(key) * 2
+    return expected == actual
+
+
 def _as_set(values: list[Any], name: str) -> set[str]:
     if name in ("claim_conditions", "other_conditions"):
         return {normalize_condition(str(v)) for v in values}
@@ -185,7 +207,7 @@ def score_fields(persona: Persona, case: CaseFile) -> list[FieldResult]:
         if expected is None and actual is None:
             continue
         status = ("extra" if expected is None else "missing" if actual is None
-                  else "correct" if _norm(expected) == _norm(actual) else "wrong")  # fmt: skip
+                  else "correct" if _same(expected, actual) else "wrong")  # fmt: skip
         out.append(FieldResult(name, expected, actual, status, _source(case, name)))
     for name in SET_FIELDS:
         exp, act = _as_set(getattr(truth, name), name), _as_set(getattr(got, name), name)

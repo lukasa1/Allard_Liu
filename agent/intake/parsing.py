@@ -40,6 +40,8 @@ _NONE = re.compile(
     re.IGNORECASE,
 )
 
+_NEGATED_CLAUSE = re.compile(r"\b(don'?t|do not|didn'?t|never|none|not|no)\b", re.IGNORECASE)
+
 _BRANCHES = {
     "air national guard": "air force",  # its component ("national guard") is read separately
     "army national guard": "army",
@@ -314,6 +316,8 @@ def parse_list(text: str) -> list[str] | None:
         if not but:
             return []
         text = text[but.end():]
+        if _NEGATED_CLAUSE.search(text):  # "None that I know of, but I don't think any apply": still none
+            return []
     parts = [p.strip().strip(".") for p in re.split(r",|;|\band\b|\n", text)]
     items = [p for p in parts if p and not _is_only_unsure(p)]
     return items or (None if any(parts) else [])

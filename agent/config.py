@@ -55,7 +55,9 @@ def make_lm(role: str = "agent"):
         kwargs["reasoning_effort"] = effort
     # temperature stays unset: reasoning models on OpenRouter reject sampling parameters.
     timeout = float(os.environ.get("LM_TIMEOUT_S", "120"))
-    return dspy.LM(model, max_tokens=16000, cache=cache, timeout=timeout, **kwargs)
+    # A ReAct step is a few hundred tokens; the cap stops a runaway output (live run 2: one call ran
+    # to 16,000 tokens and 54 s).
+    return dspy.LM(model, max_tokens=4000, cache=cache, timeout=timeout, **kwargs)
 
 
 def data_dir() -> Path:
