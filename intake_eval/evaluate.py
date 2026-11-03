@@ -208,7 +208,7 @@ def render_report(run_name: str, conditions: list[str], scores: list[Score], tri
     lines = [f"# Case eval: {run_name}", "", f"Trials per persona: {trials} · runs: {len(scores)}"]
     if stopped:
         lines.append("\n**Stopped early: the traced cost passed --max-cost.** Later runs are missing.")
-    lines += ["", NOTES["conditions"], *_section("Headline: structured questions asked", NOTES["headline"])]
+    lines += ["", NOTES["conditions"], *_section("Headline: structured questions settled in chat", NOTES["headline"])]
     lines += _table(["Condition", "Structured questions", "n", "Runs w/ critical errors", "Field acc.",
                      "Prefilled (share)", "Clarifications", "Turns to signed 21-22a", "pass^k"],
                     [[c, f"**{_num(a['structured_questions'])}**", f"{a['completed_runs']}/{a['runs']}",

@@ -147,12 +147,17 @@ def _branch(v: str) -> str | None:
 
 
 def _ym(v: str) -> str | None:
-    """Service dates are YYYY-MM; models also write full dates or YYYYMM."""
+    """Service dates are YYYY-MM; models also write full dates, YYYYMM, 06/2004 or June 2004."""
     v = v.strip()
     if re.fullmatch(r"\d{4}-\d{2}", v):
         return v
     if re.fullmatch(r"\d{6}", v):
         return f"{v[:4]}-{v[4:]}"
+    for fmt in ("%m/%Y", "%B %Y", "%b %Y"):
+        try:
+            return datetime.strptime(v, fmt).strftime("%Y-%m")
+        except ValueError:
+            continue
     iso = _iso(v)
     return iso[:7] if iso else None
 

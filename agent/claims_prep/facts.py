@@ -40,12 +40,22 @@ class Cite(BaseModel):
         return f"p. {self.page}"
 
 
-def _date(v: Any) -> Any:
-    return (_iso(v) or v) if isinstance(v, str) else v
+# A value that doesn't normalize is refused here (verify and the face note parse them); a blank
+# one is left out.
+def _norm(parse: Any, form: str) -> Any:
+    def check(v: Any) -> Any:
+        if not isinstance(v, str):
+            return v
+        if not v.strip():
+            return None
+        if (out := parse(v)) is None:
+            raise ValueError(f"{v!r} is not a date; write {form}")
+        return out
+
+    return check
 
 
-def _month(v: Any) -> Any:
-    return (_ym(v) or v) if isinstance(v, str) else v
+_date, _month = _norm(_iso, "YYYY-MM-DD"), _norm(_ym, "YYYY-MM")
 
 
 class _Fact(BaseModel):

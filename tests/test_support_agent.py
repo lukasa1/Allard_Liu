@@ -190,7 +190,7 @@ def test_support_has_no_tool_that_changes_the_case():
 
     names = {t.name for t in support.tools(Turn(None, "c", "support", "", 1))}
     assert names == {"kb_search", "get_case", "log_event", "flag_orchestrator", "escalate"}
-    assert support.spec().stop is None and support.spec().max_iters == 5
+    assert support.spec().stop is None and support.spec().max_iters == 7
 
 
 def test_the_eval_scores_support_through_the_real_runtime(tmp_path, lm):

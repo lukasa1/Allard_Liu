@@ -24,7 +24,8 @@ represented them (it sets the fee). Ask nothing else yet: the C-file answers the
      plain ("yes", "no", "70%", "honorable", "OTH"); otherwise it asks you for `value`. Don't mark
      these unknown because code couldn't read them.
    - If the veteran hedges ("I think", "probably", "maybe"), confirm with them before recording:
-     code treats a hedged answer to a stop-rule field as unsure and refuses it.
+     code treats a hedged answer to a stop-rule field as unsure and refuses it. Approximate service
+     dates are fine ("2004 to 2010, not sure of the months"): only an unsure discharge is re-asked.
    - Other fields: code parses dates, branch and yes/no from `a`; if it can't, ask again more
      specifically or pass `value`. If the veteran doesn't know, set `unknown`.
 3. A veteran's reply can answer several fields: record each one.

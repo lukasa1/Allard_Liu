@@ -500,3 +500,18 @@ def test_a_later_passing_verify_closes_the_uncertain_line_task(rt, lm):
     assert case.prep.verified and case.prep.uncertain == []
     task = next(t for t in case.tasks if t.text.startswith("Face note line 6"))
     assert task.done_at  # the line verifies now: its staff task is closed
+
+
+def test_a_date_that_does_not_normalize_is_refused_naming_the_fact():
+    """C4 minor 1: 06/2004 and June 2004 read as 2004-06; a date that reads as nothing is refused,
+    not stored to crash verify later."""
+    at = {"doc_id": "D1", "page": 1}
+    for start in ("06/2004", "6/2004", "June 2004", "Jun 2004", "200406", "2004-06-01"):
+        assert FACT.validate_python({"kind": "service_period", "branch": "army", "start": start, "cite": at}).start == "2004-06"
+    for fact, field in (({"kind": "service_period", "branch": "army", "start": "summer 2004"}, "service_period.start"),
+                        ({"kind": "discharge", "period_start": "13/2004", "character": "honorable"}, "discharge.period_start"),
+                        ({"kind": "dob", "dob": "1980"}, "dob.dob"),
+                        ({"kind": "notification_letter", "date": "2021-02-30", "decision_date": "2021-01-05"},
+                         "notification_letter.date")):  # fmt: skip
+        with pytest.raises(ValueError, match=rf"{field}\n.*is not a date; write YYYY-MM"):
+            FACT.validate_python({"cite": at, **fact})

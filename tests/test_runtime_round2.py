@@ -187,6 +187,8 @@ def test_the_deadline_is_checked_before_argument_validation(rt, lm):
 
 def test_scrub_hides_an_ssn_given_as_a_number():
     assert scrub({"ssn": 123456789, "n": 42, "ok": True}) == {"ssn": "[SSN removed]", "n": 42, "ok": True}
+    # Round 4 A minor 2: other numbers stay numbers, however large.
+    assert scrub([1_000_000, 1234567, 1234567890, 1234567.89, 0.5]) == [1_000_000, 1234567, 1234567890, 1234567.89, 0.5]
 
 
 def test_an_event_queued_for_the_orchestrator_goes_to_intake_once_intake_owns_the_case(rt, lm):
@@ -263,3 +265,13 @@ def test_a_retried_support_attempt_does_not_duplicate_its_flag(rt, lm):
     rt.wait_until_idle()
     assert [f.kind for f in rt.store.get_case(cid).flags] == ["complaint"]
     assert len(_types(rt, cid, "support_flag")) == 1
+
+
+def test_a_repeated_failure_on_a_parked_case_leaves_one_staff_task(rt):
+    """Round 4 A minor 4: the same "<agent> turn <status>" while its task is open adds no task."""
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED, side_state="needs_human")).case_id
+    rt.to_staff(cid, "orchestrator turn error: timed out")
+    rt.to_staff(cid, "orchestrator turn error: model said no")
+    rt.to_staff(cid, "claims_prep turn limit: 40 steps")
+    assert [t.text for t in rt.store.get_case(cid).tasks] == ["orchestrator turn error: timed out",
+                                                             "claims_prep turn limit: 40 steps"]  # fmt: skip

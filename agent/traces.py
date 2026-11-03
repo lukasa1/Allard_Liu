@@ -36,8 +36,8 @@ CURRENT: contextvars.ContextVar[TurnInfo | None] = contextvars.ContextVar("trace
 
 
 def scrub(value: Any) -> Any:
-    """Hide SSNs, ID numbers and a typed date of birth in every string inside `value`. A number
-    stays a number unless it reads as one of those (a 9-digit SSN)."""
+    """Hide SSNs, ID numbers and a typed date of birth in every string inside `value`. Numbers stay
+    numbers, except a 9-digit int (SSN-shaped), which is hidden."""
     if isinstance(value, str):
         return redact_chat(strip_ssns(value))[0]
     if isinstance(value, dict):
@@ -46,9 +46,10 @@ def scrub(value: Any) -> Any:
         return [scrub(v) for v in value]
     if isinstance(value, bool) or value is None:
         return value
-    if isinstance(value, int | float):
-        text = str(value)
-        return value if scrub(text) == text else scrub(text)
+    if isinstance(value, int):
+        return strip_ssns(str(abs(value))) if len(str(abs(value))) == 9 else value
+    if isinstance(value, float):
+        return value
     return scrub(str(value))
 
 

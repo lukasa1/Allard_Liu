@@ -212,5 +212,5 @@ def _same(kind: str, a: str, b: str) -> bool:
 def spec() -> AgentSpec:
     return AgentSpec(
         name="support", instructions=INSTRUCTIONS, tools=tools, context=context, guard=guard,
-        max_iters=5, timeout_s=60,
+        max_iters=7, timeout_s=60,
     )  # fmt: skip

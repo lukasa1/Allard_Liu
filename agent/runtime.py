@@ -304,10 +304,14 @@ class Runtime:
 
     def to_staff(self, case_id: str, why: str) -> None:
         """The harness parks the case (a failed or crashed turn, claims prep out of continuations):
-        needs_human (unless already parked), and a staff task naming the flags nobody decided."""
+        needs_human (unless already parked), and a staff task naming the flags nobody decided. A
+        repeat of the same failure ("<agent> turn <status>") while its task is open adds nothing."""
         case = self.store.get_case(case_id)
         if not case.parked:
             self.move(case_id, "needs_human", "harness", why)
+        key = why.split(":")[0]
+        if any(t.kind == "staff" and t.done_at is None and t.text.startswith(key) for t in case.tasks):
+            return
         flags = [f"{f.kind}: {f.text}" for f in case.flags if f.status != "handled"]
         text = why + ("; undecided support flags: " + " | ".join(flags) if flags else "")
         add_task(self, case_id, Task(kind="staff", text=text), "harness")

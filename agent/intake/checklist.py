@@ -24,7 +24,15 @@ from pydantic import BaseModel
 
 from agent.casefile import CaseFile, StopRule
 from agent.intake import rules
-from agent.intake.parsing import DISCHARGES, HEDGE, coerce, named_discharges
+from agent.intake.parsing import (
+    DISCHARGE_WORDS,
+    DISCHARGES,
+    HEDGE,
+    _scan_discharges,
+    coerce,
+    named_discharges,
+    parse_service_periods,
+)
 from agent.intake.questions import QuestionBank, is_visible, parse_show_if
 from agent.intake.schema import NON_HONORABLE, IntakeRecord
 
@@ -239,9 +247,14 @@ def parse(key: str, text: str, value: Any = None) -> Any:
 
 
 def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
+    periods = qtype.startswith("service_periods")
+    if periods:
+        text = _drop_date_hedges(text)
     if hedge := _answer_hedge(text):
+        about = ("Approximate dates (a year alone) are fine; only an unsure discharge, branch or period "
+                 "is asked again" if periods else "Ask again to confirm")  # fmt: skip
         raise StrictError(f"the veteran sounds unsure ({hedge!r}), and {key} decides whether the "
-                          "firm can take the case: ask again to confirm. Mark it unknown only if they say "
+                          f"firm can take the case. {about}. Mark it unknown only if they say "
                           "they don't know.")  # fmt: skip
     if key == "prior_attorney" and value is None and _VSO.search(text) and not _LAWYER.search(text):
         return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
@@ -270,11 +283,49 @@ def _cross_check(qtype: str, text: str, value: Any, out: Any) -> None:
         said = _plain_or_none(qtype, text)
         if said is not None and said != out:
             raise ValueError(f"the veteran said {text.strip()!r} but value is {value!r}")
+    elif not out and qtype == "service_periods_append":
+        if _no_other_period(text):
+            return  # "Nope, just the one, honorable": that discharge is the first period's
+        found, _ = _scan_discharges(text)
+        if found is None or found or parse_service_periods(text):  # "No, but Navy too, OTH"
+            raise ValueError(f"the veteran said {text.strip()!r}, which mentions another period or "
+                             "discharge, but value is empty")  # fmt: skip
     elif (said := named_discharges(text)) and said != {p.discharge for p in out if p.discharge}:
         raise ValueError(f"the veteran said {text.strip()!r} (discharge {', '.join(sorted(said))}) but value has "
                          f"{[p.discharge for p in out]}")  # fmt: skip
 
 
+# A clause that hedges only on when: it names a date or month and no discharge ("not sure of the
+# exact months", "2004 to 2010 I believe"). Approximate dates are fine for a service period.
+_CLAUSE = re.compile(r"[^.!?;,\n]+[.!?;,\n]*")
+_WHEN = re.compile(r"\b((19|20)\d{2}|months?|years?|dates?|when|summer|winter|spring|fall|in may|jan\w*|feb\w*|"
+                   r"mar\w*|apr\w*|june?|july?|aug\w*|sept?\w*|oct\w*|nov\w*|dec\w*)\b", re.IGNORECASE)  # fmt: skip
+
+
+def _drop_date_hedges(text: str) -> str:
+    """`text` without its hedges about dates: such a clause loses its hedge words (or, with no
+    year in it, the whole clause and a "but" after it). Everything else is checked as usual."""
+    out, after_dropped = [], False
+    for clause in _CLAUSE.findall(text):
+        if after_dropped:
+            clause = re.sub(r"^\s*but\b", "", clause, flags=re.IGNORECASE)
+        after_dropped = False
+        if HEDGE.search(clause) and _WHEN.search(clause) and not DISCHARGE_WORDS.search(clause.lower()):
+            if re.search(r"\d", clause):
+                clause = HEDGE.sub("", clause)
+            else:
+                clause, after_dropped = "", True
+        out.append(clause)
+    return "".join(out)
+
+
+def _no_other_period(text: str) -> bool:
+    """ "No, just the one, honorable": a no that names no further period and doesn't turn."""
+    return parse_service_periods(text) == [] and not _MORE.search(text)
+
+
+_MORE = re.compile(r"\b(but|though|although|except|actually|also|too|again|another|went back|re-?enlist\w*)\b",
+                   re.IGNORECASE)  # fmt: skip
 _SENTENCE = re.compile(r"[.!?;\n]+")
 # A later sentence is about the answer when it is only a hedge ("Probably.") or names service.
 _TOPIC = re.compile(r"\d|\b(army|navy|marines?|air force|coast guard|space force|guard|reserves?|served|service|"

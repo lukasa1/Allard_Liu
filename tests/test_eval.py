@@ -134,7 +134,7 @@ def test_an_eligible_case_runs_end_to_end_and_is_scored_per_agent(rt, lm, result
     assert s.by_agent["intake"]["calls"] > 0 and s.cost_usd > 0
     report = (out / "report.md").read_text()
     assert f"| cfile | **{s.structured_questions}.0** | 1/1 | 0 of 1 |" in report
-    assert "## Claims prep" in report and "## Cost and latency per agent" in report
+    assert "structured questions settled in chat" in report and "## Claims prep" in report and "## Cost and latency per agent" in report
     assert (out / "summary.json").exists() and (out / "transcripts" / "cfile" / "baseline_clean.md").exists()
 
 
@@ -319,3 +319,11 @@ def test_the_dspy_simulator_replies_in_character_and_counts_its_calls():
     sim = DSPySimulator(get_persona("two_service_periods"), DummyLM([{"reply": "Army, 1990 to 1994."}]))
     assert "ONLY your first service period" in sim.brief and "Dale" in sim.brief
     assert sim.respond("When did you serve?") == "Army, 1990 to 1994." and sim.calls == 1
+
+
+def test_facenote_mos_check_ignores_case_and_spacing():
+    from intake_eval.scoring import facenote_checks
+
+    want = CfileFacts(mos=["88M Motor Transport Operator"])
+    assert facenote_checks(CfileFacts(mos=["88M  MOTOR TRANSPORT OPERATOR"]), want)["mos"]
+    assert not facenote_checks(CfileFacts(mos=["11B Infantryman"]), want)["mos"]

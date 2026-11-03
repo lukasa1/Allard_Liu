@@ -68,6 +68,7 @@ _DISCHARGE_RES = [
     (r"\bgeneral( discharge)?\b(\W*under honorable( conditions)?\b)?", "general"),
     (r"\b(uncharacterized|entry level( separation)?|els)\b", "uncharacterized"),
     (r"\both\b", "oth"),
+    (r"\bunder honorable( conditions)?\b", None),  # without "general" it could be either: unclear
     (r"\bhonorabl[ey]\b", "honorable"),
 ]
 _NEGATED = re.compile(r"\b(not|never|no|wasn'?t|isn'?t|nor)\s+(an?\s+|a\s+)?$")
@@ -82,7 +83,7 @@ _QUALIFIER = re.compile(
     r"\b(not|no|never|less|other|than|non|un|wasn'?t|isn'?t|didn'?t|don'?t|weren'?t|except|exactly|quite|almost|nearly|technically|"
     r"but|though|however|upgrad\w*|downgrad\w*|chang\w*|originally|initially|either|or)\b"
 )
-_DISCHARGE_WORDS = re.compile(
+DISCHARGE_WORDS = re.compile(
     r"\b(honou?r\w*|dishonou?r\w*|discharg\w*|conduct|misconduct|separat\w*|characteri[sz]\w*|"
     r"chapter\w*|court martial\w*|oth|general|bcd|els)\b"
 )
@@ -97,7 +98,7 @@ def _scan_discharges(text: str) -> tuple[set[str] | None, str]:
     found = set()
     for pattern, code in _DISCHARGE_RES:
         for m in re.finditer(pattern, low):
-            if _NEGATED.search(low[: m.start()]):
+            if code is None or _NEGATED.search(low[: m.start()]):
                 return None, low  # "not dishonorable", "never got a general": unclear, ask again
             found.add(code)
         low = re.sub(pattern, " ", low)
@@ -130,7 +131,7 @@ def strict_discharge(text: str) -> str | None:
     the code when it is plain ("honorable", "OTH", "general under honorable conditions"); else a
     ValueError, so the model passes the discharge it understood as one of DISCHARGES."""
     code, rest = _read_discharge(text)
-    if code is None and not _DISCHARGE_WORDS.search(text.lower()):
+    if code is None and not DISCHARGE_WORDS.search(text.lower()):
         return None
     if code is None or _QUALIFIER.search(rest) or HEDGE.search(text):
         raise ValueError(f"the discharge in {text.strip()!r} is not plain enough for code to read")

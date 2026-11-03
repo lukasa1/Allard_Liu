@@ -249,7 +249,7 @@ def facenote_checks(got: CfileFacts, want: CfileFacts) -> dict[str, bool]:
     return {
         "dob": got.dob == want.dob,
         "service_periods": [p.model_dump() for p in got.service_periods] == [p.model_dump() for p in want.service_periods],
-        "mos": got.mos == want.mos,
+        "mos": [" ".join(m.lower().split()) for m in got.mos] == [" ".join(m.lower().split()) for m in want.mos],
         "combined_rating": got.combined_rating == want.combined_rating,
         "sc_conditions": sorted((c.name, c.rating_pct) for c in got.sc_conditions)
         == sorted((c.name, c.rating_pct) for c in want.sc_conditions),

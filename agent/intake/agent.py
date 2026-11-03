@@ -16,7 +16,8 @@ rules run on every answer (checklist.stop_rule).
 from __future__ import annotations
 
 import json
-import uuid
+import secrets
+import string
 from datetime import date, timedelta
 from typing import Any, Literal
 
@@ -201,6 +202,16 @@ def update_draft(turn: Turn, args: DraftArgs) -> dict:
     try:
         doc = svc.edit(doc.id, args.changes, actor="intake")
     except WorkflowError as err:
+        if doc.status != "draft":  # a signed form never changes: a person decides (field names only)
+            text = (f"The veteran asked in chat to change {', '.join(sorted(args.changes))} on the signed "
+                    f"{args.form}; it was not changed. Check whether it needs a new version and signature.")  # fmt: skip
+
+            def add(case: CaseFile) -> None:
+                if all(t.text != text for t in case.tasks):
+                    case.tasks.append(Task(kind="staff", text=text))
+
+            turn.rt.patch(turn.case_id, add, "intake")
+            return {"error": str(err), "note": "A staff task asks a person to follow up; tell the veteran."}
         return {"error": str(err)}
     answers = masked_answers(svc, sorted(args.changes), f"veteran, chat {now()[11:16]} UTC")
     task = signed_change_task(svc, before, sorted(args.changes), "in chat (update_draft)")
@@ -248,13 +259,19 @@ class FaxArgs(BaseModel):
     doc: Literal["fee_agreement"]
 
 
+def _letters(n: int = 10) -> str:
+    """A simulated confirmation code of letters only, so the trace scrubber (which masks a run of
+    7+ digits) never hides part of it."""
+    return "".join(secrets.choice(string.ascii_uppercase) for _ in range(n))
+
+
 def submit_va(turn: Turn, args: SubmitArgs) -> dict:
     """Simulated filing with VA (L21): a fake confirmation number; the ITF date for the ITF."""
     data = {}
     if args.form == "itf":
         today = date.today()
         data = {"itf_date": today.isoformat(), "expires": (today + timedelta(days=365)).isoformat()}
-    filing = Filing(confirmation=f"VA-{uuid.uuid4().hex[:10].upper()}", data=data)
+    filing = Filing(confirmation=f"VA-{_letters()}", data=data)
     case = turn.rt.patch(turn.case_id, lambda c: c.filings.__setitem__(args.form, filing), "intake")
     _post(turn, {"type": "filed", "form": args.form, "to": "VA", "confirmation": filing.confirmation, **data})
     return {"filed": args.form, "confirmation": filing.confirmation, **data, "stage": case.stage}
@@ -262,7 +279,7 @@ def submit_va(turn: Turn, args: SubmitArgs) -> dict:
 
 def efax_ogc(turn: Turn, args: FaxArgs) -> dict:
     """Simulated eFax of the countersigned fee agreement to VA's Office of General Counsel."""
-    filing = Filing(confirmation=f"FAX-{uuid.uuid4().hex[:10].upper()}", data={"to": "VA Office of General Counsel"})
+    filing = Filing(confirmation=f"FAX-{_letters()}", data={"to": "VA Office of General Counsel"})
 
     def apply(case: CaseFile) -> None:
         case.filings[args.doc] = filing
