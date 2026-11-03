@@ -69,7 +69,7 @@ OpenAI/OpenRouter format (`skill.tools_openai`).
 
 ```json
 {"captured": {"first_name": "Jordan", "ssn": "***-**-6789", "date_of_birth": "**/**/1988",
-              "address.line1": "*** **n St", "address.city": "Milwaukee"},
+              "address.line1": "*** ***n St", "address.city": "Milwaukee"},
  "missing_for_21_22a": [], "signature_on_file": true, "documents": [...]}
 ```
 
