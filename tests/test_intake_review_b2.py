@@ -3,7 +3,6 @@
 
 import pytest
 from conftest import VETERAN
-from fake_lm import call, final
 from test_intake_review_b import CONSENTS, _refusals, _say, _screened
 
 from agent.casefile import Answer, CaseFile, StopRule
@@ -11,6 +10,7 @@ from agent.harness import Turn
 from agent.intake import checklist, documents
 from agent.intake.agent import DraftArgs, SecureArgs, SubmitArgs, guard
 from agent.intake.parsing import coerce, parse_discharge, parse_service_periods
+from agent.scripted.lm import call, final
 from agent.stages import settle
 from poa_skill.service import ESIGN_CONSENT
 

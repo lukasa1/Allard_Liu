@@ -22,11 +22,13 @@ uv sync
 uv run pytest -q                 # about a minute, no key, no network (scripted fake model)
 cp .env.example .env             # set OPENROUTER_API_KEY for anything live
 uv run intake serve              # the web demo: http://localhost:8000
+uv run intake serve --scripted   # the same demo with no model: no key, no cost (D26)
 uv run intake --help             # serve | simulate | eval | support-eval | personas
 ```
 
 Without `OPENROUTER_API_KEY` the server still starts and the page says to set it; `simulate`,
-`eval` and `support-eval` exit with the same message. There are no offline agents (D7).
+`eval` and `support-eval` exit with the same message. There are no offline agents (D7), except
+the scripted demo (D26).
 
 ## Architecture
 
@@ -195,6 +197,9 @@ Candidate deviations from the build, for the lead to confirm:
   case a rule handed to a person; `staff_task` is allowed after the wake's handoff.
 - **D25:** `run_intake` at stage 4 after a new-condition flag also reopens `claim_conditions`, so pass
   2 can't end before the condition is recorded.
+- **D26:** a scripted demo (`intake serve --scripted`) plays one case with no model: the agents'
+  turns come from `agent/scripted/demo.py`; the runtime, tools, guard, documents and `verify` are the
+  real code. It shows the flow without a key; it says nothing about the agents' quality.
 - **D23:** `verify` also checks coverage (no DD-214, rating decision or letter left out, nor a
   DD-214's discharge or MOS, nor a claim or appointment form; every service-connected condition on the newest
   code sheet; the combined rating and rated conditions from the newest rating decision or its
@@ -233,6 +238,11 @@ read-only support alongside.
 ## The demo
 
 `uv run intake serve` (needs the key), then http://localhost:8000:
+
+**No key:** `uv run intake serve --scripted` (D26) plays one case, Hector Alvarez (`recent_decision`),
+with no model. Press **Next line** (the Autoplay button) and **Send**, fill the secure form (its test
+values are filled in), sign, and countersign as the cards appear. The agents follow the script, so
+typing something else won't change their answers. One case at a time: Start case starts the story over.
 
 1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
    **Start case**. You type as the veteran, or press **Autoplay** to have the eval's simulated
@@ -288,9 +298,9 @@ traces.
 
 ## Tests
 
-`uv run pytest -q`: the whole suite in about a minute, no key and no network. `tests/fake_lm.py` scripts
-each agent's tool calls through the real harness, registry and guards; `tests/fake_kb.py` stands in
-for web search. They pin the guards and stage moves, stop rules, citations and `verify`, crisis /
+`uv run pytest -q`: the whole suite in about a minute, no key and no network. `agent/scripted/lm.py` scripts
+each agent's tool calls through the real harness, registry and guards; `agent/scripted/kb.py` stands
+in for web search. They pin the guards and stage moves, stop rules, citations and `verify`, crisis /
 withdraw / a person by rule, signing and countersign integrity, SSNs never in a context or trace,
 untrusted wrapping, end-to-end flows (runtime, HTTP demo, eval) and the eval's scoring.
 
@@ -320,10 +330,12 @@ agent/        runtime, harness, orchestrator, stages, casefile, store, traces, i
   cfile/        vbms.py (simulated VBMS), synth.py (synthetic C-files), facts.py, facenote.py
   skills/       SKILL.md files per agent
   data/personas/  the synthetic veterans
+  scripted/     lm.py (scripted fake LM), kb.py (offline FAQ), prep.py (claims prep's correct reading),
+                demo.py (the scripted demo's story)
 poa_skill/    21-22a and fee agreement: vault, documents, PDF fill and signing
 demo/         app.py (FastAPI) and static/app.html
 intake_eval/  simulator, runner, scoring, report, support eval
-tests/        fake_lm.py, fake_kb.py, fixtures, tests
+tests/        fixtures, tests
 ```
 
 `poa_skill/pdf/` and the signature-pad trimming are adapted from an earlier form engine by the

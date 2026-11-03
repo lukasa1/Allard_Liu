@@ -66,7 +66,7 @@ def svc(tmp_path):
 
 @pytest.fixture
 def lm():
-    from fake_lm import ScriptedLM
+    from agent.scripted.lm import ScriptedLM
 
     return ScriptedLM()
 
@@ -75,9 +75,8 @@ def lm():
 def rt(tmp_path, lm):
     """The runtime (orchestrator, intake, claims prep, support) on a fresh store,
     driven by the scripted LM. kb_search uses the offline FAQ: no test touches the network."""
-    from fake_kb import FaqKB
-
     from agent.runtime import make_runtime
+    from agent.scripted.kb import FaqKB
 
     yield make_runtime(tmp_path, lm, kb=FaqKB())
     assert lm.unused() == {}, f"scripted steps never used: {lm.unused()}"

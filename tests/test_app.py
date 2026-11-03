@@ -8,12 +8,12 @@ import time
 import pypdf
 import pytest
 from conftest import VETERAN
-from fake_lm import call, final, pause
 from fastapi.testclient import TestClient
 from intake_fixtures import SCREEN_STEPS, prefill_pass2
-from prep_fixtures import prep_steps
 
 from agent.intake import checklist
+from agent.scripted.lm import call, final, pause
+from agent.scripted.prep import prep_steps
 from demo.app import app, get_runtime
 
 PERSONA = "baseline_clean"
@@ -223,3 +223,44 @@ def test_autoplay_waits_while_an_agent_is_mid_turn(client, rt, lm, monkeypatch):
     r = client.post(f"/api/cases/{cid}/suggest")
     assert r.status_code == 409 and "a queued turn is still working" in r.json()["detail"]
     assert client.get(f"/api/cases/{cid}/updates").json()["busy"] is True
+
+
+def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_path, signature_uri):
+    """`intake serve --scripted` (D26): no key, no model; Next line + Send and the cards, as the page does."""
+    from agent.scripted import demo
+    from demo import app as app_module
+
+    monkeypatch.setenv("DEMO_SCRIPTED", "1")
+    monkeypatch.setenv("POA_DATA_DIR", str(tmp_path))
+    app_module._scripted_runtime.cache_clear()
+    c = TestClient(app)
+    cfg = c.get("/api/config").json()
+    assert cfg["ready"] and cfg["scripted"] and [p["id"] for p in cfg["personas"]] == [demo.PERSONA]
+    rt = app_module.get_runtime()
+    cid = c.post("/api/cases", json={"persona_id": demo.PERSONA}).json()["case_id"]
+    rt.wait_until_idle()
+    d = Demo(c, rt, cid)
+
+    def next_line():
+        d.say(d.post("/suggest")["text"])
+
+    for _ in range(4):
+        next_line()
+    assert d.post(
+        f"/secure/{d.card('secure_form')['request_id']}", {"values": cfg["secure_sample"]}
+    ) == {"errors": {}}
+    next_line()
+    d.post("/signature", {"data_uri": signature_uri})
+    d.post("/sign/21-22a", {"consent_text": d.card("sign_button")["consent_text"]})
+    next_line()
+    d.post("/sign/fee_agreement", {"consent_text": d.card("sign_button")["consent_text"]})
+    d.post("/countersign")
+    for _ in demo.PASS2_LINES:
+        next_line()
+    p = d.panel()
+    assert (p["stage"], p["owner"], p["prep"]["verified"]) == (5, None, True)
+    assert any(
+        line.startswith("   DEADLINE TO FILE AMA APPEAL 03/13/27") for line in p["face_note"]
+    )
+    assert rt.harness.lm.unused() == {}
+    app_module._scripted_runtime.cache_clear()

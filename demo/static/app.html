@@ -102,7 +102,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const log = $("#log");
 const FORM = {"21-22a": "VA Form 21-22a", fee_agreement: "fee agreement"};
 const STAGES = {1: "Screening", 2: "Account opening", 3: "Filed", 4: "C-file: claims prep, pass 2", 5: "Ready for attorney review"};
-let caseId = null, since = 0, timer = null, panel = null, shownDoc = null;
+let caseId = null, since = 0, timer = null, panel = null, shownDoc = null, secureSample = null;
 
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function linkify(s) { return esc(s).replace(/(https:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
@@ -138,6 +138,12 @@ function showDoc(form) {
   const cfg = await api("/api/config");
   $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${esc(p.summary)}">${esc(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
   if (!cfg.ready) { $("#banner").textContent = cfg.message; $("#banner").style.display = "block"; $("#start").disabled = true; }
+  if (cfg.scripted) {  // D26: no model; the agents follow agent/scripted/demo.py
+    secureSample = cfg.secure_sample;
+    $("#banner").textContent = "Scripted demo: no model. Press Next line, then Send, and use the cards as they appear. The agents follow a script; everything else is the real code.";
+    $("#banner").style.display = "block";
+    $("#suggest").textContent = "Next line"; $("#suggest").title = "The story's next line for the veteran";
+  }
 })();
 $("#start").onclick = async () => {
   clearInterval(timer); caseId = null; since = 0; panel = null; shownDoc = null;
@@ -222,7 +228,8 @@ function secureForm(c) {
       input.type = {ssn: "password", date: "date", email: "email", tel: "tel"}[f.input_type] || "text";
       input.autocomplete = "off";
     }
-    input.name = f.name; l.append(input); grid.append(l);
+    input.name = f.name; if (secureSample && f.name in secureSample) input.value = secureSample[f.name];
+    l.append(input); grid.append(l);
   }
   const b = $("button", card);
   b.onclick = () => act(card, b, async () => {

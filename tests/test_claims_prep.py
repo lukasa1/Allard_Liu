@@ -8,8 +8,7 @@ import time
 from datetime import date
 
 import pytest
-from fake_lm import call, final, pause
-from prep_fixtures import case_at_stage_3, prep_steps, reads, the_cfile, truth_batch
+from prep_fixtures import case_at_stage_3
 
 from agent.casefile import Answer
 from agent.cfile.vbms import pull
@@ -17,6 +16,8 @@ from agent.claims_prep.facts import FACT
 from agent.claims_prep.prefill import QUESTIONS
 from agent.claims_prep.verify import date_forms, discharges, missing
 from agent.personas import get_persona
+from agent.scripted.lm import call, final, pause
+from agent.scripted.prep import prep_steps, reads, the_cfile, truth_batch
 
 VETERAN = "veteran, chat 10:00 UTC"
 DONE = {"finished": "face note verified, prefill done"}

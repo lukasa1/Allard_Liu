@@ -6,14 +6,14 @@ import io
 import pypdf
 import pytest
 from conftest import SSN, VETERAN
-from fake_kb import FaqKB
-from fake_lm import call, final
 from intake_fixtures import SCREEN_STEPS, prefill_pass2
 
 from agent.casefile import Answer, CaseFile, Conflict, Filing, PrepState
 from agent.intake import checklist, documents
 from agent.kb import NO_ANSWER
 from agent.runtime import make_runtime
+from agent.scripted.kb import FaqKB
+from agent.scripted.lm import call, final
 from poa_skill.documents import sha256
 from poa_skill.service import FEE_ESIGN_CONSENT
 

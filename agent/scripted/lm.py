@@ -13,7 +13,8 @@ one call with unparseable text (to exercise the adapter fallback and the harness
 
 The agent is read from the "Agent: <name>" line the harness puts in every system prompt. A new
 turn starts when a ReAct call arrives and the agent's current turn is used up, so retries of a
-failed turn keep consuming the same turn's steps. Tests never touch a real model or the network.
+failed turn keep consuming the same turn's steps. Tests never touch a real model or the network;
+the scripted demo (agent/scripted/demo.py) plays a whole case with it.
 """
 
 from __future__ import annotations
@@ -112,6 +113,10 @@ class ScriptedLM(DummyLM):
     def turn(self, agent: str, *steps: Call | Final | Raw | Pause) -> ScriptedLM:
         self.turns.setdefault(agent, deque()).append(_Turn(deque(steps)))
         return self
+
+    def reset(self) -> None:
+        """Drop the script and what was seen (the scripted demo loads a new story per case)."""
+        self.turns, self.current, self.seen = {}, {}, []
 
     def unused(self) -> dict[str, int]:
         """Scripted steps not consumed yet, per agent (should be {} at the end of a test)."""

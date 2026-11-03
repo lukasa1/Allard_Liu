@@ -6,7 +6,6 @@ import re
 import threading
 import time
 
-from fake_lm import bad, call, final, pause
 from intake_fixtures import prefill_pass2
 from pydantic import BaseModel
 
@@ -17,6 +16,7 @@ from agent.ingest import CRISIS_MESSAGE
 from agent.intake import agent as intake
 from agent.intake import checklist
 from agent.runtime import Job
+from agent.scripted.lm import bad, call, final, pause
 from agent.tools.registry import ToolSpec
 from agent.traces import scrub
 

@@ -1,9 +1,8 @@
 """Shared scripts and case-file fixtures for tests that drive the real intake agent."""
 
-from fake_lm import call
-
 from agent.casefile import Answer, CaseFile, DocState
 from agent.intake import checklist
+from agent.scripted.lm import call
 
 T = "2026-11-03T10:00:00+00:00"
 

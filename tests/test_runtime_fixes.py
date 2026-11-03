@@ -7,7 +7,6 @@ import threading
 import time
 
 import pytest
-from fake_lm import call, final, pause
 from intake_fixtures import prefill_pass2
 from pydantic import BaseModel
 
@@ -17,6 +16,7 @@ from agent.harness import AgentSpec, Turn
 from agent.ingest import CRISIS_MESSAGE
 from agent.intake import agent as intake
 from agent.intake import checklist
+from agent.scripted.lm import call, final, pause
 from agent.tools.registry import ToolSpec
 
 FILED = {"21-22a": Filing(confirmation="A"), "itf": Filing(confirmation="B")}

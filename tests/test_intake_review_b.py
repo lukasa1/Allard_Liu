@@ -7,13 +7,13 @@ import re
 import pypdf
 import pytest
 from conftest import SSN, VETERAN
-from fake_lm import call, final
 from fastapi.testclient import TestClient
 from intake_fixtures import SCREEN_STEPS
 
 from agent.casefile import Answer, CaseFile, Conflict, Filing, StopRule
 from agent.intake import checklist, documents
 from agent.intake.parsing import coerce, parse_bool, parse_discharge, parse_text
+from agent.scripted.lm import call, final
 from poa_skill.fee_agreement import CLAIM_NUMBER_LABEL, claim_number, missing_fields
 from poa_skill.service import ESIGN_CONSENT, WorkflowError
 from poa_skill.tools import preview_card

@@ -1,6 +1,6 @@
 """Command line: `uv run intake <command>` (run `uv run intake <command> -h` for options).
 
-serve      the web demo (http://localhost:8000)
+serve      the web demo (http://localhost:8000; --scripted: no model, no key)
 simulate   watch one synthetic veteran go through a whole case on the runtime (needs the key)
 eval       the simulated-veteran evaluation across conditions; writes results/<name>/report.md (needs the key)
 support-eval  the customer-support sub-agent on labeled messages (intake_eval/support_messages.yaml)
@@ -74,8 +74,13 @@ def _live(trials: int = 1, max_cost: float | None = None):
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
-    key = "set" if config.os.environ.get("OPENROUTER_API_KEY") else "NOT set: the page will say so"
-    print(f"Demo: http://{args.host}:{args.port}  (OPENROUTER_API_KEY {key})", flush=True)
+    if args.scripted:
+        config.os.environ["DEMO_SCRIPTED"] = "1"
+        mode = "scripted: no model, no key, no cost"
+    else:
+        key = "set" if config.os.environ.get("OPENROUTER_API_KEY") else "NOT set: the page will say so"
+        mode = f"OPENROUTER_API_KEY {key}"
+    print(f"Demo: http://{args.host}:{args.port}  ({mode})", flush=True)
     uvicorn.run("demo.app:app", host=args.host, port=args.port, reload=False)
 
 
@@ -162,6 +167,8 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("serve", help="run the web demo")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--scripted", action="store_true",
+                   help="play one scripted case with no model (agent/scripted/demo.py): no key, no cost")
     p.set_defaults(func=cmd_serve)
 
     def max_cost_arg(p: argparse.ArgumentParser) -> None:

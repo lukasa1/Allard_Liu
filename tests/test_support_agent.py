@@ -8,12 +8,13 @@ import time
 from datetime import date
 
 import pytest
-from fake_kb import FaqKB
-from fake_lm import call, final, pause
-from prep_fixtures import case_at_stage_3, reads, truth_batch
+from prep_fixtures import case_at_stage_3
 
 from agent.claims_prep.prefill import QUESTIONS
 from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
+from agent.scripted.kb import FaqKB
+from agent.scripted.lm import call, final, pause
+from agent.scripted.prep import reads, truth_batch
 from agent.support import agent as support
 from intake_eval.support_eval import base_case, misses, run_support_eval, summarize
 

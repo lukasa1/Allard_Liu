@@ -2,11 +2,11 @@
 
 import time
 
-from fake_lm import bad, call, final
 from pydantic import BaseModel
 
 from agent.casefile import CaseFile
 from agent.harness import CANNED_REPLY, AgentSpec, Turn, conversation
+from agent.scripted.lm import bad, call, final
 from agent.tools.registry import ToolSpec
 
 SSN = "123-45-6789"

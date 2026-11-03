@@ -6,10 +6,7 @@ import copy
 import time
 
 import pytest
-from fake_kb import FaqKB
-from fake_lm import call, final, pause
 from intake_fixtures import SCREEN_STEPS
-from prep_fixtures import prep_steps
 
 from agent import cli
 from agent.casefile import Answer, CaseFile
@@ -17,6 +14,9 @@ from agent.cfile.facts import CfileFacts
 from agent.intake import checklist
 from agent.personas import get_persona
 from agent.runtime import make_runtime
+from agent.scripted.kb import FaqKB
+from agent.scripted.lm import call, final, pause
+from agent.scripted.prep import prep_steps
 from intake_eval import evaluate
 from intake_eval.runner import CaseRun, run_case
 from intake_eval.scoring import score_run

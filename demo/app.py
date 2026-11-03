@@ -4,8 +4,9 @@ attorney's countersign, and the case panel.
 Run:  uv run intake serve        then open http://localhost:8000
 (or:  uv run uvicorn demo.app:app --port 8000)
 
-It needs OPENROUTER_API_KEY (D7: there are no offline agents). Without the key the page still
-loads and says to set it; every case endpoint answers 503 with the same message.
+It needs OPENROUTER_API_KEY (D7). Without the key the page still loads and says to set it; every
+case endpoint answers 503 with the same message. `intake serve --scripted` (D26) needs no key:
+it plays one scripted case (agent/scripted/demo.py) on the same runtime with no model.
 
 Pick a synthetic test veteran (its synthetic C-file is what claims prep pulls) and chat as the
 veteran. Agents reach the page only through the outbox, which the page polls
@@ -53,8 +54,24 @@ def _live_runtime() -> Runtime:
     return make_runtime(config.data_dir() / "demo", config.make_lm())
 
 
+def scripted() -> bool:
+    """`intake serve --scripted` (D26): one story played with no model (agent/scripted/demo.py)."""
+    return os.environ.get("DEMO_SCRIPTED") == "1"
+
+
+@lru_cache(maxsize=1)
+def _scripted_runtime() -> Runtime:
+    from agent.scripted.kb import FaqKB
+    from agent.scripted.lm import ScriptedLM
+
+    return make_runtime(config.data_dir() / "demo-scripted", ScriptedLM(), kb=FaqKB())
+
+
 def get_runtime() -> Runtime | None:
-    """The live runtime, or None with no key. Tests override this with a scripted-LM runtime."""
+    """The live runtime, or None with no key; the scripted one with --scripted. Tests override
+    this with a scripted-LM runtime."""
+    if scripted():
+        return _scripted_runtime()
     return _live_runtime() if os.environ.get("OPENROUTER_API_KEY") else None
 
 
@@ -92,12 +109,15 @@ def index():
 
 @app.get("/api/config")
 def get_config(rt: MaybeRuntime):
-    return {
-        "ready": rt is not None,
-        "message": None if rt else NO_KEY,
-        "attorney": documents.attorney_name(),
-        "personas": [{"id": p.id, "name": p.display_name, "summary": p.summary} for p in load_personas()],
-    }
+    personas = load_personas()
+    out = {"ready": rt is not None, "message": None if rt else NO_KEY, "attorney": documents.attorney_name(),
+           "scripted": scripted()}  # fmt: skip
+    if scripted():
+        from agent.scripted import demo
+
+        personas, out["secure_sample"] = [p for p in personas if p.id == demo.PERSONA], demo.SECURE
+    out["personas"] = [{"id": p.id, "name": p.display_name, "summary": p.summary} for p in personas]
+    return out
 
 
 class NewCase(BaseModel):
@@ -108,6 +128,13 @@ class NewCase(BaseModel):
 def new_case(body: NewCase, rt: Live):
     if body.persona_id not in {p.id for p in load_personas()}:
         raise HTTPException(404, f"unknown test veteran {body.persona_id!r}")
+    if scripted():  # one case at a time: a new case starts the story over
+        from agent.scripted import demo
+
+        if body.persona_id != demo.PERSONA:
+            raise HTTPException(404, f"the scripted demo plays {demo.PERSONA!r} only")
+        rt.wait_until_idle()
+        demo.story().load(rt.harness.lm)
     return {"case_id": rt.open_case(body.persona_id).case_id}
 
 
@@ -146,6 +173,12 @@ def suggest(case_id: str, rt: Live):
     if rt.busy(case_id):
         running = ", ".join(sorted(rt.running(case_id))).replace("_", " ") or "a queued turn"
         raise HTTPException(409, f"Wait: {running} is still working.")
+    if scripted():  # the story's next line
+        from agent.scripted import demo
+
+        sent = len([e for e in rt.store.events(case_id, types=("message",)) if e.data["from"] == "veteran"])
+        lines = demo.story().veteran
+        return {"text": lines[sent] if sent < len(lines) else "Thank you."}
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}

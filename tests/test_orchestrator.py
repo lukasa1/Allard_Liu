@@ -5,9 +5,8 @@ import dataclasses
 import threading
 import time
 
-from fake_lm import bad, call, final, pause
 from intake_fixtures import SCREEN_STEPS, countersign_both, prefill_pass2, sign_both
-from prep_fixtures import case_at_stage_3, fee_agreement, prep_steps
+from prep_fixtures import case_at_stage_3, fee_agreement
 
 from agent import stages
 from agent.casefile import CaseFile, Filing, PrepState
@@ -15,6 +14,8 @@ from agent.harness import CANNED_REPLY
 from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
 from agent.intake import checklist
 from agent.runtime import route
+from agent.scripted.lm import bad, call, final, pause
+from agent.scripted.prep import prep_steps
 
 FILED = {"21-22a": Filing(confirmation="A"), "itf": Filing(confirmation="B")}
 
