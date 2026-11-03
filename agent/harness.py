@@ -192,8 +192,11 @@ class Harness:
         pred = None
         for attempt in (1, 2):
             try:
-                # A copy per turn: its history holds only this turn's calls (the trace reads it).
-                with dspy.context(lm=self.lm.copy(), callbacks=[self.callback], adapter=dspy.ChatAdapter()):
+                # A copy per turn: its history holds only this turn's calls (the trace reads it). The
+                # retry gets its own rollout_id, so DSPy's cache can't hand back the failed output
+                # (live run 3: both attempts of one turn returned the same garbled text).
+                lm = self.lm.copy() if attempt == 1 else self.lm.copy(rollout_id=attempt)
+                with dspy.context(lm=lm, callbacks=[self.callback], adapter=dspy.ChatAdapter()):
                     pred = react(context=context(spec, turn), incoming=incoming(turn))
                 break
             except TurnTimeout:

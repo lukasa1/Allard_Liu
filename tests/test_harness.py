@@ -122,6 +122,16 @@ def test_malformed_output_falls_back_to_json_then_retries_the_turn(rt, lm):
     assert len(errors) == 1
 
 
+def test_the_retry_bypasses_the_response_cache(rt, lm, monkeypatch):
+    """Live run 3: the cache handed the retry the same garbled output. Attempt 2 has its own rollout_id."""
+    copies = []
+    real = type(lm).copy
+    monkeypatch.setattr(type(lm), "copy", lambda self, **kw: copies.append(kw) or real(self, **kw))
+    lm.turn("support", bad(), bad(), call("echo", text="x"), final(reply="recovered"))
+    rt.harness.run(_spec(), _turn(rt))
+    assert copies == [{}, {"rollout_id": 2}]
+
+
 def test_two_failed_attempts_end_the_turn_without_another_policy(rt, lm):
     lm.turn("support", bad(), bad(), bad(), bad())
     out = rt.harness.run(_spec(), _turn(rt))
