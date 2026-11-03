@@ -60,8 +60,8 @@ def _sim_factory(provider: str):
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
-    print(f"Demo: http://{args.host}:{args.port}  (provider: {config.default_provider()}, "
-          f"Lighthouse: {config.os.environ.get('LIGHTHOUSE_MODE', 'stub')})", flush=True)  # fmt: skip
+    key = "set" if config.os.environ.get("OPENROUTER_API_KEY") else "NOT set: the page will say so"
+    print(f"Demo: http://{args.host}:{args.port}  (OPENROUTER_API_KEY {key})", flush=True)
     uvicorn.run("demo.app:app", host=args.host, port=args.port, reload=False)
 
 

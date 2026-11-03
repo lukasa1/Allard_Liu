@@ -234,7 +234,7 @@ class Runtime:
         key = (case_id, job.agent)
         self._turns[key] = self._turns.get(key, 0) + 1
         turn = Turn(self, case_id, job.agent, job.incoming, self._turns[key],
-                    owner_at_start=case.owner == job.agent)  # fmt: skip
+                    owner_at_start=case.owner == job.agent, kind=job.kind)  # fmt: skip
         flags_seen = case.flags_to_decide()
         outcome = self.harness.run(spec, turn)
         if outcome.reply:

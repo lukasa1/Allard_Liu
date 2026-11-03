@@ -37,7 +37,7 @@ C-files). Add an OpenRouter key to switch the agents to an LLM (DSPy). **Synthet
 
 ```bash
 uv sync
-uv run intake serve              # web demo: http://localhost:8000
+uv run intake serve              # web demo: http://localhost:8000 (needs OPENROUTER_API_KEY)
 uv run pytest                    # ~290 tests, all offline (about 3 minutes)
 uv run intake eval --name offline  # the evaluation; report in results/offline/report.md
 ```
@@ -52,24 +52,36 @@ before the full 14 x 4 run. Set `INTAKE_PROVIDER=offline` to force offline mode 
 
 ## Try the demo
 
-1. `uv run intake serve` and open http://localhost:8000.
-2. Pick a **test veteran** (each is a synthetic persona with a scenario: two service periods, a
-   forgotten old claim, a prior attorney, an other-than-honorable discharge, a crisis
-   disclosure...) and how **VA records** are used (fetch + confirm, fetch only, or ask only).
-3. Press **Start case**. You play the veteran:
-   - type answers yourself (offline mode reads plain answers: "Yes", "Army, active duty, from
-     2004-06 to 2010-05, honorable discharge"; **Suggest a reply** fills in what the persona
-     would say), or
-   - press **Auto-play one step** / **Auto-play to the end** to let the simulated veteran answer,
-     sign in with VA, fill the secure form, draw a signature and click Sign.
-   - After the veteran signs, a **staff card** asks the attorney to countersign; you play the
-     attorney (auto-play does it as a "simulated attorney"). Only then is anything filed.
-4. Watch the right panel: **Case** shows the phase, every orchestrator decision with its reason,
-   staff tasks and the intake record (each field tagged with where it came from); **21-22a** shows
-   the PDF; **Face note** appears after intake; **VA records** shows the raw Lighthouse responses.
-5. Ask a question mid-intake ("How much do you charge?", "What is an intent to file?"): the agent
-   answers with a source, then goes back to its question. Questions needing legal advice go to
-   the team instead.
+The demo runs the real agents (orchestrator, intake, claims prep, support) on Claude Haiku 5.5
+through OpenRouter, so it **needs `OPENROUTER_API_KEY`** (in your shell or in `.env`) and every
+case costs money. There is no offline mode for the agents (tests use a scripted fake model). Without
+the key the server still starts, and the page says to set it.
+
+```bash
+cp .env.example .env              # then set OPENROUTER_API_KEY
+uv run intake serve               # http://localhost:8000
+# or: uv run uvicorn demo.app:app --port 8000
+```
+
+1. Pick a **test veteran**. Each is a synthetic persona with its own synthetic C-file (the one
+   claims prep pulls from the simulated VBMS). Then press **Start case**.
+2. You play the veteran in the chat. Intake screens you, then opens a **secure form** for the ID
+   numbers, shows the **21-22a preview**, a **signature pad** and a **Sign** card, then the **fee
+   agreement** preview and its Sign card. The page polls the outbox every 1.5 s
+   (`GET /api/cases/<id>/updates?since=<seq>`), so replies from background turns appear by
+   themselves.
+3. You also play the attorney. When both documents are signed, the **Staff** box in the case panel
+   enables **Countersign both documents** (one action; it is refused at any other time). Intake
+   then files the 21-22a and the intent to file and faxes the fee agreement to VA OGC. All three
+   are simulated, and the chat shows their confirmation numbers.
+4. Claims prep then reads the C-file in the background. Chat meanwhile and customer support
+   answers. When it is done, intake's pass 2 asks only what is still missing, and the case ends
+   at stage 5, ready for attorney review.
+5. The right panel shows the **Case** (stage, owner, side state, the orchestrator's decisions
+   including refused moves, filings, tasks, support's log, flags and escalations, the cost per
+   agent from the traces, and every answer with its source), the **Face note** (lines verify
+   couldn't cite are marked `[UNCERTAIN]`), the **Documents** (the latest PDF of each, the
+   countersigned version after the countersign) and the **Event log**.
 
 Command-line equivalents:
 
@@ -356,7 +368,7 @@ agent/
   personas.py, data/personas/   the synthetic test veterans
   cli.py              `uv run intake ...`
 intake_eval/          simulator, case runner, scoring, report; support_eval.py + support_messages.yaml
-demo/app.py, demo/static/app.html   the full-flow web demo
+demo/app.py, demo/static/app.html   the web demo, on agent/runtime.py
 tests/                form mapping, security properties, host-agent loop, HTTP flow, intake,
                       Lighthouse, C-file, orchestrator, whole cases, LLM paths (scripted models)
 ```
@@ -397,7 +409,7 @@ no KMS, and a local file store.
   - Item 24 limitations.
   - The representative's own signature (25A).
   - Submitting to VA from the skill itself (the orchestrator does it: Lighthouse `POST /forms/2122`, stubbed).
-  - Real authentication. The demo session is just a cookie.
+  - Real authentication. The demo has no login: a case is addressed by its id.
 
 ### PDF gotchas already handled
 

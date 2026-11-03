@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from agent.ingest import redact_chat
+from agent.ingest import redact_chat, untrusted
 from agent.tools.registry import ToolSpec
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ def kb_search(turn: Turn, args: KbArgs) -> dict:
                                "sources": result.sources}, actor=turn.agent)  # fmt: skip
     if not answered:
         return {"answer": None, "note": NO_ANSWER}
-    return {"answer": result.text, "sources": result.sources}
+    return {"answer": untrusted("knowledge base (web search)", result.text), "sources": result.sources}
 
 
 def kb_tool(turn: Turn) -> ToolSpec:

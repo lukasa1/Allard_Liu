@@ -206,6 +206,7 @@ def submit_va(turn: Turn, args: SubmitArgs) -> dict:
         data = {"itf_date": today.isoformat(), "expires": (today + timedelta(days=365)).isoformat()}
     filing = Filing(confirmation=f"VA-{uuid.uuid4().hex[:10].upper()}", data=data)
     case = turn.rt.patch(turn.case_id, lambda c: c.filings.__setitem__(args.form, filing), "intake")
+    _post(turn, {"type": "filed", "form": args.form, "to": "VA", "confirmation": filing.confirmation, **data})
     return {"filed": args.form, "confirmation": filing.confirmation, **data, "stage": case.stage}
 
 
@@ -220,6 +221,8 @@ def efax_ogc(turn: Turn, args: FaxArgs) -> dict:
                 t.done_at = filing.at
 
     turn.rt.patch(turn.case_id, apply, actor="intake")
+    _post(turn, {"type": "filed", "form": args.doc, "to": "VA Office of General Counsel (eFax)",
+                 "confirmation": filing.confirmation})  # fmt: skip
     return {"faxed": args.doc, "confirmation": filing.confirmation}
 
 

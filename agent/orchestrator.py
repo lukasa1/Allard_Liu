@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from agent import stages
 from agent.casefile import CaseFile, Task
 from agent.harness import AgentSpec, Turn
+from agent.ingest import untrusted
 from agent.runtime import CHAT_EVENT_TYPES, Job
 from agent.tools.registry import ToolSpec
 
@@ -128,7 +129,8 @@ def context(turn: Turn) -> str:
     open_flags = [case.flags[i].model_dump() for i in case.flags_to_decide()]
     return (
         f"## Case file\n{json.dumps(case.memory(), indent=1)}\n\n"
-        f"## Flags to decide this wake\n{json.dumps(open_flags) if open_flags else 'none'}\n\n"
+        "## Flags to decide this wake\n"
+        f"{untrusted('support flags (what the veteran told support)', json.dumps(open_flags)) if open_flags else 'none'}\n\n"
         f"## Last {MEMORY_EVENTS} events (oldest first)\n" + "\n".join(e.line() for e in events)
     )
 

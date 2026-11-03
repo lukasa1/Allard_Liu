@@ -3,8 +3,8 @@
 agent/orchestrator.py  the orchestrating agent: picks the next action among the ones the case's
                        phase allows (DSPy, or a deterministic policy offline)
 agent/session.py       one case end to end: wires the orchestrator, the intake subagent, the POA
-                       skill, Lighthouse, QA and the face-note pipeline; used by the web demo, the
-                       CLI and the eval
+                       skill, Lighthouse, QA and the face-note pipeline (legacy: the CLI and the
+                       eval until step 7; the web demo runs on agent/runtime.py)
 agent/intake/          the intake sub-agent: agent.py (its AgentSpec), checklist.py, documents.py,
                        plus the question bank, parsing and rules (the old controller and brains
                        are legacy, unused by the new intake)

@@ -157,4 +157,6 @@ def test_history_is_the_agents_own_last_n_messages(rt):
         rt.store.append_event("c1", "message", {"from": "veteran", "to": "intake", "text": f"v{i}"})
         rt.store.append_event("c1", "message", {"from": "intake", "to": "veteran", "text": f"i{i}"})
     rt.store.append_event("c1", "message", {"from": "veteran", "to": "support", "text": "elsewhere"})
-    assert conversation(turn, 3).splitlines() == ["intake: i3", "veteran: v4", "intake: i4"]
+    lines = conversation(turn, 3).splitlines()
+    assert lines[0].startswith("<untrusted ") and lines[-1] == "</untrusted>"
+    assert lines[1:-1] == ["intake: i3", "veteran: v4", "intake: i4"]

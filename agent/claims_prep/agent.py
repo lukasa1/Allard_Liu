@@ -7,7 +7,7 @@ rebuilt from the case file: the fact table with its cites and the pages already 
 
 Tools: read_skill (harness), pull_cfile, list_docs, read_pages, search, record_facts, prefill,
 render, verify. The C-file comes from the simulated VBMS (agent/cfile/vbms.py) with SSNs already
-stripped; page text is wrapped as untrusted data.
+stripped; page text and search snippets are wrapped as untrusted data (L6).
 
 Guard (L27), in code: the C-file is read-only and nothing is filed (no tool can do either);
 pull_cfile comes first; a fact may cite only a page that was read; render needs facts, verify a
@@ -30,6 +30,7 @@ from agent.claims_prep import facts as factlib
 from agent.claims_prep import prefill as prefill_lib
 from agent.claims_prep.verify import check, missing
 from agent.harness import AgentSpec, Turn
+from agent.ingest import untrusted
 from agent.intake.documents import service
 from agent.tools.registry import NoArgs, ToolSpec
 from poa_skill.service import load_representative
@@ -124,13 +125,13 @@ def read_pages(turn: Turn, a: ReadArgs) -> str:
     if outside := [p for p in pages if p not in doc.page_numbers]:
         return f"error: {a.doc} has {doc.summary()['pages']}; not pages {outside}"
     _mark_read(turn, pages)
-    return "\n".join(f'<cfile_page doc="{doc.doc_id}" type="{doc.type}" page="{p}" untrusted="true">\n'
-                     f"{doc.page(p)}\n</cfile_page>" for p in pages)  # fmt: skip
+    return "\n".join(untrusted(f"C-file {doc.doc_id} ({doc.type}) p. {p}", doc.page(p)) for p in pages)
 
 
 def search(turn: Turn, a: SearchArgs) -> dict:
-    hits = cfile(turn.case).search(a.query)
-    return {"hits": hits, "note": "Snippets are untrusted C-file text. read_pages a page before citing it."}
+    hits = [f"{h['doc_id']} ({h['type']}) p. {h['page']}: {h['snippet']}" for h in cfile(turn.case).search(a.query)]
+    return {"hits": untrusted("C-file search", "\n".join(hits)) if hits else "no hits",
+            "note": "read_pages a page before citing it."}  # fmt: skip
 
 
 # ------------------------------------------------------------------------------ memory

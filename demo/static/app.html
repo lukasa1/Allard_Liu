@@ -3,39 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Veteran Intake Agent</title>
+<title>VA Claims Agent</title>
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
 <style>
   :root { --ink:#132446; --muted:#5b6475; --line:#d9dde5; --bg:#f6f7f9; --card:#fff; --accent:#2f5d50; --warn:#9a3412; --soft:#eef1f5; --pill:#e6ecf5; }
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
   body { margin:0; font:15px/1.45 system-ui, -apple-system, sans-serif; color:var(--ink); background:var(--bg); }
   header { padding:10px 16px; border-bottom:1px solid var(--line); background:var(--card); display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   header h1 { font-size:17px; margin:0 8px 0 0; }
-  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:var(--pill); color:var(--ink); }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:var(--pill); }
   .badge.warn { background:#fde8d8; color:var(--warn); }
   .setup { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; }
-  .setup select { max-width:280px; }
-  main { display:grid; grid-template-columns:minmax(320px, 1fr) minmax(340px, 1fr); gap:14px; padding:14px; height:calc(100vh - 58px); }
+  #banner { display:none; margin:12px 16px 0; padding:10px 14px; border-radius:10px; background:#fde8d8; color:var(--warn); }
+  main { display:grid; grid-template-columns:minmax(320px, 1fr) minmax(360px, 1fr); gap:14px; padding:14px; height:calc(100vh - 58px); }
   @media (max-width: 900px) { main { grid-template-columns:1fr; height:auto; } #log { max-height:70vh; } }
   section { background:var(--card); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:0; }
   #log { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:300px; }
   .msg { max-width:88%; padding:8px 12px; border-radius:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
   .user { align-self:flex-end; background:var(--ink); color:#fff; }
   .bot { align-self:flex-start; background:var(--soft); }
+  .who { display:block; font-size:11px; color:var(--muted); margin-bottom:2px; }
   .sys { align-self:center; color:var(--muted); font-size:13px; text-align:center; }
-  .act { align-self:flex-end; color:var(--accent); font-size:13px; font-style:italic; }
   form.chat { display:flex; gap:8px; padding:10px; border-top:1px solid var(--line); }
-  .tools { display:flex; flex-wrap:wrap; gap:6px; padding:0 10px 10px; }
-  input, select, button, textarea { font:inherit; }
-  input[type=text], input[type=email], input[type=tel], input[type=date], input[type=password], select { padding:7px 10px; border:1px solid var(--line); border-radius:8px; width:100%; background:#fff; color:var(--ink); }
-  .setup select { width:auto; }
-  button { padding:7px 13px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; }
+  #status { padding:0 12px 8px; font-size:12px; color:var(--muted); min-height:18px; }
+  input, select { padding:7px 10px; border:1px solid var(--line); border-radius:8px; width:100%; background:#fff; color:var(--ink); font:inherit; }
+  .setup select { width:auto; max-width:300px; }
+  button { padding:7px 13px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; font:inherit; }
   button.ghost { background:#fff; color:var(--ink); }
-  button.small { padding:4px 10px; font-size:13px; }
   button:disabled { opacity:.5; cursor:default; }
-  .card { border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; align-self:stretch; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; }
   .card h3 { margin:0 0 6px; font-size:14px; }
-  .card .lock { color:var(--accent); font-size:12px; }
+  .lock { color:var(--accent); font-size:13px; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0; }
   @media (max-width: 520px) { .grid { grid-template-columns:1fr; } }
   .grid label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
@@ -46,251 +44,171 @@
   .tabs button.on { color:var(--ink); border-bottom-color:var(--ink); font-weight:600; }
   .pane { flex:1; overflow:auto; padding:12px 14px; display:none; }
   .pane.on { display:block; }
-  #pane-doc.on { display:flex; flex-direction:column; padding:0; }
-  #preview { flex:1; border:0; width:100%; min-height:480px; }
-  .steps { display:flex; flex-wrap:wrap; gap:4px; margin:0 0 12px; }
+  #pane-docs.on { display:flex; flex-direction:column; }
+  #pdf { flex:1; border:1px solid var(--line); border-radius:8px; width:100%; min-height:480px; margin-top:8px; }
+  .steps { display:flex; flex-wrap:wrap; gap:4px; margin:0 0 10px; }
   .step { font-size:12px; padding:3px 8px; border-radius:999px; background:var(--soft); color:var(--muted); }
   .step.done { background:#dcefe6; color:var(--accent); }
   .step.now { background:var(--ink); color:#fff; }
-  h4 { margin:14px 0 6px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
-  ul.plain { margin:0; padding-left:18px; } ul.plain li { margin:3px 0; }
-  pre { background:var(--soft); padding:10px; border-radius:8px; overflow:auto; font-size:12.5px; white-space:pre-wrap; }
+  h4 { margin:14px 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  ul.plain { margin:0; padding-left:18px; font-size:13px; } ul.plain li { margin:3px 0; }
+  .staff { border:1px solid var(--line); background:var(--soft); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
   .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:13px; }
   .kv dt { color:var(--muted); } .kv dd { margin:0; overflow-wrap:anywhere; }
   .src { font-size:11px; padding:0 6px; border-radius:6px; background:var(--pill); color:var(--muted); margin-left:4px; }
   .muted { color:var(--muted); font-size:13px; }
-  .consent { font-size:13px; color:var(--muted); margin:6px 0 10px; }
-  details summary { cursor:pointer; }
+  .note { font:12.5px/1.5 ui-monospace, monospace; background:var(--soft); padding:10px; border-radius:8px; }
+  .note div { white-space:pre-wrap; }
+  .note .uncertain { color:var(--warn); font-weight:600; }
+  .ev { font:12px/1.45 ui-monospace, monospace; border-bottom:1px solid var(--soft); padding:3px 0; overflow-wrap:anywhere; }
+  .ev b { color:var(--ink); } .ev.refused b { color:var(--warn); }
 </style>
 </head>
 <body>
 <header>
-  <h1>Veteran intake agent</h1>
-  <span class="badge" id="b-provider">…</span>
-  <span class="badge" id="b-lighthouse">…</span>
+  <h1>VA claims agent</h1>
   <span class="badge warn">Synthetic data only</span>
   <div class="setup">
     <label class="muted" for="persona">Test veteran</label>
     <select id="persona"></select>
-    <label class="muted" for="mode">VA records</label>
-    <select id="mode">
-      <option value="ask">no VA sign-in (default): ask, then the C-file</option>
-    </select>
     <button id="start">Start case</button>
   </div>
 </header>
+<div id="banner"></div>
 <main>
   <section>
-    <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran: type answers, or press <b>Auto-play</b> to let a simulated veteran answer and use the cards.</div></div>
-    <form class="chat" id="chat"><input type="text" id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button></form>
-    <div class="tools">
-      <button class="ghost small" id="suggest" disabled title="Fill the box with what this test veteran would say">Suggest a reply</button>
-      <button class="ghost small" id="step" disabled title="The simulated veteran takes one step">Auto-play one step</button>
-      <button class="ghost small" id="run" disabled title="Play until the case is done">Auto-play to the end</button>
-      <span class="muted" id="hint"></span>
-    </div>
-    <div class="muted" id="offline-hint" style="padding:0 10px 10px;display:none"></div>
+    <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran; the staff panel on the right plays the attorney.</div></div>
+    <div id="status"></div>
+    <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button></form>
   </section>
   <section>
     <div class="tabs">
       <button data-tab="case" class="on">Case</button>
-      <button data-tab="doc">21-22a</button>
       <button data-tab="note">Face note</button>
-      <button data-tab="records">VA records</button>
+      <button data-tab="docs">Documents</button>
+      <button data-tab="events">Event log</button>
     </div>
-    <div class="pane on" id="pane-case"><p class="muted">The orchestrator's progress, decisions and staff tasks appear here.</p></div>
-    <div class="pane" id="pane-doc"><div id="editor"></div><p class="muted" id="docmeta" style="padding:10px 14px;margin:0">No draft yet.</p><iframe id="preview" title="21-22a preview"></iframe></div>
-    <div class="pane" id="pane-note"><p class="muted">The face note is generated from the C-file after intake.</p></div>
-    <div class="pane" id="pane-records"><p class="muted">VA's records (Lighthouse) appear here after sign-in.</p></div>
+    <div class="pane on" id="pane-case"><p class="muted">The stage, the orchestrator's decisions, tasks and cost appear here.</p></div>
+    <div class="pane" id="pane-note"><p class="muted">Claims prep writes the face note from the C-file after filing.</p></div>
+    <div class="pane" id="pane-docs">
+      <div><button class="ghost" data-doc="21-22a">VA Form 21-22a</button> <button class="ghost" data-doc="fee_agreement">Fee agreement</button> <span class="muted" id="docmeta">No document yet.</span></div>
+      <iframe id="pdf" title="Document"></iframe>
+    </div>
+    <div class="pane" id="pane-events"></div>
   </section>
 </main>
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 const log = $("#log");
-const PHASES = ["new", "va_sign_in", "screening", "poa", "attorney_signoff", "case_prep", "intake", "attorney_review"];
-const PHASE_LABEL = {new: "Start", va_sign_in: "VA sign-in", screening: "Pass 1: screening", poa: "21-22a", attorney_signoff: "Attorney countersign + filing", case_prep: "C-file → claims prep", intake: "Pass 2: intake", attorney_review: "Attorney review", closed: "Closed", human_handoff: "Handed to staff"};
-let cfg = null, currentDoc = null, running = false, lastCase = null, caseToken = 0, signedShown = null;
+const FORM = {"21-22a": "VA Form 21-22a", fee_agreement: "fee agreement"};
+const STAGES = {1: "Screening", 2: "Account opening", 3: "Filed", 4: "C-file: claims prep, pass 2", 5: "Ready for attorney review"};
+let caseId = null, since = 0, timer = null, panel = null, shownDoc = null;
 
-let caseId = null;
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function linkify(s) { return esc(s).replace(/(https:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
 async function api(path, body) {
-  const token = caseToken, headers = {"Content-Type": "application/json"};
-  if (caseId && !path.startsWith("/api/case/new")) headers["X-Case-Id"] = caseId;
-  const r = await fetch(path, body === undefined ? {headers} : {method: "POST", headers, body: JSON.stringify(body)});
+  const r = await fetch(path, body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
   const data = await r.json().catch(() => ({}));
-  if (token !== caseToken) return {stale: true};  // the user started a new case meanwhile: drop it
-  if (!r.ok) {
-    const d = data.detail;
-    throw new Error(Array.isArray(d) ? d.map(x => x.msg || JSON.stringify(x)).join("; ") : (d || r.statusText));
-  }
+  if (!r.ok) { const d = data.detail; throw new Error(Array.isArray(d) ? d.map(x => x.msg).join("; ") : (d || r.statusText)); }
   return data;
 }
-function pdfUrl(id, q) { return `/api/documents/${id}/pdf?${q}&case=${encodeURIComponent(caseId || "")}`; }
-function showErr(card, msg) { const e = $(".err", card); if (e) e.textContent = msg; else say(msg, "sys"); }
-function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
-function linkify(s) { return escapeHtml(s).replace(/(https:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
-function say(text, who) {
-  if (!text) return;
-  const d = document.createElement("div");
-  d.className = "msg " + who;
-  if (who === "bot") d.innerHTML = linkify(text); else d.textContent = text;
-  log.append(d); log.scrollTop = log.scrollHeight;
+const casePath = p => `/api/cases/${caseId}${p}`;
+function scroll() { log.scrollTop = log.scrollHeight; }
+function say(text, who, agent) {
+  const d = document.createElement("div"); d.className = "msg " + who;
+  d.innerHTML = (agent ? `<span class="who">${esc(agent.replace("_", " "))}</span>` : "") + (who === "bot" ? linkify(text) : esc(text));
+  log.append(d); scroll();
 }
-function setChat(on) {
-  $("#text").disabled = !on; $("#send").disabled = !on; $("#suggest").disabled = !on;
-  $("#hint").textContent = on ? "" : (lastCase && ["attorney_review","closed","human_handoff"].includes(lastCase.phase) ? "Case finished." : "Use the card above to continue.");
-}
-function handle(res) {
-  if (!res || res.stale) return res;
-  if (res.case && res.case.case_id) caseId = res.case.case_id;
-  if (res.veteran_text) say(res.veteran_text, "user");
-  if (res.veteran_action) say(res.veteran_action, "act");
-  if (res.redacted) say("Your message was sent with the ID number hidden. Use the secure form for those.", "sys");
-  (res.messages || []).forEach(m => say(m, "bot"));
-  (res.cards || []).forEach(renderCard);
-  if (res.case) renderCase(res.case);
-  setChat(!!res.waiting_for_chat);
-  const done = res.case && ["attorney_review","closed","human_handoff"].includes(res.case.phase);
-  $("#step").disabled = done; $("#run").disabled = done;
-  return res;
-}
-
-// ── setup ───────────────────────────────────────────────────────────────────────────────────
-(async () => {
-  cfg = await api("/api/config");
-  $("#b-provider").textContent = cfg.provider === "dspy" ? "Agent: DSPy (LLM)" : "Agent: offline (rule-based, no key)";
-  $("#b-lighthouse").textContent = "Lighthouse: " + cfg.lighthouse_mode;
-  if (cfg.va_sign_in) {  // INTAKE_VA_SIGN_IN=1: also offer VA sign-in before representation
-    $("#mode").insertAdjacentHTML("beforeend", `<option value="fetch_confirm">VA sign-in: fetch + confirm</option><option value="fetch">VA sign-in: fetch only</option>`);
-  }
-  $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${escapeHtml(p.summary)}">${escapeHtml(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
-  if (cfg.provider !== "dspy") {
-    const h = $("#offline-hint");
-    h.textContent = "Offline mode (no API key): the agent reads plain answers like \"Yes\" or \"Army, active duty, from 2004-06 to 2010-05, honorable discharge\". Press Suggest a reply to see what this veteran would say.";
-    h.style.display = "block";
-  }
-})();
-$("#start").onclick = async () => {
-  running = false; $("#run").textContent = "Auto-play to the end";
-  caseToken += 1; caseId = null; lastCase = null; currentDoc = null; signedShown = null;
-  log.innerHTML = "";
-  $("#preview").removeAttribute("src"); $("#editor").innerHTML = ""; $("#docmeta").textContent = "No draft yet.";
-  $("#pane-case").innerHTML = "<p class='muted'>Starting…</p>";
-  $("#pane-note").innerHTML = "<p class='muted'>The face note is generated from the C-file after intake.</p>";
-  $("#pane-records").innerHTML = "<p class='muted'>VA's records (Lighthouse) appear here after sign-in.</p>";
-  showTab("case");
-  $("#start").disabled = true; $("#step").disabled = true; $("#run").disabled = true; setChat(false);
-  const p = cfg.personas.find(x => x.id === $("#persona").value);
-  say(`New case. You are playing ${p.name}: ${p.summary}`, "sys");
-  try {
-    handle(await api("/api/case/new", {persona_id: p.id, records_mode: $("#mode").value}));
-    $("#step").disabled = false; $("#run").disabled = false;
-  } catch (e) { say(e.message, "sys"); }
-  $("#start").disabled = false;
-};
-$("#chat").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const t = $("#text").value.trim(); if (!t) return;
-  $("#text").value = ""; say(t, "user"); setChat(false);
-  try { handle(await api("/api/chat", {text: t})); } catch (err) { say(err.message, "sys"); setChat(true); }
-});
-$("#suggest").onclick = async () => {
-  try { const r = await api("/api/suggest", {}); $("#text").value = r.text || ""; $("#text").focus(); } catch (e) { say(e.message, "sys"); }
-};
-async function step() {
-  const res = await api("/api/autoplay", {});
-  if (res.stale) return {done: true};
-  if (res.card_done) markCardDone(res.card_done);
-  if (res.card_invalid) invalidate(res.card_invalid.type, res.card_invalid.request_id || res.card_invalid.document_id || "");
-  handle(res);
-  return res;
-}
-$("#step").onclick = async () => { try { await step(); } catch (e) { say(e.message, "sys"); } };
-$("#run").onclick = async () => {
-  if (running) { running = false; return; }
-  running = true; $("#run").textContent = "Stop";
-  const token = caseToken;
-  try {
-    for (let i = 0; i < 300 && running && token === caseToken; i++) {
-      const res = await step();
-      if (res.done || (res.case && ["attorney_review","closed","human_handoff"].includes(res.case.phase))) break;
-      await new Promise(r => setTimeout(r, cfg.provider === "dspy" ? 50 : 120));
-    }
-  } catch (e) { say(e.message, "sys"); }
-  running = false; $("#run").textContent = "Auto-play to the end";
-};
-document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
 }
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+document.querySelectorAll("[data-doc]").forEach(b => b.onclick = () => showDoc(b.dataset.doc));
+function showDoc(form) {
+  shownDoc = form;
+  const d = panel && panel.documents[form];
+  if (!d) { $("#docmeta").textContent = `No ${FORM[form]} yet.`; $("#pdf").removeAttribute("src"); return; }
+  $("#docmeta").textContent = `${FORM[form]} · v${d.version} · ${d.status}`;
+  $("#pdf").src = casePath(`/documents/${form}.pdf?v=${d.version}-${d.status}`);
+}
 
-// ── cards ───────────────────────────────────────────────────────────────────────────────────
-const cardEls = [];
+// ── setup and polling ───────────────────────────────────────────────────────────────────────
+(async () => {
+  const cfg = await api("/api/config");
+  $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${esc(p.summary)}">${esc(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
+  if (!cfg.ready) { $("#banner").textContent = cfg.message; $("#banner").style.display = "block"; $("#start").disabled = true; }
+})();
+$("#start").onclick = async () => {
+  clearInterval(timer); caseId = null; since = 0; panel = null; shownDoc = null;
+  log.innerHTML = ""; $("#pdf").removeAttribute("src"); $("#docmeta").textContent = "No document yet.";
+  const p = $("#persona").selectedOptions[0];
+  say(`New case. You are playing ${p.textContent}: ${p.title}`, "sys");
+  try {
+    caseId = (await api("/api/cases", {persona_id: p.value})).case_id;
+    $("#text").disabled = false; $("#send").disabled = false;
+    timer = setInterval(poll, 1500); poll();
+  } catch (e) { say(e.message, "sys"); }
+};
+let polling = false;
+async function poll() {
+  if (!caseId || polling) return;
+  polling = true;
+  const id = caseId;
+  try {
+    const u = await api(casePath(`/updates?since=${since}`));
+    if (id !== caseId) return;
+    for (const item of u.items) {
+      since = item.seq;
+      if (item.kind === "message") say(item.payload.text, "bot", item.agent);
+      else renderCard(item.payload);
+    }
+    $("#status").textContent = u.running.length ? `${u.running.join(", ").replace(/_/g, " ")} working…` : "";
+    renderPanel(await api(casePath("")));
+  } catch (e) { $("#status").textContent = e.message; }
+  finally { polling = false; }
+}
+$("#chat").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const t = $("#text").value.trim(); if (!t || !caseId) return;
+  $("#text").value = "";
+  try { say((await api(casePath("/messages"), {text: t})).text, "user"); poll(); } catch (err) { say(err.message, "sys"); }
+});
+
+// ── cards (from the outbox) ─────────────────────────────────────────────────────────────────
 function renderCard(c) {
-  const fn = {va_sign_in: vaSignIn, secure_form: secureForm, signature_pad: signaturePad, document_preview: preview, sign_button: signButton, attorney_signoff: attorneySignoff}[c.type];
+  const fn = {secure_form: secureForm, document_preview: preview, signature_pad: signaturePad, sign_button: signButton, filed}[c.type];
   if (fn) fn(c);
 }
-function stale(card) {
-  if (Number(card.dataset.token) === caseToken) return false;
-  say("That card belongs to an earlier case. Press Start case for a new one.", "sys");
-  return true;
-}
-// A newer card of these types replaces the older one (same rule as the host's card queue).
-const REPLACED_BY_NEWER = ["sign_button", "secure_form", "signature_pad"];
-function invalidate(kind, key, why = "No longer valid.") {
-  log.querySelectorAll(".card").forEach(x => {
-    if (x.dataset.kind !== kind || x.dataset.done || (key !== null && x.dataset.key !== key)) return;
-    x.dataset.done = "1"; x.innerHTML = `<div class="lock">${escapeHtml(why)}</div>`;
+function addCard(c, html) {
+  // A newer card replaces an older open one of the same kind (for Sign: of the same form); a new
+  // preview of a form also retires its Sign card: the draft changed.
+  log.querySelectorAll(".card[data-open]").forEach(x => {
+    if ((x.dataset.kind === c.type && x.dataset.form === (c.form || "")) || (c.type === "document_preview" && x.dataset.kind === "sign_button" && x.dataset.form === c.form))
+      retire(x, "Replaced by a newer card below.");
   });
-}
-function addCard(card, c) {
-  if (REPLACED_BY_NEWER.includes(c.type)) invalidate(c.type, null, "Replaced by a newer card below.");
-  card.dataset.token = caseToken; card.dataset.kind = c.type; card.dataset.key = c.request_id || c.document_id || ""; log.append(card); log.scrollTop = log.scrollHeight;
-}
-function markCardDone(c) {
-  const key = c.request_id || c.document_id || "";
-  const el = [...log.querySelectorAll(".card")].reverse().find(x => x.dataset.kind === c.type && x.dataset.key === key && !x.dataset.done);
-  if (el) { el.dataset.done = "1"; el.innerHTML = `<div class="lock">✓ Done by the simulated veteran.</div>`; }
-}
-
-function vaSignIn(c) {
   const card = document.createElement("div"); card.className = "card";
-  const who = (c.test_veterans || [])[0];
-  const label = c.mode === "sandbox" ? "Sign in with VA (sandbox token from .env)" : who ? `Sign in with VA as ${escapeHtml(who.name)} (${c.mode})` : "Sign in with VA";
-  card.innerHTML = `<h3>Share your VA records</h3><p class="consent">The firm reads your service history, disability ratings and claims from VA (Lighthouse API). ${c.mode === "stub" ? "Stub mode: synthetic records for this test veteran." : ""}</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button data-go>${label}</button><button class="ghost" data-skip>Skip, I'll answer questions</button></div><div class="err"></div>`;
-  $("[data-go]", card).onclick = async () => {
-    if (stale(card)) return;
-    try { card.dataset.done = "1"; card.innerHTML = `<div class="lock">✓ Signed in with VA.</div>`; handle(await api("/api/va/sign-in", {icn: who?.icn})); } catch (e) { say(e.message, "sys"); }
-  };
-  $("[data-skip]", card).onclick = async () => {
-    if (stale(card)) return;
-    try { card.dataset.done = "1"; card.innerHTML = `<div class="lock">Skipped VA sign-in.</div>`; handle(await api("/api/va/skip", {})); } catch (e) { say(e.message, "sys"); }
-  };
-  addCard(card, c);
+  card.dataset.kind = c.type; card.dataset.form = c.form || ""; card.dataset.open = "1"; card.dataset.case = caseId;
+  card.innerHTML = html + `<div class="err"></div>`;
+  log.append(card); scroll();
+  return card;
 }
-
-// Staff side, not the veteran: in the demo the presenter plays the attorney.
-function attorneySignoff(c) {
-  const card = document.createElement("div"); card.className = "card";
-  card.innerHTML = `<h3>Staff · attorney countersign</h3><p class="consent">The firm's attorney reviews the veteran's signed 21-22a and countersigns it (Item 25A). Nothing is filed with VA before this.</p><button>Countersign as the attorney</button><div class="err"></div>`;
-  $("button", card).onclick = async () => {
-    if (stale(card) || card.dataset.done) return;
-    try { card.dataset.done = "1"; card.innerHTML = `<div class="lock">✓ Countersigned by the attorney.</div>`; handle(await api("/api/attorney/countersign", {})); } catch (e) { showErr(card, e.message); }
-  };
-  addCard(card, c);
+function retire(card, html) { delete card.dataset.open; card.innerHTML = `<div class="lock">${html}</div>`; }
+async function act(card, button, fn) {
+  if (!card.dataset.open || card.dataset.case !== caseId) return;
+  button.disabled = true;
+  try { await fn(); poll(); } catch (e) { $(".err", card).textContent = e.message; button.disabled = false; }
 }
 
 function secureForm(c) {
-  const card = document.createElement("div"); card.className = "card";
-  card.innerHTML = `<h3>Secure form</h3><div class="lock">🔒 Encrypted. The assistant only sees masked values.</div><p>${escapeHtml(c.purpose)}</p><div class="grid"></div><div class="err"></div><button>Submit securely</button>`;
+  const card = addCard(c, `<h3>Secure form</h3><div class="lock">🔒 Encrypted. The agents only see masked values.</div><p>${esc(c.purpose)}</p><div class="grid"></div><button>Submit securely</button>`);
   const grid = $(".grid", card);
   for (const f of c.fields) {
     const l = document.createElement("label"); l.textContent = f.label;
     let input;
     if (f.input_type === "select") {
       input = document.createElement("select");
-      input.innerHTML = `<option value="">Choose</option>` + f.options.map(o => `<option value="${o}">${o.replace(/_/g, " ")}</option>`).join("");
+      input.innerHTML = `<option value="">Choose</option>` + f.options.map(o => `<option value="${esc(o)}">${esc(o.replace(/_/g, " "))}</option>`).join("");
     } else {
       input = document.createElement("input");
       input.type = {ssn: "password", date: "date", email: "email", tel: "tel"}[f.input_type] || "text";
@@ -298,154 +216,113 @@ function secureForm(c) {
     }
     input.name = f.name; l.append(input); grid.append(l);
   }
-  const submit = $("button", card);
-  submit.onclick = async () => {
-    if (stale(card) || card.dataset.done) return;
-    const values = {};
-    grid.querySelectorAll("[name]").forEach(i => values[i.name] = i.value);
-    submit.disabled = true;
-    try {
-      const res = await api(`/api/secure/${c.request_id}`, {values});
-      if (Object.keys(res.errors || {}).length) { showErr(card, Object.entries(res.errors).map(([k, v]) => `${k}: ${v}`).join(" · ")); submit.disabled = false; return; }
-      card.dataset.done = "1"; card.innerHTML = `<h3>Secure form</h3><div class="lock">🔒 Saved securely.</div>`;
-      handle(res);
-    } catch (err) { showErr(card, err.message); submit.disabled = false; }
-  };
-  addCard(card, c);
+  const b = $("button", card);
+  b.onclick = () => act(card, b, async () => {
+    const values = {}; grid.querySelectorAll("[name]").forEach(i => values[i.name] = i.value);
+    const res = await api(casePath(`/secure/${c.request_id}`), {values});
+    const errs = Object.entries(res.errors || {});
+    if (errs.length) throw new Error(errs.map(([k, v]) => `${k}: ${v}`).join(" · "));
+    retire(card, "🔒 Saved securely.");
+  });
+}
+
+function preview(c) {
+  const card = addCard(c, `<h3>Preview: ${esc(FORM[c.form])} (v${c.version})</h3><p class="muted">${c.missing.length ? "Still missing: " + esc(c.missing.join(", ")) : "Complete. Check it, then tell the agent in chat if it's right."}</p><button class="ghost">Open the document</button>`);
+  $("button", card).onclick = () => { showTab("docs"); showDoc(c.form); };
+  shownDoc = c.form; showTab("docs");  // the panel fetched after this poll loads the new version
 }
 
 // Signature pad: draw only; trimmed to the ink before upload (adapted from demo/static/index.html).
-function trimmedSignatureDataUrl(canvas) {
-  const ctx = canvas.getContext("2d"), {width: w, height: h} = canvas;
-  const data = ctx.getImageData(0, 0, w, h).data;
+function trimmed(canvas) {
+  const ctx = canvas.getContext("2d"), {width: w, height: h} = canvas, data = ctx.getImageData(0, 0, w, h).data;
   let minX = w, minY = h, maxX = -1, maxY = -1;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3]) {
-    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
   }
   if (maxX < 0) return null;
-  const px = Math.max(2, Math.round((maxX - minX) * 0.04)), py = Math.max(2, Math.round((maxY - minY) * 0.04));
-  const l = Math.max(0, minX - px), t = Math.max(0, minY - py);
-  const ow = Math.min(w, maxX + px + 1) - l, oh = Math.min(h, maxY + py + 1) - t;
+  const l = Math.max(0, minX - 4), t = Math.max(0, minY - 4), ow = Math.min(w, maxX + 5) - l, oh = Math.min(h, maxY + 5) - t;
   const out = document.createElement("canvas"); out.width = ow; out.height = oh;
   out.getContext("2d").drawImage(canvas, l, t, ow, oh, 0, 0, ow, oh);
   return out.toDataURL("image/png");
 }
 function signaturePad(c) {
-  const card = document.createElement("div"); card.className = "card";
-  card.innerHTML = `<h3>Your signature</h3><p class="consent">Draw it once. It's saved and placed on the form only when you click Sign.</p><canvas class="pad"></canvas><div style="display:flex;gap:8px;margin-top:8px"><button class="ghost" data-clear>Clear</button><button data-save>Save signature</button></div><div class="err"></div>`;
-  addCard(card, c);
+  const card = addCard(c, `<h3>Your signature</h3><p class="muted">Draw it once. It is placed on a document only when you click Sign.</p><canvas class="pad"></canvas><div style="display:flex;gap:8px;margin-top:8px"><button class="ghost" data-clear>Clear</button><button data-save>Save signature</button></div>`);
   const canvas = $("canvas", card), ratio = Math.max(window.devicePixelRatio || 1, 1);
   canvas.width = canvas.offsetWidth * ratio; canvas.height = canvas.offsetHeight * ratio;
   canvas.getContext("2d").scale(ratio, ratio);
   const pad = typeof SignaturePad !== "undefined" ? new SignaturePad(canvas, {penColor: "#132446"}) : null;
-  if (!pad) $(".err", card).textContent = "The signature library didn't load (offline?). Use Auto-play one step instead.";
+  if (!pad) $(".err", card).textContent = "The signature library didn't load (no internet?).";
   $("[data-clear]", card).onclick = () => pad && pad.clear();
-  const save = $("[data-save]", card);
-  save.onclick = async () => {
-    if (stale(card) || card.dataset.done) return;
-    const uri = !pad || pad.isEmpty() ? null : trimmedSignatureDataUrl(canvas);
-    if (!uri) { showErr(card, "Draw your signature first."); return; }
-    save.disabled = true;
-    try {
-      const res = await api("/api/signature", {data_uri: uri});
-      card.dataset.done = "1"; card.innerHTML = `<h3>Your signature</h3><img alt="Saved signature" src="${uri}" style="max-height:60px"><div class="lock">Saved.</div>`;
-      handle(res);
-    } catch (err) { showErr(card, err.message); save.disabled = false; }
-  };
-}
-
-function preview(c) {
-  currentDoc = c.document_id;
-  $("#preview").src = pdfUrl(c.document_id, `v=${c.version}`);
-  $("#docmeta").textContent = `Draft v${c.version}` + (c.missing.length ? ` · missing: ${c.missing.join(", ")}` : " · complete");
-  const ed = $("#editor");
-  const fields = Object.entries(c.editable).map(([k, label]) =>
-    `<label>${escapeHtml(label)}<input type="text" name="${k}" value="${escapeHtml(c.current[k] && !c.current[k].includes("*") ? c.current[k] : "")}" placeholder="${escapeHtml(c.current[k] || "")}"></label>`).join("");
-  ed.innerHTML = `<details style="padding:8px 14px;border-bottom:1px solid var(--line)"><summary>Edit before signing</summary>
-    <div class="grid">${fields}
-      <label><span><input type="checkbox" name="authorize_7332_records" ${c.consents.authorize_7332_records ? "checked" : ""}> Item 20: sensitive records access</span></label>
-      <label><span><input type="checkbox" name="authorize_address_change" ${c.consents.authorize_address_change ? "checked" : ""}> Item 22: address changes</span></label>
-    </div><div class="err"></div><button>Update draft</button></details>`;
-  $("button", ed).onclick = async () => {
-    const changes = {};
-    ed.querySelectorAll("input[type=text]").forEach(i => { if (i.value.trim() && i.value !== c.current[i.name]) changes[i.name] = i.value.trim(); });
-    ed.querySelectorAll("input[type=checkbox]").forEach(i => { if (i.checked !== Boolean(c.consents[i.name])) changes[i.name] = i.checked; });
-    if (!Object.keys(changes).length) return;
-    try {
-      const res = await api(`/api/documents/${c.document_id}/edit`, {changes});
-      invalidate("sign_button", c.document_id, "No longer valid: the draft changed. Review it again before signing.");
-      preview({...c, version: res.document.version, missing: res.document.missing, consents: res.document.consents,
-               current: Object.fromEntries(Object.entries(res.captured).filter(([k]) => k in c.editable))});
-      handle(res);
-    } catch (err) { $(".err", ed).textContent = err.message; }
-  };
-  const note = document.createElement("div"); note.className = "msg sys";
-  note.innerHTML = `📄 Draft 21-22a ready. <a href="#" data-open>Open the 21-22a tab</a>`;
-  $("[data-open]", note).onclick = (e) => { e.preventDefault(); showTab("doc"); };
-  log.append(note); log.scrollTop = log.scrollHeight;
-  showTab("doc");
+  const b = $("[data-save]", card);
+  b.onclick = () => act(card, b, async () => {
+    const uri = pad && !pad.isEmpty() ? trimmed(canvas) : null;
+    if (!uri) throw new Error("Draw your signature first.");
+    await api(casePath("/signature"), {data_uri: uri});
+    retire(card, `Signature saved. <img alt="" src="${uri}" style="max-height:40px;vertical-align:middle">`);
+  });
 }
 
 function signButton(c) {
-  const card = document.createElement("div"); card.className = "card";
-  card.innerHTML = `<h3>Sign VA Form 21-22a</h3><p class="consent">${escapeHtml(c.consent_text)}</p><button>Sign</button><div class="err"></div>`;
-  $("button", card).onclick = async () => {
-    if (stale(card)) return;
-    if (card.dataset.done) return;
-    $("button", card).disabled = true;
-    try {
-      const res = await api(`/api/documents/${c.document_id}/sign`, {consent_text: c.consent_text});
-      card.dataset.done = "1"; card.innerHTML = `<h3>Signed ✓</h3><div class="lock">Signed ${escapeHtml(res.document.signed_at)}</div>`;
-      $("#preview").src = pdfUrl(c.document_id, "signed=1");
-      $("#docmeta").textContent = "Signed"; $("#editor").innerHTML = "";
-      handle(res);
-    } catch (err) { showErr(card, err.message); const b = $("button", card); if (b) b.disabled = false; }
-  };
-  addCard(card, c);
+  const card = addCard(c, `<h3>Sign the ${esc(FORM[c.form])}</h3><p class="muted">${esc(c.consent_text)}</p><button>Sign</button>`);
+  const b = $("button", card);
+  b.onclick = () => act(card, b, async () => {
+    await api(casePath(`/sign/${c.form}`), {consent_text: c.consent_text});
+    retire(card, `✓ You signed the ${esc(FORM[c.form])}.`);
+  });
 }
 
-// ── case panels ─────────────────────────────────────────────────────────────────────────────
-function renderCase(c) {
-  const prevNote = lastCase && lastCase.face_note;
-  lastCase = c;
-  if (c.poa_document_id && signedShown !== c.poa_document_id) {
-    signedShown = c.poa_document_id;
-    $("#preview").src = pdfUrl(c.poa_document_id, "signed=1");
-    $("#docmeta").textContent = "Signed"; $("#editor").innerHTML = "";
-  }
-  const idx = PHASES.indexOf(c.phase);
-  const steps = PHASES.map((p, i) => `<span class="step ${i < idx ? "done" : i === idx ? "now" : ""}">${PHASE_LABEL[p]}</span>`).join("")
-    + (idx < 0 ? `<span class="step now">${PHASE_LABEL[c.phase] || c.phase}</span>` : "");
-  const decisions = (c.decisions || []).filter(d => d.action !== "wait").map(d =>
-    `<li><b>${escapeHtml(d.action)}</b> <span class="src">${escapeHtml(d.policy)}</span><br><span class="muted">after ${escapeHtml(d.event)} · ${escapeHtml(d.reason)}</span></li>`).join("");
-  const tasks = (c.tasks || []).map(t => `<li><span class="src">${escapeHtml(t.kind)}</span> ${escapeHtml(t.text)}${t.due ? ` <b>due ${escapeHtml(t.due)}</b>` : ""}</li>`).join("");
-  const rec = c.intake || {};
-  const prov = rec.provenance || {};
-  const shown = ["is_veteran","first_name","last_name","service_periods","filed_before","rating_pct","tdiu","sc_conditions","prior_attorney","prior_attorney_name","claim_conditions","other_conditions","mos","exposures","marital_status","email","cell_phone","city","state"];
-  const fmt = v => Array.isArray(v) ? v.map(x => typeof x === "object" ? Object.values(x).filter(Boolean).join(" ") : x).join("; ") : typeof v === "object" ? JSON.stringify(v) : String(v);
-  const kv = shown.filter(k => rec[k] !== undefined && rec[k] !== null && !(Array.isArray(rec[k]) && !rec[k].length))
-    .map(k => `<dt>${k.replace(/_/g, " ")}</dt><dd>${escapeHtml(fmt(rec[k]))}${prov[k] ? `<span class="src">${escapeHtml(prov[k])}</span>` : ""}</dd>`).join("");
-  const qa = (rec.qa_log || []).map(q => `<li><b>${escapeHtml(q.question)}</b><br><span class="muted">${linkify(q.answer)}</span></li>`).join("");
+function filed(c) {
+  const what = c.form === "itf" ? "Intent to file" : FORM[c.form];
+  const card = addCard(c, `<h3>${esc(what)} sent to ${esc(c.to)}</h3><div class="lock">Confirmation ${esc(c.confirmation)} (simulated)${c.itf_date ? ` · ITF date ${esc(c.itf_date)}` : ""}</div>`);
+  delete card.dataset.open;
+}
+
+// ── case panel and staff panel ──────────────────────────────────────────────────────────────
+function ev(e) {
+  const d = JSON.stringify(e.data);
+  return `<div class="ev ${e.type === "refused" ? "refused" : ""}">#${e.seq} ${esc(e.at.slice(11, 19))} <b>${esc(e.type)}</b> by ${esc(e.actor)} ${esc(d.length > 400 ? d.slice(0, 400) + "…" : d)}</div>`;
+}
+function fmt(v) { return v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); }
+function renderPanel(p) {
+  const versionsChanged = !panel || JSON.stringify(panel.documents) !== JSON.stringify(p.documents);
+  const noteBefore = panel && panel.face_note.length;
+  panel = p;
+  const steps = Object.entries(STAGES).map(([n, label]) => `<span class="step ${n < p.stage ? "done" : n == p.stage ? "now" : ""}">${n} ${label}</span>`).join("");
+  const docs = Object.entries(p.documents).map(([f, d]) => `<li>${esc(FORM[f])}: <b>${esc(d.status)}</b> (v${d.version})${d.countersigned_by ? ` · countersigned by ${esc(d.countersigned_by)}` : ""}</li>`).join("");
+  const tasks = p.tasks.map(t => `<li><span class="src">${esc(t.kind)}</span> ${esc(t.text)}${t.due ? ` <b>due ${esc(t.due)}</b>` : ""}${t.done_at ? " ✓" : ""}</li>`).join("");
+  const filings = Object.entries(p.filings).map(([k, f]) => `<li>${esc(k)}: <b>${esc(f.confirmation)}</b>${f.data.itf_date ? ` · ITF ${esc(f.data.itf_date)}` : ""}</li>`).join("");
+  const flags = p.flags.map(f => `<li><span class="src">${esc(f.status)}</span> ${esc(f.kind)}: ${esc(f.text)}</li>`).join("");
+  const cost = Object.entries(p.cost.by_agent).map(([a, c]) => `<dt>${esc(a.replace("_", " "))}</dt><dd>$${c.toFixed(4)}</dd>`).join("");
+  const answers = Object.entries(p.answers).map(([k, a]) => `<dt>${esc(k.replace(/_/g, " "))}</dt><dd>${a.unknown ? "<i>unknown</i>" : esc(fmt(a.value))}<span class="src">${esc(a.source)}</span></dd>`).join("");
+  const support = p.events.filter(e => ["support_log", "support_flag", "escalated"].includes(e.type));
+  const pr = p.prep;
   $("#pane-case").innerHTML = `
+    <div class="staff"><b>Staff · attorney</b> <span class="muted">(the presenter plays the attorney)</span>
+      <ul class="plain">${docs || "<li class='muted'>No documents yet.</li>"}</ul>
+      <button id="countersign" style="margin-top:6px" ${p.can_countersign ? "" : "disabled"}>Countersign both documents</button>
+      <span class="err" id="cs-err"></span></div>
     <div class="steps">${steps}</div>
-    <div class="muted">Case ${escapeHtml(c.case_id)} · agent ${escapeHtml(c.provider)} · Lighthouse ${escapeHtml(c.lighthouse_mode)} · records mode ${escapeHtml(c.records_mode)}
-      ${c.intake_outcome ? ` · intake: <b>${escapeHtml(c.intake_outcome)}</b>` : ""}${c.fee_pct ? ` · fee ${c.fee_pct}%` : ""}</div>
-    <h4>Orchestrator decisions</h4><ul class="plain">${decisions || "<li class='muted'>None yet.</li>"}</ul>
-    <h4>Staff tasks</h4><ul class="plain">${tasks || "<li class='muted'>None.</li>"}</ul>
-    <h4>Intake record <span class="muted" style="text-transform:none">(tag = where it came from)</span></h4><dl class="kv">${kv || "<dt class='muted'>Nothing yet.</dt>"}</dl>
-    ${qa ? `<h4>Questions answered</h4><ul class="plain">${qa}</ul>` : ""}
-    ${c.flags && c.flags.length ? `<h4>Flags</h4><p>${c.flags.map(f => `<span class="src">${escapeHtml(f)}</span>`).join(" ")}</p>` : ""}`;
-  if (c.face_note) {
-    $("#pane-note").innerHTML = `${(c.face_note_flags || []).map(f => `<p class="err">⚠ ${escapeHtml(f)}</p>`).join("")}
-      <pre>${escapeHtml(c.face_note)}</pre><p class="muted">Built from ${c.cfile_documents.length} C-file documents (synthetic, Benefits Documents stub).</p>`;
-    if (!prevNote) showTab("note");
+    <dl class="kv"><dt>owner</dt><dd>${esc(p.owner || "none")}${p.running.length ? ` · running: ${esc(p.running.join(", "))}` : ""}</dd>
+      <dt>side state</dt><dd>${esc(p.side_state || "none")}${p.side_reason ? ` (${esc(p.side_reason)})` : ""}</dd>
+      <dt>goal</dt><dd>${esc(p.goal || "")}</dd>
+      <dt>claims prep</dt><dd>${pr.pulled ? `C-file pulled · ${pr.pages_read} pages read · ${pr.facts} facts · verified ${pr.verified}${pr.uncertain.length ? ` · ${pr.uncertain.length} uncertain` : ""} · prefill ${pr.prefill_done ? "done" : "not yet"}` : "not started"}</dd></dl>
+    <h4>Orchestrator decisions</h4><div>${p.decisions.map(ev).join("") || "<p class='muted'>None yet.</p>"}</div>
+    <h4>Filings (simulated)</h4><ul class="plain">${filings || "<li class='muted'>None yet.</li>"}</ul>
+    <h4>Tasks</h4><ul class="plain">${tasks || "<li class='muted'>None.</li>"}</ul>
+    <h4>Support</h4><div>${support.map(ev).join("") || "<p class='muted'>Nothing yet.</p>"}${flags ? `<ul class="plain">${flags}</ul>` : ""}</div>
+    <h4>Cost per agent (from the traces)</h4><dl class="kv">${cost || "<dt class='muted'>None yet.</dt>"}<dt><b>total</b></dt><dd><b>$${p.cost.total.toFixed(4)}</b></dd></dl>
+    <h4>Case file answers <span class="muted" style="text-transform:none">(tag = source)</span></h4><dl class="kv">${answers || "<dt class='muted'>Nothing yet.</dt>"}</dl>`;
+  $("#countersign").onclick = async (e) => {
+    e.target.disabled = true;
+    try { await api(casePath("/countersign"), {}); poll(); } catch (err) { $("#cs-err").textContent = err.message; }
+  };
+  $("#pane-events").innerHTML = p.events.map(ev).join("") || "<p class='muted'>No events yet.</p>";
+  if (p.face_note.length) {
+    $("#pane-note").innerHTML = `<div class="note">${p.face_note.map(l => `<div class="${l.includes("[UNCERTAIN") ? "uncertain" : ""}">${esc(l)}</div>`).join("")}</div>
+      <p class="muted">Every line cites C-file pages; verify ${p.prep.verified ? "passed" : "flagged the lines marked UNCERTAIN (staff tasks)"}.</p>`;
+    if (!noteBefore) showTab("note");
   }
-  if (c.va_records) {
-    const v = c.va_records;
-    $("#pane-records").innerHTML = `<p class="muted">Mode: ${escapeHtml(v.mode)} · fetched ${escapeHtml(v.fetched_at)}${c.records_prefilled.length ? ` · settled ${c.records_prefilled.length} questions` : ""}</p>
-      ${["veteran_status","service_history","disability_rating","permanent_and_total","claims","active_poa"].map(k =>
-        `<details ${k === "service_history" ? "open" : ""}><summary>${k.replace(/_/g, " ")}</summary><pre>${escapeHtml(JSON.stringify(v[k], null, 2))}</pre></details>`).join("")}`;
-  }
+  if (versionsChanged && shownDoc) showDoc(shownDoc);
 }
 </script>
 </body>
