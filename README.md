@@ -246,18 +246,20 @@ read-only support alongside.
 `uv run intake serve` (needs the key), then http://localhost:8000:
 
 **No key:** `uv run intake serve --scripted` (D26) plays one case, Hector Alvarez (`recent_decision`),
-with no model. Press **Next line** (the Autoplay button) and **Send**, fill the secure form (its test
-values are filled in), sign, and countersign as the cards appear. The agents follow the script, so
-typing something else won't change their answers. One case at a time: Start case starts the story over.
+with no model. Press **Tab** to take the line the input box suggests and **Enter** to send it, submit
+the secure form (its test values are filled in), sign, and countersign as the cards appear. The
+agents follow the script, so typing something else won't change their answers; the box then
+suggests nothing rather than a line that no longer fits. One case at a time: Start case starts the story over.
 
 1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
    **Start case**. The left side is the **veteran's screen** (the chat and its cards, documents
    shown in the card); above it, **You are playing…** lists who you play (the same facts and
    condition stories the eval's simulated veteran plays from), and the secure form is filled in
    with them. The right side is the **firm's, internal**: Attorney (countersign, the documents),
-   Case, Answers, Face note, Event log. You type as the veteran, or press **Autoplay** to have the eval's simulated
-   veteran draft the next reply (you still press Send). Autoplay is disabled while any turn is
-   queued or running, claims prep in the background included.
+   Case, Answers, Face note, Event log. You type as the veteran; whenever the agents are idle the
+   input box suggests a reply in grey (the eval's simulated veteran writes it from the chat so far,
+   about $0.0005), and **Tab** takes it. No suggestion while any turn is queued or running, claims
+   prep in the background included.
 2. Intake screens you, then shows the **secure form** for the ID numbers, the **21-22a preview**, a
    signature pad and a **Sign** card, then the **fee agreement** preview and its Sign card.
 3. You also play the attorney: **Countersign both documents** in the staff box (refused at any

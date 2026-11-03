@@ -89,7 +89,7 @@
     <details class="role" id="role" hidden><summary id="role-title">You are playing…</summary><div class="body" id="pane-character"></div></details>
     <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran here; on the right, the firm's side (you also play the attorney there).</div></div>
     <div id="status"></div>
-    <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button><button type="button" class="ghost" id="suggest" disabled title="The simulated veteran writes the next reply">Autoplay</button></form>
+    <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button></form>
   </section>
   <section>
     <div class="side firm">Firm · internal <span class="muted">the veteran never sees this side</span></div>
@@ -153,13 +153,12 @@ function showDoc(form) {
   $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${esc(p.summary)}">${esc(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
   if (!cfg.ready) { $("#banner").textContent = cfg.message; $("#banner").style.display = "block"; $("#start").disabled = true; }
   if (cfg.scripted) {  // D26: no model; the agents follow agent/scripted/demo.py
-    $("#banner").textContent = "Scripted demo: no model. Press Next line, then Send, and use the cards as they appear. The agents follow a script; everything else is the real code.";
+    $("#banner").textContent = "Scripted demo: no model. Press Tab to take the suggested line, Enter to send, and use the cards as they appear. The agents follow a script; everything else is the real code.";
     $("#banner").style.display = "block";
-    $("#suggest").textContent = "Next line"; $("#suggest").title = "The story's next line for the veteran";
   }
 })();
 $("#start").onclick = async () => {
-  clearInterval(timer); caseId = null; since = 0; panel = null; shownDoc = null;
+  clearInterval(timer); caseId = null; since = 0; panel = null; shownDoc = null; suggestedAt = -1; clearSuggestion();
   log.innerHTML = ""; $("#pdf").removeAttribute("src"); $("#docmeta").textContent = "No document yet.";
   $("#role").hidden = true; showTab("attorney");
   const p = $("#persona").selectedOptions[0];
@@ -168,7 +167,7 @@ $("#start").onclick = async () => {
     caseId = (await api("/api/cases", {persona_id: p.value})).case_id;
     const ch = await api(casePath("/character"));
     secureSample = ch.secure; renderCharacter(ch);
-    $("#text").disabled = false; $("#send").disabled = false; $("#suggest").disabled = false;
+    $("#text").disabled = false; $("#send").disabled = false;
     timer = setInterval(poll, 1500); poll();
   } catch (e) { say(e.message, "sys"); }
 };
@@ -186,7 +185,7 @@ async function poll() {
       else renderCard(item.payload);
     }
     $("#status").textContent = u.running.length ? `${u.running.join(", ").replace(/_/g, " ")} working…` : u.busy ? "working…" : "";
-    $("#suggest").disabled = u.busy;  // autoplay waits for idle, claims prep included (the server says 409 too)
+    if (u.busy) { clearSuggestion(); suggestedAt = -1; } else if (suggestedAt !== since) suggest(id);  // once per idle: what to say next
     renderPanel(await api(casePath("")));
   } catch (e) { $("#status").textContent = e.message; }
   finally { polling = false; }
@@ -194,16 +193,30 @@ async function poll() {
 $("#chat").addEventListener("submit", async (e) => {
   e.preventDefault();
   const t = $("#text").value.trim(); if (!t || !caseId) return;
-  $("#text").value = "";
+  $("#text").value = ""; clearSuggestion();
   // Shown before the POST returns, so a reply (a crisis line) can't land above it; the server's
   // redacted text (ID numbers hidden) replaces it when the POST returns.
   const mine = say(t, "user");
   try { mine.textContent = (await api(casePath("/messages"), {text: t})).text; poll(); } catch (err) { mine.remove(); say(err.message, "sys"); }
 });
 
-$("#suggest").onclick = async () => {  // autoplay: the eval's simulated veteran types the reply
-  try { $("#text").value = (await api(casePath("/suggest"), {})).text; $("#text").focus(); } catch (err) { say(err.message, "sys"); }
-};
+// The suggestion: grey text in the empty box; Tab takes it. Asked for once per idle (keyed by the
+// outbox position), so it always answers what is on screen; none when the server has none.
+const PLACEHOLDER = "Type a message as the veteran";
+let suggestion = "", suggestedAt = -1;
+function clearSuggestion() { suggestion = ""; $("#text").placeholder = PLACEHOLDER; }
+async function suggest(id) {
+  suggestedAt = since; clearSuggestion();
+  try {
+    const text = (await api(casePath("/suggest"), {})).text || "";
+    if (id !== caseId || suggestedAt !== since) return;  // the chat moved on meanwhile
+    suggestion = text;
+    $("#text").placeholder = text ? `${text}   ⇥ Tab` : PLACEHOLDER;
+  } catch (e) { /* busy again (409) or no model: no suggestion */ }
+}
+$("#text").addEventListener("keydown", (e) => {
+  if (e.key === "Tab" && suggestion && !$("#text").value) { e.preventDefault(); $("#text").value = suggestion; }
+});
 
 // ── cards (from the outbox) ─────────────────────────────────────────────────────────────────
 function renderCard(c) {

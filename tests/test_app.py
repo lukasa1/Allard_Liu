@@ -225,7 +225,8 @@ def test_autoplay_waits_while_an_agent_is_mid_turn(client, rt, lm, monkeypatch):
 
 
 def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_path, signature_uri):
-    """`intake serve --scripted` (D26): no key, no model; Next line + Send and the cards, as the page does."""
+    """`intake serve --scripted` (D26): no key, no model; Tab takes the suggestion, Enter sends it, and the
+    cards, as the page does."""
     from agent.scripted import demo
     from demo import app as app_module
 
@@ -241,7 +242,9 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     d = Demo(c, rt, cid)
 
     def next_line():
-        d.say(d.post("/suggest")["text"])
+        text = d.post("/suggest")["text"]
+        assert text, "no suggestion where the story has a line"
+        d.say(text)
 
     for _ in range(4):
         next_line()
@@ -262,9 +265,10 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
         line.startswith("   DEADLINE TO FILE AMA APPEAL 03/13/27") for line in p["face_note"]
     )
     assert rt.harness.lm.unused() == {} and p["cost"]["total"] == 0  # no model ran
-    assert c.post(f"/api/cases/{cid}/suggest").status_code == 409  # the story is over
+    assert d.post("/suggest") == {"text": ""}  # the story is over: nothing to suggest
     d.say("Thank you.")  # off the script: a fixed note, not the canned failure reply
     assert d.poll()[-1]["payload"]["text"] == demo.OFF_SCRIPT
+    assert d.post("/suggest") == {"text": ""}  # off the script: no suggestion rather than a wrong one
     app_module._scripted_runtime.cache_clear()
 
 
@@ -280,3 +284,24 @@ def test_the_character_tab_shows_who_the_presenter_plays(client, rt, lm):
     assert rows["Period 1"] == "Marine Corps active, 2002-06 to 2010-06, honorable discharge"
     assert "Your story: left knee condition" in [s["title"] for s in ch["sections"]]
     assert ch["secure"]["last_name"] == "Alvarez" and ch["secure"]["ssn"]
+
+
+def test_a_scripted_suggestion_follows_the_last_reply_not_a_count(monkeypatch, tmp_path):
+    """Off the script, the box suggests nothing (a count of lines would suggest the wrong one)."""
+    from agent.scripted import demo
+    from demo import app as app_module
+
+    monkeypatch.setenv("DEMO_SCRIPTED", "1")
+    monkeypatch.setenv("POA_DATA_DIR", str(tmp_path))
+    app_module._scripted_runtime.cache_clear()
+    c = TestClient(app)
+    rt = app_module.get_runtime()
+    cid = c.post("/api/cases", json={"persona_id": demo.PERSONA}).json()["case_id"]
+    rt.wait_until_idle()
+    d = Demo(c, rt, cid)
+    assert d.post("/suggest") == {"text": demo.story().veteran[0]}
+    d.say("Hold on, what is this?")  # off the script: intake takes its next scripted turn anyway
+    assert d.post("/suggest") == {"text": demo.story().veteran[1]}  # it answers that reply, not "line 2"
+    rt.store.append_event(cid, "message", {"from": "veteran", "to": "intake", "text": "hm"}, actor="veteran")
+    assert d.post("/suggest") == {"text": ""}  # the veteran spoke last: nothing to answer yet
+    app_module._scripted_runtime.cache_clear()

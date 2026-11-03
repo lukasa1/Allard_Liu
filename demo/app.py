@@ -165,24 +165,23 @@ def simulator_lm():
 
 @app.post("/api/cases/{case_id}/suggest")
 def suggest(case_id: str, rt: Live):
-    """Autoplay: the eval's simulated veteran (the case's persona, intake_eval/simulator.py) writes
-    the next reply from the chat so far. The page puts it in the text box; Send sends it. Like the
-    eval's runner (plan §3), it waits for idle: 409 while any turn is queued or running (claims
-    prep in the background included)."""
+    """The input box's suggestion (Tab takes it). Live: the eval's simulated veteran (the case's
+    persona, intake_eval/simulator.py) writes the next reply from the chat so far, so it follows
+    whatever really happened. Scripted: the story's line for the agent's last reply, or none
+    once the chat left the script. Like the eval's runner (plan §3), it waits for idle: 409
+    while any turn is queued or running (claims prep in the background included)."""
     from intake_eval.simulator import DSPySimulator, load_chat
 
     case = _case(rt, case_id)
     if rt.busy(case_id):
         running = ", ".join(sorted(rt.running(case_id))).replace("_", " ") or "a queued turn"
         raise HTTPException(409, f"Wait: {running} is still working.")
-    if scripted():  # the story's next line
+    if scripted():  # the story's line for the reply last shown; none once the chat left the script
         from agent.scripted import demo
 
-        sent = len([e for e in rt.store.events(case_id, types=("message",)) if e.data["from"] == "veteran"])
-        lines = demo.story().veteran
-        if sent >= len(lines):
-            raise HTTPException(409, "The story is over: the case is ready for attorney review. Start case plays it again.")
-        return {"text": lines[sent]}
+        chat = rt.store.events(case_id, types=("message",))
+        last = chat[-1].data if chat else None  # the veteran spoke last: nothing to answer yet
+        return {"text": demo.story().suggestion(last["text"] if last and last["from"] != "veteran" else None)}
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}
@@ -203,7 +202,7 @@ def character(case_id: str, rt: Live):
 @app.get("/api/cases/{case_id}/updates")
 def updates(case_id: str, rt: Live, since: int = 0):
     """The outbox after `since`, in order: messages and cards. `running`: agents mid-turn; `busy`:
-    any turn queued or running (autoplay waits for it)."""
+    any turn queued or running (the input box's suggestion waits for it)."""
     _case(rt, case_id)
     items = rt.updates(case_id, since)
     return {"items": [o.model_dump() for o in items], "running": sorted(rt.running(case_id)), "busy": rt.busy(case_id)}

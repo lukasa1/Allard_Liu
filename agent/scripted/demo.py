@@ -3,7 +3,7 @@
 The real runtime, tools, guard, stage table, documents, claims prep's verify and the case panel
 run as usual; only the model is replaced by agent/scripted/lm.py, loaded with this story when a
 case starts. Each agent takes its scripted turns in order, so the presenter follows the story:
-press Autoplay to put the veteran's next line in the box, press Send, and use the cards (secure
+press Tab to take the veteran's line the input box suggests, press Enter, and use the cards (secure
 form, signature, Sign) and the attorney's Countersign as they appear. Typing something else
 still runs the real code, but the agents' answers stay on the script.
 
@@ -23,15 +23,22 @@ from intake_eval.runner import SECURE_FIELDS
 PERSONA = "recent_decision"
 MARINES = [{"branch": "marine corps", "component": "active", "start": "2002-06", "end": "2010-06",
             "discharge": "honorable"}]  # fmt: skip
-OFF_SCRIPT = "(Scripted demo: that message isn't in the script, so no agent answers it. Press Next line for the story's next line.)"
+OFF_SCRIPT = "(Scripted demo: that message isn't in the script, so no agent answers it. The story is over here: Start case plays it again.)"
 PASS1 = {"finished": "pass 1: 21-22a and ITF filed, fee agreement faxed"}
 
 
 @dataclass
 class Story:
     persona: str
-    veteran: list[str]  # the veteran's lines, in order (Autoplay offers the next one)
+    veteran: list[str]  # the veteran's lines, in order
     turns: list[tuple[str, tuple]] = field(default_factory=list)  # (agent, steps), in order
+    # An agent's reply -> the veteran's line that answers it. The input box suggests the line for
+    # the reply last shown, so a chat that left the script (an off-script message, a canned reply)
+    # gets no suggestion rather than a wrong one.
+    answers: dict[str, str] = field(default_factory=dict)
+
+    def suggestion(self, last_reply: str | None) -> str:
+        return self.answers.get(last_reply or "", "")
 
     def load(self, lm: ScriptedLM) -> None:
         lm.reset()
@@ -45,19 +52,13 @@ def _r(q: str, a: str, value=None, **kw):
 
 def story() -> Story:
     t: list[tuple[str, tuple]] = []
+    answers: dict[str, str] = {}
 
-    def turn(agent: str, *steps) -> None:
+    def turn(agent: str, *steps, then: str | None = None) -> None:
+        """`then`: the veteran's line that answers this turn's reply."""
         t.append((agent, steps))
-
-    veteran = [
-        "Yes, I served in the Marine Corps.",
-        "Active duty, June 2002 to June 2010, honorable discharge. That was my only enlistment.",
-        "Yes, I filed with the VA before. I get disability pay now, 40 percent.",
-        "No, I've never had a lawyer or anyone else represent me.",
-        "Yes, that all looks right.",
-        "Yes, I agree to the fee agreement.",
-        *PASS2_LINES,
-    ]
+        if then:
+            answers[steps[-1].reply] = then
 
     # Case opened: the orchestrator hands pass 1 to intake, which greets the veteran.
     turn("orchestrator", call("run_intake", goal="Pass 1: screen, open the account, file."),
@@ -65,23 +66,24 @@ def story() -> Story:
     turn(
         "intake",
         final(reply="Hi! I'll help you get started. Have you served in the U.S. military?"),
+        then='Yes, I served in the Marine Corps.',
     )
     # Screening.
     turn("intake", _r("is_veteran", "Yes, I served in the Marine Corps.", True),
-         final(reply="Thank you for your service. What were your dates of service, and how was your discharge characterized?"))  # fmt: skip
+         final(reply="Thank you for your service. What were your dates of service, and how was your discharge characterized?"), then='Active duty, June 2002 to June 2010, honorable discharge. That was my only enlistment.')  # fmt: skip
     turn("intake", _r("service_periods", "Active duty, June 2002 to June 2010, honorable discharge", MARINES),
          _r("other_service_periods", "That was my only enlistment.", []),
-         final(reply="Got it. Have you ever filed a claim with the VA? And are you receiving VA disability pay now?"))  # fmt: skip
+         final(reply="Got it. Have you ever filed a claim with the VA? And are you receiving VA disability pay now?"), then='Yes, I filed with the VA before. I get disability pay now, 40 percent.')  # fmt: skip
     turn("intake", _r("filed_before", "Yes, I filed with the VA before."),
          _r("receiving_va_pay", "I get disability pay now", True), _r("rating_pct", "40 percent", 40),
-         final(reply="Thanks. Have you ever had an attorney or agent represent you on a VA claim?"))  # fmt: skip
+         final(reply="Thanks. Have you ever had an attorney or agent represent you on a VA claim?"), then="No, I've never had a lawyer or anyone else represent me.")  # fmt: skip
     # Account opening: the secure form, the 21-22a, the fee agreement.
     turn("intake", _r("prior_attorney", "No, I've never had a lawyer or anyone else represent me.", False),
          call("request_secure_info", fields=list(SECURE_FIELDS), purpose="For your VA Form 21-22a (appointing our attorney)."),
          final(reply="You qualify for us to help. Please fill in the secure form: only our team sees those numbers."))  # fmt: skip
     turn("intake", call("fill_pdf", form="21-22a", fields={"authorize_7332_records": True,
                                                           "authorize_address_change": False}),
-         final(reply="Here is your 21-22a, which appoints our attorney. Does everything look right?"))  # fmt: skip
+         final(reply="Here is your 21-22a, which appoints our attorney. Does everything look right?"), then='Yes, that all looks right.')  # fmt: skip
     turn(
         "intake",
         call("get_signature", form="21-22a"),
@@ -93,7 +95,7 @@ def story() -> Story:
         final(reply="Your signature is saved. Click Sign when you're ready."),
     )
     turn("intake", call("fill_pdf", form="fee_agreement", fields={}),
-         final(reply="Next is the fee agreement: 30% of past-due benefits, and only if you win. Do you agree?"))  # fmt: skip
+         final(reply="Next is the fee agreement: 30% of past-due benefits, and only if you win. Do you agree?"), then='Yes, I agree to the fee agreement.')  # fmt: skip
     turn(
         "intake",
         call("get_signature", form="fee_agreement"),
@@ -112,9 +114,10 @@ def story() -> Story:
         call("run_intake", goal="Pass 2: ask only what the C-file left open."),
         final(),
     )
-    for agent, steps in PASS2_TURNS:
-        turn(agent, *steps)
-    return Story(PERSONA, veteran, t)
+    for (_, steps), (line, _) in zip(PASS2, [*PASS2[1:], ("", ())], strict=True):
+        turn("intake", *steps, then=line or None)
+    turn("orchestrator", final())
+    return Story(PERSONA, [*answers.values()], t, answers)
 
 
 K = "left knee condition"
@@ -261,4 +264,3 @@ PASS2: list[tuple[str, tuple]] = [
     ),
 ]
 PASS2_LINES = [line for line, _ in PASS2 if line]
-PASS2_TURNS = [("intake", steps) for _, steps in PASS2] + [("orchestrator", (final(),))]
