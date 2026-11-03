@@ -49,3 +49,19 @@ def svc(tmp_path):
     from poa_skill.service import PoaService
 
     return PoaService("test_session_" + tmp_path.name[-8:].replace(".", "_"), data_dir=tmp_path)
+
+
+@pytest.fixture
+def lm():
+    from fake_lm import ScriptedLM
+
+    return ScriptedLM()
+
+
+@pytest.fixture
+def rt(tmp_path, lm):
+    """The runtime (orchestrator + sub-agent stubs) on a fresh store, driven by the scripted LM."""
+    from agent.runtime import make_runtime
+
+    yield make_runtime(tmp_path, lm)
+    assert lm.unused() == {}, f"scripted steps never used: {lm.unused()}"

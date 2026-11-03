@@ -5,6 +5,7 @@ One home for the deterministic checks that run whatever a subagent or model woul
   redact_chat   hide ID numbers (poa_skill.redact) and a date of birth typed next to a birth word
   detect_crisis crisis language (the session and the intake controller hand off on it)
   wants_human   a request to talk to a person (not a mention of one)
+  wants_withdraw a request to end the firm's representation
   ingest        all three at once, on the redacted text
 
 Crisis detection favours recall: when unsure, it flags. It still has to leave ordinary injury and
@@ -128,6 +129,28 @@ _WANTS_HUMAN = re.compile(
 
 def wants_human(text: str) -> bool:
     return bool(_WANTS_HUMAN.search(text))
+
+
+# ----------------------------------------------------------------------------- ending representation
+# Ending OUR representation, not a VA claim ("withdraw my old claim at VA" goes to a person).
+WITHDRAW = re.compile(
+    # "Can I revoke the 21-22a later?" asks how it works (QA answers it), it doesn't revoke it
+    r"\b((?<!can i )(?<!could i )(?<!do i )(?<!how do i )(?<!how can i )(?<!if i )(?<!when i )"
+    r"(revoke|withdraw|cancel|terminate|end|stop|quit) (my |the |your |our |this )?"
+    r"(representation|agreement|fee agreement|contract|poa|power of attorney|(form )?21-22a|services"
+    r"|case(?! (at|with) (the )?va\b))\b"
+    r"|withdraw from (the firm|your firm|representation|your services)"
+    r"|(i|we)( want| would like|'d like| need| wanna) to (quit|stop working with you|leave the firm)\s*[.!]*$"
+    r"|^\s*(please )?(revoke|withdraw|cancel)( it| everything| all of it)?\s*[.!]*$"
+    r"|(don'?t|do not|no longer) want (you|the firm|your firm|an attorney|a lawyer|anyone) to represent"
+    r"|(don'?t|do not|no longer) want (your|the firm'?s|an attorney'?s) (help|services)"
+    r"|fire (you|my (lawyer|attorney))|(find|get) (a )?(new|different|another) (lawyer|attorney))\b",
+    re.IGNORECASE,
+)
+
+
+def wants_withdraw(text: str) -> bool:
+    return bool(WITHDRAW.search(text))
 
 
 # ----------------------------------------------------------------------------- all at once

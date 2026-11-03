@@ -49,7 +49,7 @@ from agent.intake.controller import (
 )
 from agent.intake.schema import Outcome
 from agent.lighthouse import Lighthouse, LighthouseError, make_lighthouse
-from agent.orchestrator import DSPyPolicy, OfflinePolicy, Orchestrator
+from agent.legacy_orchestrator import DSPyPolicy, OfflinePolicy, Orchestrator
 from agent.personas import Persona, get_persona
 from agent.poa import OfflinePoaStep, PoaTurn, is_signed, make_dspy_poa_step, signed_document_id
 from agent.qa import make_qa

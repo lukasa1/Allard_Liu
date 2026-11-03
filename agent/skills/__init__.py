@@ -2,10 +2,10 @@
 one-line description, then the directions).
 
 Only the index (name + description) sits in an agent's prompt; `read_skill` loads one skill's
-directions when the model decides it needs them (progressive disclosure). The LLM agents read
-them: the DSPy orchestrator policy (`read_skill` tool) and the POA step (poa_skill, mounted in
-full). For the rule-based parts (routing, the intake controller, support), the skill is the spec
-the code implements, and tests keep the two in sync.
+directions when the model decides it needs them (progressive disclosure). The harness
+(agent/harness.py) gives every agent the index in its prompt and a `read_skill` tool for its own
+folder. Where code enforces a rule (routing, the stage guard), the skill describes it for the
+model, and tests keep the two in sync.
 
   orchestrator/  stage-playbook, routing, flags
   intake/        screen-veteran, intent-to-file, close-gaps   (+ poa_skill: poa-21-22a)

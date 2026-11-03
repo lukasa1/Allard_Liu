@@ -12,7 +12,7 @@ from agent.cfile import build_documents, extract_cfile, make_dspy_extractor
 from agent.cfile.extract import DocumentFacts
 from agent.intake.dspy_brain import DSPyBrain, ExtractAnswers
 from agent.intake.questions import Ask, QuestionBank
-from agent.orchestrator import DSPyPolicy, allowed_actions
+from agent.legacy_orchestrator import DSPyPolicy, allowed_actions
 from agent.personas import get_persona
 from agent.poa import make_dspy_poa_step
 from agent.qa import OfflineQA, WebSearchQA
@@ -193,7 +193,7 @@ class _TextAwareVeteran:
 def test_dspy_provider_runs_a_whole_case(tmp_path):
     """Every DSPy component (orchestrator policy, intake brain, POA ReAct agent mounting the skill,
     C-file extractor) wired into one case, with a rule-driven fake model."""
-    from fake_lm import RuleLM
+    from legacy_rule_lm import RuleLM
 
     from intake_eval.runner import run_case
 

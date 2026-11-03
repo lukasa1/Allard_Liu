@@ -1,19 +1,22 @@
 ---
 name: routing
-description: Who answers the veteran's message in each stage. Read when a message arrives and you need to know which subagent has the conversation.
+description: Who answers the veteran's messages and who gets each event, as code routes them. Read when you need to know why a message or event did or did not reach you.
 ---
 
-# Routing
+# Routing (done in code, not by you)
 
-Routing is deterministic (code in `CaseSession.message`), following these rules:
+You never route messages; code does, on every message, before any model:
 
-- While intake (pass 1 or pass 2) or the POA step is working the case, every message goes to it,
-  questions included: it has the conversation and answers from the Q&A tool.
-- Otherwise (attorney_signoff, case_prep, and the terminal stages) messages go to customer
-  support, which reads a snapshot of the case and never changes it.
-- In every stage, crisis language is checked first: the veteran gets the Veterans Crisis Line and
-  a person is alerted.
-- A withdrawal of the representation or a request for a person, in any stage that isn't parked
-  with a person already, stops the case for a person (by rule).
-- Anything else that would change the case comes back from support as a flag for the
-  orchestrator (see the `flags` skill).
+1. **Crisis language** in any stage: the veteran gets the Veterans Crisis Line from code, a staff
+   task is created, the case goes to `needs_human`, and you wake on `escalated`.
+2. **A request for a person, or to end the representation**, while the case isn't parked: a
+   person is asked by rule, the case goes to `needs_human`, and you wake on `escalated`.
+3. Otherwise:
+   - **intake owns the case** (pass 1 or pass 2, including while it waits for the attorney's
+     countersign): the message goes to intake, questions included;
+   - **claims prep is reading the C-file, or nobody owns the case, or it is parked**: the message
+     goes to customer support, which reads the case but never changes it.
+
+Events: a card action or a staff action goes to intake while intake owns the case; otherwise it
+wakes you. Support's flags wake you, except while claims prep runs: then they are held and come
+to you with claims prep's result, in the same wake.

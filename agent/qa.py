@@ -28,7 +28,7 @@ DEFAULT_DOMAINS = (
     "law.cornell.edu",
     "veteranscrisisline.net",
 )
-DEFAULT_QA_MODEL = "openai/gpt-6-luna"
+DEFAULT_QA_MODEL = "anthropic/claude-haiku-5.5"
 
 # Case-specific or legal-advice questions: always a person.
 _NEEDS_PERSON = re.compile(
