@@ -284,7 +284,7 @@ def test_every_narrative_prompt_names_the_condition():
 def test_a_vso_is_not_a_prior_attorney_and_stale_fee_terms_block_signing(rt, lm, signature_uri):
     assert checklist.parse("prior_attorney", "A VSO from the DAV") is False
     assert checklist.parse("prior_attorney", "Yes, a VSO from the DAV helped") is False
-    assert checklist.parse("prior_attorney", "Yes, a lawyer and then the DAV") is True
+    assert checklist.parse("prior_attorney", "Yes, a lawyer and then the DAV", True) is True
     cid = rt.store.create_case(_screened()).case_id
     svc = documents.service(rt, cid)
     svc.vault.put(VETERAN)

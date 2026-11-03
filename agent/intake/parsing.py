@@ -62,33 +62,65 @@ DISCHARGES = ("honorable", "general", "oth", "bad_conduct", "dishonorable", "unc
 _DISCHARGE_RES = [
     # A qualifier before "honorable" makes it non-honorable: OTH is the catch-all code (A1 then
     # sends it to an attorney, which is a review, not a rejection).
-    (r"\b(under )?(other than|less than|not|non|un|wasn'?t|was not|isn'?t|is not) ?honorable\b", "oth"),
-    (r"\bdis ?honorable\b", "dishonorable"),
+    (r"\b(under )?(other than|less than|not|non|un|wasn'?t|was not|isn'?t|is not) ?honorabl[ey]\b", "oth"),
+    (r"\bdis ?honorabl[ey]\b", "dishonorable"),
     (r"\b(bad conduct|bcd)\b", "bad_conduct"),
-    (r"\bgeneral\b(\W*under honorable( conditions)?\b)?", "general"),
+    (r"\bgeneral( discharge)?\b(\W*under honorable( conditions)?\b)?", "general"),
     (r"\b(uncharacterized|entry level( separation)?|els)\b", "uncharacterized"),
     (r"\both\b", "oth"),
     (r"\bhonorabl[ey]\b", "honorable"),
 ]
 _NEGATED = re.compile(r"\b(not|never|no|wasn'?t|isn'?t|nor)\s+(an?\s+|a\s+)?$")
+# Stop-rule fields (A1) read free text only when it is plain. A hedge makes an answer unsure; a
+# qualifier left over next to a discharge, or discharge words code can't read, need the model.
+HEDGE = re.compile(
+    _UNSURE.pattern + r"|\b(i think|i believe|i guess|i suppose|probably|maybe|possibly|perhaps|might|"
+    r"pretty sure|fairly sure|kind of|sort of|if i remember|i'?m not certain)\b",
+    re.IGNORECASE,
+)
+_QUALIFIER = re.compile(
+    r"\b(not|no|never|less|other|than|non|un|wasn'?t|isn'?t|didn'?t|don'?t|weren'?t|except|exactly|quite|almost|nearly|technically|"
+    r"but|though|however|upgrad\w*|downgrad\w*|chang\w*|originally|initially|either|or)\b"
+)
+_DISCHARGE_WORDS = re.compile(
+    r"\b(honou?r\w*|dishonou?r\w*|discharg\w*|conduct|misconduct|separat\w*|characteri[sz]\w*|"
+    r"chapter\w*|court martial\w*|oth|general|bcd|els)\b"
+)
+
+
+def _read_discharge(text: str) -> tuple[str | None, str]:
+    """(the discharge code named in `text` or None, the text left after the discharge phrases)."""
+    low = re.sub(r"\s+", " ", re.sub(r"[-_/()]", " ", text.lower())).strip()
+    if low in DISCHARGES:
+        return low, ""
+    found = set()
+    for pattern, code in _DISCHARGE_RES:
+        for m in re.finditer(pattern, low):
+            if _NEGATED.search(low[: m.start()]):
+                return None, low  # "not dishonorable", "never got a general": unclear, ask again
+            found.add(code)
+        low = re.sub(pattern, " ", low)
+    if len(found) != 1 or _UNSURE.search(text):
+        return None, low
+    return found.pop(), low
 
 
 def parse_discharge(text: str) -> str | None:
     """The character of discharge named in `text` (one of DISCHARGES), or None when there is none
     or it isn't clear (two different ones, "not general", "not sure"): then intake asks again."""
-    low = re.sub(r"\s+", " ", re.sub(r"[-_/]", " ", text.lower()))
-    if low.strip() in DISCHARGES:
-        return low.strip()
-    found = set()
-    for pattern, code in _DISCHARGE_RES:
-        for m in re.finditer(pattern, low):
-            if _NEGATED.search(low[: m.start()]):
-                return None  # "not dishonorable", "never got a general": unclear, ask again
-            found.add(code)
-        low = re.sub(pattern, " ", low)
-    if len(found) != 1 or _UNSURE.search(text):
+    return _read_discharge(text)[0]
+
+
+def strict_discharge(text: str) -> str | None:
+    """A stop-rule reading of the discharge in `text`: None when no discharge is mentioned at all;
+    the code when it is plain ("honorable", "OTH", "general under honorable conditions"); else a
+    ValueError, so the model passes the discharge it understood as one of DISCHARGES."""
+    code, rest = _read_discharge(text)
+    if code is None and not _DISCHARGE_WORDS.search(text.lower()):
         return None
-    return found.pop()
+    if code is None or _QUALIFIER.search(rest) or HEDGE.search(text):
+        raise ValueError(f"the discharge in {text.strip()!r} is not plain enough for code to read")
+    return code
 
 
 _COMPONENTS = [
@@ -142,13 +174,10 @@ def _phrase_code(table: list[tuple[str, str]], low: str) -> str | None:
 _TURN = re.compile(r"\b(but|though|although|except|just kidding|kidding|j/?k|actually|wait)\b", re.IGNORECASE)
 
 
-def parse_bool(text: str, strict: bool = False) -> bool | None:
+def parse_bool(text: str) -> bool | None:
     """A leading yes/no first ("Yes I served, not sure what else you need" is a yes; "No idea" is
     not a no); then unsure; then negations ("I did not") before affirmations ("I did"). A no that
-    turns into a yes ("Never deployed, but yes I served") or a mix of both is unclear: None.
-
-    `strict` (a stop-rule field such as is_veteran): a no counts only when it is a bare no or is
-    about serving ("No, I never served"), not about something else ("Never deployed")."""
+    turns into a yes ("Never deployed, but yes I served") or a mix of both is unclear: None."""
     lead_no = _LEAD_NO.match(text)
     if _LEAD_YES.match(text) or _LEAD_OK.match(text):
         rest = text[(_LEAD_YES.match(text) or _LEAD_OK.match(text)).end():]
@@ -157,24 +186,57 @@ def parse_bool(text: str, strict: bool = False) -> bool | None:
         rest = text[lead_no.end():]
         if _UNSURE.search(text) or _TURN.search(rest) or _YES.search(rest) or _LEAD_YES.search(rest):
             return None  # "No, I'm not sure" is unsure; "No combat, but I was in the Navy" is not a no
-        return False if not strict or _about_serving(text) else None
+        return False
     if _UNSURE.search(text):
         return None
     neg, yes = _NEG.search(text), _YES.search(text)
     if neg and yes:
         return None  # "I never deployed but I served"
     if neg:
-        return False if not strict or _about_serving(text) else None
+        return False
     return True if yes else None
 
 
-def _about_serving(text: str) -> bool:
-    return bool(re.fullmatch(r"\W*(no|nope|nah|never|not really)\W*", text, re.IGNORECASE)
-                or re.search(r"\b(serv\w*|veteran|military|enlist\w*|armed forces)\b", text, re.IGNORECASE))
+# Plain answers a stop-rule bool accepts as free text (after _plain() normalised it); anything
+# else ("I haven't served since 2008", "I'm not a disabled veteran yet") needs the model's value.
+_PLAIN_BOOL = {
+    True: re.compile(r"(yes|yeah|yep|yup|correct|true)( (i (do|did|have|am|was|served)|i am a veteran))?"
+                     r"|i (do|did|have|am|was|served)|i am a veteran"),
+    False: re.compile(r"(no|nope|nah|false)( (i (do|did|have|am) not( serve)?|i never (did|served)|i am not a veteran))?"
+                      r"|i (do|did|have|am) not( serve)?|i never served|never|i am not a veteran"),
+}
 
 
-def parse_service_periods(text: str) -> list[ServicePeriod] | None:
+def _plain(text: str) -> str:
+    low = re.sub(r"[’`]", "'", text.lower())
+    low = re.sub(r"\bi'?m\b", "i am", re.sub(r"\b(do|did|have|has|was|is|are)n'?t\b", r"\1 not", low))
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9% ]", " ", low)).strip()
+
+
+def plain_value(qtype: str, text: str) -> Any:
+    """A stop-rule field's value from free text, only when the answer is plain: a bare yes/no, a
+    bare rating ("70", "70%"), service periods whose discharge is plain. Raises ValueError."""
+    low = _plain(text)
+    match qtype:
+        case "bool":
+            for value, pattern in _PLAIN_BOOL.items():
+                if pattern.fullmatch(low):
+                    return value
+        case "int":
+            if m := re.fullmatch(r"(\d{1,3}) ?(%|percent)?", low):
+                return int(m.group(1))
+        case "service_periods" | "service_periods_append":
+            periods = parse_service_periods(text, strict=True)
+            if periods is not None:
+                return periods
+    raise ValueError(f"{text.strip()!r} is not a plain answer")
+
+
+def parse_service_periods(text: str, strict: bool = False) -> list[ServicePeriod] | None:
+    """Periods named in `text` (branch and two dates each). `strict` (a stop-rule reading): a
+    discharge must be plain (strict_discharge raises otherwise)."""
     periods: list[ServicePeriod] = []
+    read = strict_discharge if strict else parse_discharge
     for chunk in (c for part in re.split(r";|\n", text) for c in _split_on_branches(part)):
         low = chunk.lower()
         dates = _dates(low)
@@ -183,7 +245,7 @@ def parse_service_periods(text: str) -> list[ServicePeriod] | None:
         )
         if branch is None or len(dates) < 2:
             continue
-        discharge = parse_discharge(chunk)
+        discharge = read(chunk)
         rest = low.replace("coast guard", "")  # so "Coast Guard" isn't read as the National Guard
         component = next(
             (code for phrase, code in _COMPONENTS if re.search(rf"\b{phrase}\b", rest)), "active"
@@ -198,6 +260,11 @@ def parse_service_periods(text: str) -> list[ServicePeriod] | None:
             )
         )
     if periods:  # "No other active duty, but Navy reserve 2014 to 2016" still has a period
+        if len(periods) > 1 and re.search(r"\b(both|all)\b", text, re.IGNORECASE):
+            # "Army 2004 to 2008 and Navy 2010 to 2014, both honorable": one discharge for all
+            named = {p.discharge for p in periods} - {None}
+            if len(named) == 1:
+                periods = [p.model_copy(update={"discharge": p.discharge or next(iter(named))}) for p in periods]
         return periods
     return [] if _NONE.match(text) else None
 
@@ -237,15 +304,14 @@ def parse_list(text: str) -> list[str] | None:
     return items or (None if any(parts) else [])
 
 
-def parse_text(qtype: str, text: str, options: tuple[str, ...] = (), strict: bool = False) -> Any:
-    """Rule-based reading of a plain answer. Returns None when the answer can't be read. `strict`
-    is for stop-rule fields: only an unambiguous answer counts."""
+def parse_text(qtype: str, text: str, options: tuple[str, ...] = ()) -> Any:
+    """Rule-based reading of a plain answer. Returns None when the answer can't be read."""
     text = text.strip()
     if not text:
         return None
     match qtype:
         case "bool":
-            return parse_bool(text, strict)
+            return parse_bool(text)
         case "int":  # "I'm not 100, I'm 70" or "70, maybe 100 soon" is unclear: ask again
             numbers = set(re.findall(r"\d+", text))
             if len(numbers) != 1 or re.search(r"\b(not|isn'?t|wasn'?t|never|maybe|hope|soon)\b", text, re.IGNORECASE):
@@ -286,8 +352,9 @@ def _is_only_unsure(text: str) -> bool:
     return not [w for w in re.findall(r"[a-z0-9']+", rest) if w not in _FILLER]
 
 
-def _norm_period(p: Any) -> Any:
-    """Map an LLM's free wording ("Honorable", "Active Duty", "Other Than Honorable") to the enums."""
+def _norm_period(p: Any, strict: bool) -> Any:
+    """Map an LLM's free wording ("Honorable", "Active Duty", "Other Than Honorable") to the enums.
+    `strict`: a discharge must be plain or one of DISCHARGES (or null)."""
     if not isinstance(p, dict):
         return p
     out = dict(p)
@@ -300,19 +367,26 @@ def _norm_period(p: Any) -> Any:
     if out.get("branch") in _BRANCHES:
         out["branch"] = _BRANCHES[out["branch"]]
     dis = out.get("discharge")
-    if dis:
+    if dis and strict:
+        out["discharge"] = strict_discharge(dis)
+        if out["discharge"] is None:
+            raise ValueError(f"discharge {dis!r} is not one of {DISCHARGES} (pass null if not known yet)")
+    elif dis:
         out["discharge"] = parse_discharge(dis) or dis  # unreadable: the model validation refuses it
     return out
 
 
 def coerce(qtype: str, value: Any, options: tuple[str, ...] = (), strict: bool = False) -> Any:
-    """Validate and normalise a value for a field type. Raises ValueError if it doesn't fit."""
+    """Validate and normalise a value for a field type. Raises ValueError if it doesn't fit.
+    `strict` (a stop-rule field, A1): free text counts only when it is plain (plain_value)."""
     if isinstance(value, str) and qtype not in ("str", "narrative", "enum"):
         stripped = value.strip()
         if stripped[:1] in "[{" or stripped in ("true", "false", "null") or stripped.isdigit():
             value = json.loads(stripped)
+        elif strict:
+            value = plain_value(qtype, stripped)
         else:
-            value = parse_text(qtype, stripped, options, strict)
+            value = parse_text(qtype, stripped, options)
     if value is None:
         raise ValueError("no value")
     match qtype:
@@ -350,7 +424,7 @@ def coerce(qtype: str, value: Any, options: tuple[str, ...] = (), strict: bool =
             return kept if qtype == "list_str" else normalize_conditions(kept)
         case "service_periods" | "service_periods_append":
             return [
-                p if isinstance(p, ServicePeriod) else ServicePeriod.model_validate(_norm_period(p))
+                p if isinstance(p, ServicePeriod) else ServicePeriod.model_validate(_norm_period(p, strict))
                 for p in value
             ]
         case "conditions_rated":

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from datetime import date, timedelta
 
 from agent.casefile import Answer, CaseFile, DocState, Task
-from agent.intake.checklist import VAULT_FIELD
+from agent.intake.checklist import VAULT_FIELD, fee_pct
 from poa_skill.service import FORMS, PoaService, kind_of, load_representative
 from poa_skill.tools import preview_card
 
@@ -62,16 +62,36 @@ def sign_card_open(rt, case_id: str, form: str) -> bool:
 
 def submit_secure_form(rt, case_id: str, request_id: str, values: dict[str, str]) -> dict[str, str]:
     """The veteran submitted a secure form. Values go to the vault; the case file gets only the
-    masked contact fields (source "secure form"); live drafts are re-rendered. Returns
+    masked contact fields (source "secure form"); live drafts are re-rendered. A value changed after
+    a document was signed gets a staff task (the signed version keeps the old one). Returns
     {field: error} for rejected values."""
     svc = service(rt, case_id)
+    before = svc.vault.veteran()
     errors = svc.complete_capture_request(request_id, values)
     stored = sorted(k for k in values if k in svc.vault.masked() and k not in errors)
+    after = svc.vault.veteran()
+    changed = [k for k in stored if _dotted(before, k) not in (None, "", _dotted(after, k))]
     refreshed = refresh_drafts(rt, case_id, svc)
+    signed = [f for f in FORM_KEYS if changed and (d := svc.live(f)) and d.status != "draft"]
+    answers = masked_answers(svc, stored, "secure form")
+
+    def apply(case: CaseFile) -> None:
+        answers(case)
+        if signed:  # a signed document never changes: a person decides whether it is re-signed
+            case.tasks.append(Task(kind="staff", text=f"The veteran changed {', '.join(changed)} on a secure "
+                                   f"form after signing the {' and '.join(signed)}: the signed version still "
+                                   "has the old values. Check whether it needs a new signature."))  # fmt: skip
+
     rt.event(case_id, "secure_form_submitted", {"request_id": request_id, "stored": stored,
              "rejected": sorted(errors), "drafts_refreshed": refreshed}, actor="veteran",
-             apply=masked_answers(svc, stored, "secure form"))  # fmt: skip
+             apply=apply)  # fmt: skip
     return errors
+
+
+def _dotted(d: dict, name: str):
+    for part in name.split("."):
+        d = d.get(part) if isinstance(d, dict) else None
+    return d
 
 
 def save_signature(rt, case_id: str, data_uri: str) -> None:
@@ -85,6 +105,9 @@ def sign(rt, case_id: str, form: str, consent_text: str, ip: str = "", user_agen
     doc = svc.live(form)
     if doc is None:
         raise ValueError(f"no {form} to sign")
+    if form == "fee_agreement" and doc.terms.get("fee_pct") != fee_pct(rt.store.get_case(case_id)):
+        raise ValueError("the fee terms changed since this draft was shown (prior representation was "
+                         "re-recorded): the fee agreement must be prepared again")  # fmt: skip
     doc = svc.sign(doc.id, consent_text=consent_text, ip=ip, user_agent=user_agent)
 
     def apply(case: CaseFile) -> None:

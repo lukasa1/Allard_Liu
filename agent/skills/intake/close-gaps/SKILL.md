@@ -23,6 +23,10 @@ Work through the checklist in this order:
 A new condition the orchestrator's goal mentions: record `claim_conditions` again with the full
 list, which adds its narrative prompts to the checklist.
 
+Stop-rule fields (`is_veteran`, the service periods, `receiving_va_pay`, `rating_pct`,
+`prior_attorney`) take the structured value you understood in `value`, with the veteran's words in
+`a`, here too (a C-file conflict on the rating included); a hedged answer is confirmed first.
+
 The stop rules still run on every answer (after filing, a fired rule sends the case to a person).
 When the checklist is empty, code moves the case to stage 5 (ready for attorney review) and the
 pass ends: thank the veteran and say the attorney reviews their file next.

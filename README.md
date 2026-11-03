@@ -19,7 +19,7 @@ and number in the repo is made up, and `config/representative.json` holds placeh
 
 ```bash
 uv sync
-uv run pytest -q                 # 223 tests, no key, no network (scripted fake model)
+uv run pytest -q                 # about a minute, no key, no network (scripted fake model)
 cp .env.example .env             # set OPENROUTER_API_KEY for anything live
 uv run intake serve              # the web demo: http://localhost:8000
 uv run intake --help             # serve | simulate | eval | support-eval | personas
@@ -108,19 +108,31 @@ pages it read this turn.
   the version the veteran signed keeps its hash.
 - **Citations:** `render` returns each face-note line with the facts it came from, and `verify`
   checks every cited page shows the value where its label puts it (the DOB after "date of birth",
-  the start after "entered", the end after "separation date"; the whole MOS and representative
-  name; every condition a decision decides), with dates, percentages and condition names
-  normalized. A line that can't be cited goes back to the model, or is escalated as
-  `[UNCERTAIN]`. The stored face note shows each line's pages (`[p. 2, 5]`, or `[firm record]`).
+  a decision's date after "decision date" and its filing after "received", a letter's date after
+  "date of this letter"; a service period as one match, the DD-214's branch field and dates or one
+  narrative "{branch} from {start} to {end}"; the whole MOS, or one whole entry of a MOS list, and
+  representative name; every condition a decision decides), with dates, percentages and condition
+  names normalized. A coverage check in `verify` catches omissions: every DD-214 needs a service
+  period, every rating decision a decision and every notification letter a letter fact recorded
+  from it; the combined rating and the rated conditions must cite the newest rating decision; and
+  no fact may be left unlinked. A line or coverage item that fails goes back to the model, or is
+  escalated as `[UNCERTAIN]` (a staff task, closed again once a later verify passes). The stored face note shows each line's pages (`[p. 2, 5]`, or `[firm record]`).
   Prefill is refused until `verify` has passed or every failing line is escalated as uncertain,
   and it writes only facts whose cited page holds them. When the C-file conflicts with an answer,
   the DD-214 wins on discharge; any other conflict is recorded for pass 2 and a staff task (A2).
-- **Untrusted text** (the veteran's words, C-file pages, search hits, kb answers) is wrapped as
-  data before it enters a context (`ingest.untrusted`); what a tool may do is still decided by the
-  guards.
+- **Untrusted text** (the veteran's words, C-file pages, search hits, kb answers; claims prep's
+  intake answers and fact table; support's flag text, earlier Q&A and deadline tasks) is wrapped
+  as data before it enters a context (`ingest.untrusted`); what a tool may do is still decided by
+  the guards. C-file names, titles, conditions and form ids are recorded only as plain text of a
+  capped length (letters in any script, digits and `.,'’&()/#-`; no markup).
 - **SSNs never reach a context or a trace:** the simulated VBMS strips them at ingest, and trace
   lines are scrubbed again before they are written.
 - **Support changes nothing:** it has no tool that moves a stage, files or signs.
+- **Failures park the case for a person:** a crashed or failed turn, or claims prep running out of
+  continuations, moves the case to `needs_human` with a staff task listing any undecided support
+  flags. A support crash instead sends the canned reply and a staff task; the case stays where it is.
+- **The handoff goal is an instruction:** the orchestrator writes it and may paraphrase flag text; it
+  reaches the sub-agent unwrapped.
 
 ### Skills, memory, traces
 
@@ -171,10 +183,22 @@ Candidate deviations from the build, for the lead to confirm:
   UTC`; prefill writes `C-file p. N`), so the model can't mislabel where an answer came from.
 - **D18:** prefill runs once `verify` has passed **or** every failing line is escalated as
   uncertain (it writes only facts whose cites hold), not only after a clean pass.
+- **D24:** the orchestrator may reply on any wake (the design describes it at a handoff), except on a
+  case a rule handed to a person; `staff_task` is allowed after the wake's handoff.
+- **D25:** `run_intake` at stage 4 after a new-condition flag also reopens `claim_conditions`, so pass
+  2 can't end before the condition is recorded.
+- **D23:** `verify` also checks coverage (no DD-214, rating decision or letter left out; the
+  combined rating and rated conditions from the newest rating decision; no unlinked fact). Its
+  items are numbered after the face-note lines and, like a line, can be escalated as uncertain.
 - **D19:** kb_search's answer accuracy is not evaluated yet: the support eval checks that a kb
   answer cites its source, not that it is right.
-- **D22:** veteran status or service periods left unknown in pass 1 stop the case to `needs_human`
-  (`screen_unresolved`). A qualified "honorable" ("less than", "not") reads as other than honorable.
+- **D22:** veteran status, service periods, VA pay or rating left unknown in pass 1 stop the case to
+  `needs_human` (`screen_unresolved`). Stop-rule fields (is_veteran, each period's discharge,
+  receiving_va_pay, rating_pct, prior_attorney) take a structured value from the model (a JSON bool,
+  a discharge code, an integer) while the veteran's words are kept as the raw answer; code reads free
+  text for them only when it is plain ("yes", "no", "70%", "honorable", "OTH") and re-asks a
+  hedged answer. A fee agreement with stale terms can't be signed; a vault change after signing
+  creates a staff task. A qualified "honorable" ("less than", "not") reads as other than honorable.
   A secure-form or `update_draft` change re-renders stale drafts, and signing refuses a draft whose
   vault fingerprint changed.
 - **D20:** the only move back is from stage 5 to stage 4 (reopening intake for a new condition).
@@ -196,8 +220,8 @@ read-only support alongside.
 
 1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
    **Start case**. You type as the veteran, or press **Autoplay** to have the eval's simulated
-   veteran draft the next reply (you still press Send). Autoplay waits until no agent is
-   mid-turn.
+   veteran draft the next reply (you still press Send). Autoplay is disabled while any turn is
+   queued or running, claims prep in the background included.
 2. Intake screens you, then shows the **secure form** for the ID numbers, the **21-22a preview**, a
    signature pad and a **Sign** card, then the **fee agreement** preview and its Sign card.
 3. You also play the attorney: **Countersign both documents** in the staff box (refused at any
@@ -248,7 +272,7 @@ traces.
 
 ## Tests
 
-`uv run pytest -q`: 223 tests in about 40 s, no key and no network. `tests/fake_lm.py` scripts
+`uv run pytest -q`: the whole suite in about a minute, no key and no network. `tests/fake_lm.py` scripts
 each agent's tool calls through the real harness, registry and guards; `tests/fake_kb.py` stands in
 for web search. They pin the guards and stage moves, stop rules, citations and `verify`, crisis /
 withdraw / a person by rule, signing and countersign integrity, SSNs never in a context or trace,

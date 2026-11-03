@@ -12,10 +12,20 @@ each fact's cited page shows the fact's key values. It normalizes first: dates i
 name, and a decision issue's outcome must follow its condition.
 
 Values must sit where their label puts them: the date of birth after "date of birth" (not the
-entry date), a period's start after "entered" and its end after "separation date" (record `end`
-when the page has one; start is never after end), the MOS and a representative's name as the
-whole field value (code and title: "88M Motor Transport Operator", not "88M"; "Alan Smith", not
-"Smith"), and a decision lists every condition its DECISION section decides.
+entry date); a decision's date after "decision date" and its `filed` after "received"; a
+letter's date after "date of this letter" and its `decision_date` after "decision dated". A
+service period matches as one: on a DD-214, its branch field, its start after "entered" and its
+end after "separation date" (record `end` when the page has one; start is never after end); on a
+narrative, one "{branch} from {start} to {end}". The MOS and a representative's name are the
+whole field value, or one whole entry of a list (code and title: "88M Motor Transport Operator",
+not "88M"; "Alan Smith", not "Smith"), and a decision lists every condition its DECISION section
+decides.
+
+After the lines, `verify` checks coverage: every DD-214 needs a `service_period`, every rating
+decision a `decision` and every notification letter a `notification_letter` recorded from it;
+`combined_rating` and each `rated_condition` must cite the newest rating decision's code sheet;
+and no fact may be unlinked (a discharge with no period, a letter with no decision). These items
+are numbered after the face-note lines and are fixed the same way.
 
 ## A failed line
 

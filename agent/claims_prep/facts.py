@@ -24,7 +24,12 @@ from agent.intake.conditions import normalize_condition
 from agent.intake.schema import Component, Discharge, RatedCondition, ServicePeriod
 
 # C-file text that is copied into the case file: a name or title, never markup or instructions.
-_PLAIN = r"^[A-Za-z0-9 .,'&()/-]+$"
+# Letters in any script ("José Núñez"), digits and the punctuation names use ("O'Neil", "Post #12").
+_PLAIN = r"^[\w .,'\u2019&()/#-]+$"
+Plain = Annotated[str, Field(min_length=2, max_length=100, pattern=_PLAIN)]
+Condition = Annotated[str, Field(min_length=2, max_length=80, pattern=_PLAIN)]
+FormId = Annotated[str, Field(min_length=2, max_length=20, pattern=r"^[A-Za-z0-9-]+$")]
+_CONDITION: TypeAdapter[str] = TypeAdapter(Condition)
 
 
 class Cite(BaseModel):
@@ -83,12 +88,12 @@ class DischargeFact(_Fact):
 
 class MosFact(_Fact):
     kind: Literal["mos"]
-    mos: str = Field(min_length=1, max_length=80, pattern=_PLAIN, description="the code and title, e.g. 88M Motor Transport Operator")
+    mos: str = Field(min_length=2, max_length=80, pattern=_PLAIN, description="the code and title, e.g. 88M Motor Transport Operator")
 
 
 class RatedConditionFact(_Fact):
     kind: Literal["rated_condition"]
-    condition: str
+    condition: Condition
     pct: int = Field(ge=0, le=100)
     norm_cond = field_validator("condition", mode="after")(lambda v: normalize_condition(v))
 
@@ -102,7 +107,7 @@ class DecisionFact(_Fact):
     kind: Literal["decision"]
     date: str = Field(description="the rating decision's date, YYYY-MM-DD")
     issues: list[Issue] = Field(min_length=1, description="each condition decided: outcome, and % if granted")
-    form: str | None = Field(None, description="the filing form in the evidence list, e.g. 526EZ")
+    form: FormId | None = Field(None, description="the filing form in the evidence list, e.g. 526EZ")
     filed: str | None = Field(None, description="the date that form was received, YYYY-MM-DD")
     norm_dates = field_validator("date", "filed", mode="before")(_date)
     norm_form = field_validator("form", mode="before")(_form_id)
@@ -118,7 +123,8 @@ class DecisionFact(_Fact):
     @field_validator("issues", mode="after")
     @classmethod
     def _conds(cls, v: list[Issue]) -> list[Issue]:
-        return [i.model_copy(update={"condition": normalize_condition(i.condition)}) for i in v]
+        return [i.model_copy(update={"condition": normalize_condition(_CONDITION.validate_python(i.condition))})
+                for i in v]  # fmt: skip
 
 
 class NotificationLetterFact(_Fact):
@@ -130,7 +136,7 @@ class NotificationLetterFact(_Fact):
 
 class PriorRepFact(_Fact):
     kind: Literal["prior_representative"]
-    name: str = Field(min_length=2, max_length=100, pattern=_PLAIN)
+    name: Plain
     rep_type: Literal["attorney", "agent", "vso"]
     signed: str | None = Field(None, description="date signed, YYYY-MM-DD")
     revoked: str | None = Field(None, description="the revocation date, if the form has revocation details")
@@ -139,9 +145,9 @@ class PriorRepFact(_Fact):
 
 class PendingFilingFact(_Fact):
     kind: Literal["pending_filing"]
-    form: str
+    form: FormId
     filed: str = Field(description="date received, YYYY-MM-DD")
-    conditions: list[str] = Field(default_factory=list)
+    conditions: list[Condition] = Field(default_factory=list, max_length=30)
     norm_dates = field_validator("filed", mode="before")(_date)
     norm_form = field_validator("form", mode="before")(_form_id)
     norm_conds = field_validator("conditions", mode="after")(lambda v: [normalize_condition(c) for c in v])

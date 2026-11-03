@@ -11,9 +11,16 @@ Matching normalizes first: dates in every way documents write them (ISO, MM/DD/Y
 "March 14, 2024"), service months (YYYY-MM, YYYYMM, MM/YYYY), percentages ("10%", "10 percent")
 and condition names (`normalize_condition` and its synonyms). A rating is matched to its
 condition: the first percentage after the condition's name must be the fact's. Values are
-anchored to their labels (a DOB after "date of birth", a start after "entered", an end after
-"separation date"), the MOS and a representative's name must be the whole field value, and a
-decision must list every condition the page decides.
+anchored to their labels (a DOB after "date of birth", a decision's date after "decision date"
+and its filing after "received", a letter's date after "date of this letter"), a service period
+must match as one (the DD-214's branch field and its entry and separation dates, or one narrative
+"{branch} from {start} to {end}"), the MOS and a representative's name must be the whole field
+value, and a decision must list every condition the page decides.
+
+`coverage` catches what a line check can't, omissions: every DD-214 needs a service period,
+every rating decision a decision and every letter a letter fact recorded from it; the combined
+rating and the rated conditions come from the newest rating decision; no fact is left unlinked.
+Its items come back as lines numbered after the note's, like any other failure.
 """
 
 from __future__ import annotations
@@ -25,7 +32,7 @@ from datetime import date
 from agent.cfile.extract import _DISCHARGES
 from agent.cfile.facenote import FaceNote
 from agent.cfile.vbms import CFile
-from agent.claims_prep.facts import Fact
+from agent.claims_prep.facts import Fact, unlinked
 from agent.intake.conditions import SYNONYMS, normalize_condition
 
 _PCT = re.compile(r"(\d{1,3})\s*(?:%|percent)")
@@ -86,15 +93,19 @@ def _label(*names: str) -> str:
 _DOB = _label("date of birth", r"\bdob", r"\bborn(?: on)?")
 _START = _label("entered", r"\bfrom")
 _END = _label("separation date", "released", r"\bto", r"\bthrough")
+_DECISION_DATE = _label("decision date")  # also "the rating decision dated ..."
+_RECEIVED = _label("received")
+_LETTER_DATE = _label("date of this letter", r"\bletter dated")
 _DECIDED = re.compile(rf"service connection for (.+?) is {_OUTCOME.pattern}")
 # A label's value runs to the next numbered DD-214 block ("12a. ") or the next label of the form.
 _NEXT = r"(?=\s+\d{1,2}[a-z]?\.\s|\s+(?:type of|date|revocation|veteran)\b|\s*$)"
 
 
 def _field_is(page: str, label: str, value: str) -> bool:
-    """`value` is the whole value after `label` (the MOS is "88m motor transport operator", not
-    "88m"; the representative is "alan smith", not "smith")."""
-    return re.search(rf"{label}[^:]{{0,20}}:\s*{re.escape(value)}[.,;]?{_NEXT}", page) is not None
+    """`value` is the whole value after `label`, or one whole entry of a list ("; " or " // "): the
+    MOS is "88m motor transport operator", not "88m"; the representative "alan smith", not "smith"."""
+    sep = r"\s*(?:;|//)\s*"
+    return re.search(rf"{label}[^:]{{0,20}}:\s*(?:[^:;/]*{sep})*{re.escape(value)}(?:{sep}|[.,;]?{_NEXT})", page) is not None
 
 
 def mentions(page: str, condition: str) -> list[int]:
@@ -125,6 +136,32 @@ def discharges(page: str) -> set[str]:
     return found
 
 
+def _month_re(ym: str) -> str:
+    return "(?:" + "|".join(rf"(?<![\d/]){re.escape(f)}{r'(?:\d\d)?' if f.isdigit() else ''}(?![\d/])"
+                            for f in month_forms(ym)) + ")"  # fmt: skip
+
+
+def _period_gaps(page: str, branch: str, start: str, end: str | None) -> list[str]:
+    """A service period as one: on a DD-214 (one period a form) its branch field and its labeled
+    dates; anywhere else one "{branch} from {start} to {end}", so a narrative listing two periods
+    can't lend one period's dates to the other, or merge them."""
+    b = re.escape(branch.lower())
+    if "entered active duty" in page:
+        out = [] if re.search(rf"\bbranch[^:]{{0,5}}:\s*(?:u\.?s\.?\s+)?{b}\b", page) else [f"{branch} as the branch"]
+        if not _has_month(page, start, _START):
+            out.append(f"{start} as the entry date")
+        if end and not _has_month(page, end, _END):
+            out.append(f"{end} as the separation date")
+        if not end and "separation date" in page:
+            out.append("no separation date (the page has one: record `end`)")
+        return out
+    to = r"\s+(?:to|through|-)\s+"
+    tail = f"{to}{_month_re(end)}" if end else rf"(?!{to})"
+    if re.search(rf"(?<![a-z]){b}\s+from\s+{_month_re(start)}{tail}", page):
+        return []
+    return [f"{branch} from {start} to {end or '(no end)'} as one period"]
+
+
 def _rated(page: str, condition: str, pct: int) -> bool:
     return any(_pct_after(page, at) == pct for at in mentions(page, condition))
 
@@ -140,12 +177,7 @@ def missing(f: Fact, page_text: str) -> list[str]:
     if f.kind == "dob":
         need(_has_date(page, f.dob, _DOB), f"{f.dob} as the date of birth")
     elif f.kind == "service_period":
-        need(f.branch.lower() in page, f.branch)
-        need(_has_month(page, f.start, _START), f"{f.start} as the entry date")
-        if f.end:
-            need(_has_month(page, f.end, _END), f"{f.end} as the separation date")
-        else:
-            need("separation date" not in page, "no separation date (the page has one: record `end`)")
+        out += _period_gaps(page, f.branch, f.start, f.end)
     elif f.kind == "discharge":
         need(f.character in discharges(page), f"discharge {f.character}")
         need(_has_month(page, f.period_start, _START), f"the period starting {f.period_start}")
@@ -159,11 +191,11 @@ def missing(f: Fact, page_text: str) -> list[str]:
         need(any(_pct_after(page, m.end(), 40) == f.pct for m in re.finditer("combined", page)),
              f"combined rating {f.pct}%")  # fmt: skip
     elif f.kind == "decision":
-        need(_has_date(page, f.date), f.date)
+        need(_has_date(page, f.date, _DECISION_DATE), f"{f.date} as the decision date")
         if f.form:
             need(f.form.lower() in page, f"form {f.form}")
         if f.filed:
-            need(_has_date(page, f.filed), f"filed {f.filed}")
+            need(_has_date(page, f.filed, _RECEIVED), f"{f.filed} as the date the form was received")
         listed = {i.condition for i in f.issues}
         for decided in _DECIDED.findall(page):
             need(normalize_condition(decided) in listed, f"every decided issue (record {decided!r} too)")
@@ -173,8 +205,8 @@ def missing(f: Fact, page_text: str) -> list[str]:
             if issue.outcome == "granted" and issue.pct is not None:
                 need(_rated(page, issue.condition, issue.pct), f"{issue.condition} {issue.pct}%")
     elif f.kind == "notification_letter":
-        need(_has_date(page, f.date), f.date)
-        need(_has_date(page, f.decision_date), f"decision {f.decision_date}")
+        need(_has_date(page, f.date, _LETTER_DATE), f"{f.date} as the letter's date")
+        need(_has_date(page, f.decision_date, _DECISION_DATE), f"{f.decision_date} as the decision's date")
     elif f.kind == "prior_representative":
         labeled = "representative:" in page
         need(_field_is(page, "representative", _norm(f.name)) if labeled else _found(page, _norm(f.name)),
@@ -194,6 +226,30 @@ def missing(f: Fact, page_text: str) -> list[str]:
         for c in f.conditions:
             need(bool(mentions(page, c)), c)
     return out
+
+
+_NEEDS = {"dd214": "service_period", "rating_decision": "decision", "notification_letter": "notification_letter"}
+
+
+def coverage(table: list[Fact], cfile: CFile) -> list[tuple[str, str]]:
+    """What the fact table leaves out: [(item, problem)]."""
+    kinds: dict[str, set[str]] = {}
+    for f in table:
+        kinds.setdefault(f.cite.doc_id, set()).add(f.kind)
+    out = [(f"{d.type} {d.doc_id}", f"no {_NEEDS[d.type]} fact is recorded from it: read it and record it")
+           for d in cfile.docs if d.type in _NEEDS and _NEEDS[d.type] not in kinds.get(d.doc_id, set())]  # fmt: skip
+    decisions = [d for d in cfile.docs if d.type == "rating_decision"]
+    if decisions:
+        newest = max(decisions, key=lambda d: d.date or "")
+        combined = [f for f in table if f.kind == "combined_rating"]
+        if not combined:
+            out.append(("combined rating", f"no combined_rating fact: record it from {newest.doc_id}'s code sheet"))
+        rated = list({f.condition: f for f in table if f.kind == "rated_condition"}.values())
+        for f in combined[-1:] + rated:
+            if f.cite.doc_id != newest.doc_id:
+                why = f"cites {f.cite.doc_id}, not the newest rating decision {newest.doc_id} ({newest.date})"
+                out.append((f"fact {f.id}", f"{why}: re-record it from {newest.doc_id}'s code sheet"))
+    return out + [("fact table", f"{u}: record what it links to, or correct it") for u in unlinked(table)]
 
 
 def check(note: FaceNote, cites: dict[str, Fact], table: list[Fact], cfile: CFile, case: dict[str, bool]) -> list[Failure]:
@@ -222,4 +278,5 @@ def check(note: FaceNote, cites: dict[str, Fact], table: list[Fact], cfile: CFil
                 if gaps:
                     failures.append(Failure(n, line.text, f"fact {f.id} cites {f.cite}, which does not show "
                                             f"{'; '.join(gaps)}: re-record or re-cite fact {f.id}"))  # fmt: skip
-    return failures
+    after = len(note.lines)
+    return failures + [Failure(after + n, item, problem) for n, (item, problem) in enumerate(coverage(table, cfile), 1)]

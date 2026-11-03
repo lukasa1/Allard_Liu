@@ -175,8 +175,7 @@ def _move_stage(case: CaseFile, to: int, actor: str, reason: str | None) -> dict
     event = {"type": "stage_changed", "data": {"from": case.stage, "to": to, "actor": actor, "reason": reason}}
     if to < case.stage:  # back to pass 2: intake rebuilds its checklist, with the reopen item
         case.checklist["pass2"] = None
-        before = case.answers.get("claim_conditions")
-        case.reopen = Reopen(reason=reason or "moved back", before=before and before.model_dump(mode="json"))
+        case.reopen = Reopen.of(case, reason or "moved back")
     case.stage = to
     return event
 

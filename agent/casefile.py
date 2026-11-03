@@ -47,6 +47,10 @@ class Answer(BaseModel):
     raw: str | None = None  # the text the value was parsed from, kept verbatim
     unknown: bool = False  # the veteran doesn't know or declined: counts as settled
 
+    def key(self) -> dict[str, Any]:
+        """What identifies the answer, without the veteran's raw text or the time."""
+        return self.model_dump(mode="json", exclude={"raw", "at"})
+
 
 class Conflict(BaseModel):
     """The C-file disagrees with an answer on file (A2). Claims prep's prefill records it; pass 2
@@ -121,12 +125,22 @@ class StopRule(BaseModel):
 
 class Reopen(BaseModel):
     """The orchestrator moved the case back to stage 4 (pass 2). Until intake records
-    `claim_conditions` again (the answer differs from `before`), pass 2 shows it as missing, so
-    stage 5 waits."""
+    `claim_conditions` again (the answer differs from `before`, or was recorded after `before_at`),
+    pass 2 shows it as missing, so stage 5 waits."""
 
     reason: str
     at: str = Field(default_factory=now)
-    before: dict[str, Any] | None = None  # the claim_conditions answer at the move back
+    before: dict[str, Any] | None = None  # the claim_conditions answer at the move back (`Answer.key`)
+    before_at: str | None = None  # when that answer was recorded
+
+    @staticmethod
+    def of(case: CaseFile, reason: str) -> Reopen:
+        before = case.answers.get("claim_conditions")
+        return Reopen(reason=reason, before=before and before.key(), before_at=before and before.at)
+
+    def pending(self, answer: Answer | None) -> bool:
+        """True while `answer` is still the one on file at the move back."""
+        return answer is not None and answer.key() == self.before and answer.at == self.before_at
 
 
 class SubagentResult(BaseModel):
@@ -185,11 +199,10 @@ class CaseFile(BaseModel):
         """The case-file part of a memory block (L10): what the case is, not how agents talk.
 
         Text from outside the firm (the veteran's answers, C-file values, the face note, flags,
-        tasks, conflicts) is one `untrusted` block (L6), under the key "untrusted"; the raw text
+        tasks, conflicts, the reopen reason and answer) is one `untrusted` block (L6), under the key "untrusted"; the raw text
         an answer was parsed from is left out (no transcripts)."""
         data = self.model_dump(mode="json", include={"case_id", "stage", "owner", "side_state", "side_reason",
-                                                     "goal", "awaiting_veteran", "stop", "documents", "filings",
-                                                     "reopen"})  # fmt: skip
+                                                     "goal", "awaiting_veteran", "stop", "documents", "filings"})  # fmt: skip
         data["stage_name"] = STAGE_NAMES[self.stage]
         # Claims prep's working memory stays out: what it produced, not how it read.
         data["prep"] = {"done": self.prep.done, "facts": len(self.prep.facts), "verified": self.prep.verified,
@@ -204,6 +217,7 @@ class CaseFile(BaseModel):
             "uncertain": self.prep.uncertain,
             "open_tasks": [t.text for t in self.tasks if t.done_at is None],
             "flags": [f.model_dump(mode="json") for f in self.flags],
+            "reopen": self.reopen and self.reopen.model_dump(mode="json"),
         }
         data["untrusted"] = untrusted("case-file text from the veteran, the C-file and the team",
                                       json.dumps(text, indent=1))  # fmt: skip

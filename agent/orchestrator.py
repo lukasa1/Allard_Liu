@@ -9,7 +9,8 @@ wake ends (D9).
 
 Tools: read_skill (from the harness), run_intake(goal), run_prep(goal), move_stage(to, reason)
 for the move back to stage 4, needs_human and closed (D11), and staff_task(text) for a flag that goes to a
-person (L12). Its `reply` is the short update to the veteran at a handoff.
+person (L12), also allowed after the wake's handoff. Its `reply` is the short update to the veteran
+at a handoff (code sends a reply from any wake, except on a case a rule handed to a person, D3).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from agent import stages
-from agent.casefile import CaseFile, Task
+from agent.casefile import CaseFile, Reopen, Task
 from agent.harness import AgentSpec, Turn
 from agent.ingest import untrusted
 from agent.runtime import CHAT_EVENT_TYPES, Job, add_task
@@ -63,6 +64,11 @@ def _handoff(turn: Turn, agent: str, goal: str) -> str:
         if agent == "claims_prep":
             events.append(stages.move(case, 4, "handoff", goal))
             case.prep.continuations = 0
+        elif (case.stage == 4 and any(case.flags[i].kind == "new_condition" for i in turn.flags_shown)
+              and not (case.reopen and case.reopen.pending(case.answers.get("claim_conditions")))):
+            # Pass 2 must record claim_conditions again before stage 5 (as after a move back).
+            case.reopen = Reopen.of(case, "the veteran told support about a new condition (see your goal)")
+            case.checklist["pass2"] = None  # intake rebuilds it, with the reopen item
         case.owner, case.goal, case.awaiting_veteran = agent, goal, False
         return events + [{"type": "handoff", "data": {"to": agent, "goal": goal}}]
 

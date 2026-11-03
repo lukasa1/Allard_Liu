@@ -142,9 +142,11 @@ class Harness:
             lambda a: read_skill(spec.name, a.name),
         )  # fmt: skip
 
-        def guard(name: str, args: BaseModel) -> str | None:
+        def deadline() -> None:
             if time.monotonic() > turn.deadline:
                 raise TurnTimeout
+
+        def guard(name: str, args: BaseModel) -> str | None:
             if name == "read_skill":
                 return None
             if turn.owner_at_start and turn.case.owner != spec.name:
@@ -158,7 +160,7 @@ class Harness:
                 turn.case_id, "refused", {"tool": name, "args": scrub(args), "reason": reason}, actor=spec.name
             )
 
-        return Registry([read, *spec.tools(turn)], guard=guard, on_refused=refused)
+        return Registry([read, *spec.tools(turn)], guard=guard, on_refused=refused, on_call=deadline)
 
     def run(self, spec: AgentSpec, turn: Turn) -> TurnOutcome:
         turn.deadline = time.monotonic() + spec.timeout_s

@@ -163,8 +163,8 @@ async function poll() {
       if (item.kind === "message") say(item.payload.text, "bot", item.agent);
       else renderCard(item.payload);
     }
-    $("#status").textContent = u.running.length ? `${u.running.join(", ").replace(/_/g, " ")} working…` : "";
-    $("#suggest").disabled = u.running.length > 0;  // autoplay waits for idle (the server says 409 too)
+    $("#status").textContent = u.running.length ? `${u.running.join(", ").replace(/_/g, " ")} working…` : u.busy ? "working…" : "";
+    $("#suggest").disabled = u.busy;  // autoplay waits for idle, claims prep included (the server says 409 too)
     renderPanel(await api(casePath("")));
   } catch (e) { $("#status").textContent = e.message; }
   finally { polling = false; }
@@ -331,6 +331,8 @@ function renderPanel(p) {
         : p.prep.uncertain.length ? "Verify escalated the lines marked UNCERTAIN (staff tasks); the others show the C-file pages they cite (p. N)."
         : "Not verified yet: claims prep is still checking each line against the pages it cites."}</p>`;
     if (!noteBefore) showTab("note");
+  } else if (noteBefore) {  // a reopen or a new fact cleared the note: don't keep showing the old one
+    $("#pane-note").innerHTML = `<p class="muted">The face note is being rewritten from the C-file.</p>`;
   }
   if (versionsChanged && shownDoc) showDoc(shownDoc);
 }

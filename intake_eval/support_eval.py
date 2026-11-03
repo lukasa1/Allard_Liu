@@ -161,9 +161,9 @@ def score_one(rt: SupportOnly, m: dict[str, Any]) -> SupportScore:
     )  # fmt: skip
 
 
-# Model calls per message, estimated: support's ReAct steps, an orchestrator wake for a flag or an
-# escalation, and kb_search's own call.
-EST_CALLS = {"support": 3, "orchestrator": 1, "kb_search": 1}
+# Model calls per message, estimated: support's ReAct steps and kb_search's own call (the
+# orchestrator wakes a flag or an escalation would cause are recorded, not run).
+EST_CALLS = {"support": 3, "kb_search": 1}
 
 
 def estimated_calls(n: int) -> str:

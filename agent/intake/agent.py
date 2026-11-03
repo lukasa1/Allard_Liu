@@ -51,6 +51,10 @@ Pass 2 (stage 4): close the gaps the C-file left (`close-gaps`).
 Rules:
 - Save every answer the moment you hear it with record_answer, one call per field. Code parses \
 simple fields and runs the firm's stop rules; if one fires, tell the veteran kindly and finish.
+- The stop-rule fields (is_veteran, the service periods' discharge, receiving_va_pay, rating_pct, \
+prior_attorney) take the structured value you understood in `value` (true/false, an integer, the \
+periods with a discharge code), with the veteran's own words in `a`. If the veteran hedges ("I \
+think", "probably"), ask again before you record it.
 - Ask one or two questions per message, in plain warm words. Never ask for a Social Security \
 number, date of birth, VA file number or service number in chat: request_secure_info opens a secure form.
 - Answer general questions only from kb_search. Never give legal advice, predict a rating or an \
@@ -80,14 +84,21 @@ def _post(turn: Turn, card: dict) -> None:
 
 class RecordArgs(BaseModel):
     q: str = Field(description="a checklist id: a question id, confirm:<question id>, or narrative:<condition>:<prompt id>")
-    a: str = Field(description="the veteran's answer in their words (or a JSON value for a structured field)")
+    a: str = Field(description="the veteran's answer in their own words")
+    value: Any = Field(None, description="the structured value you understood. Required for the stop-rule "
+                       "fields: is_veteran / receiving_va_pay / prior_attorney true or false; rating_pct an "
+                       "integer; service_periods / other_service_periods a list of {branch, component, start, "
+                       "end, discharge} with discharge one of honorable, general, oth, bad_conduct, "
+                       "dishonorable, uncharacterized, or null. Optional for other fields.")
     unknown: bool = Field(False, description="true when the veteran doesn't know or declines to say")
 
 
 def record_answer(turn: Turn, args: RecordArgs) -> dict:
     key = args.q.removeprefix("confirm:")
     try:
-        value = None if args.unknown else checklist.parse(key, args.a)
+        value = None if args.unknown else checklist.parse(key, args.a, args.value)
+    except checklist.StrictError as err:
+        return {"saved": False, "error": str(err)}
     except ValueError as err:
         return {"saved": False, "error": f"could not read {args.a!r} for {key}: {err}. Ask again, or "
                 "pass the value as JSON, or set unknown if the veteran doesn't know."}  # fmt: skip
@@ -265,7 +276,7 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
             return f"{key} is not asked as a question"
         if key.startswith("narrative:") and key.split(":")[1] not in checklist.record(case).claim_conditions:
             return f"{key.split(':')[1]!r} is not a claimed condition; record claim_conditions first"
-        if redact_chat(args.a)[1]:
+        if redact_chat(args.a)[1] or (args.value is not None and redact_chat(json.dumps(args.value))[1]):
             return "ID numbers and dates of birth never go in chat or the case file: use request_secure_info"
         if checklist.BANK.by_id.get(key) and checklist.BANK.by_id[key].source == "secure_form" and not args.unknown:
             return f"{key} is collected by the secure form: use request_secure_info"
@@ -289,13 +300,17 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
         if args.form == "21-22a" and set(args.fields) != set(CONSENT_KEYS):
             return f"ask the veteran about Items 20 and 22 first, then pass both: {', '.join(CONSENT_KEYS)}"
         return None
-    if name in ("get_signature", "submit_va", "efax_ogc") and case.stop:
-        return f"stop rule {case.stop.rule} fired: nothing more is signed or sent; a person decides"
+    if name in ("get_signature", "submit_va", "efax_ogc", "update_draft", "request_secure_info") and case.stop:
+        return f"stop rule {case.stop.rule} fired: nothing more is prepared, signed or sent; a person decides"
+    if name in ("update_draft", "request_secure_info") and case.stage < 2:
+        return f"screening isn't finished: still missing {', '.join(case.missing('screen') or ['(not built)'])}"
     if name == "submit_va":
         if args.form in case.filings:
             return f"the {args.form} is already filed ({case.filings[args.form].confirmation})"
         if not _countersigned(case, "21-22a"):
             return "the 21-22a must be countersigned by the attorney first"
+        if args.form == "itf" and "21-22a" not in case.filings:
+            return "file the 21-22a first: the firm files the intent to file as the veteran's representative"
         return None
     if name == "efax_ogc":
         if args.doc in case.filings:
@@ -361,7 +376,9 @@ def tools(turn: Turn) -> list[ToolSpec]:
                  lambda a: get_case(turn)),
         ToolSpec("record_answer", "Save one answer the moment the veteran gives it (code parses it, "
                  "keeps the raw text and records the source). Rebuilds the checklist and runs the "
-                 "firm's stop rules.", RecordArgs, lambda a: record_answer(turn, a)),
+                 "firm's stop rules. For the stop-rule fields pass the structured value in `value`: "
+                 "free text alone is read only when plain (yes, no, 70%, honorable, OTH).", RecordArgs,
+                 lambda a: record_answer(turn, a)),
         ToolSpec("fill_pdf", "Fill the 21-22a or the fee agreement from the secure form and the "
                  "firm's details, and show the veteran a preview.", FillArgs, lambda a: fill_pdf(turn, a)),
         ToolSpec("request_secure_info", "Open a secure form outside the chat for ID numbers, date of "

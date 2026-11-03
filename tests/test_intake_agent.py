@@ -161,7 +161,7 @@ def test_record_answer_parses_in_code_and_refuses_what_it_must(rt, lm):
             call("fill_pdf", form="21-22a", fields={}), final(reply="Thanks."))  # fmt: skip
     _say(rt, cid, "Yes I did. Not sure about a claim.")
     traj = lm.prompts("intake", "extract")[-1]
-    assert "could not read 'maybe?'" in traj
+    assert "the veteran sounds unsure ('maybe')" in traj
     case = rt.store.get_case(cid)
     assert case.answers["is_veteran"].value is True and case.answers["is_veteran"].raw == "Yes I did"
     assert case.answers["filed_before"].unknown and "filed_before" not in case.checklist["screen"]

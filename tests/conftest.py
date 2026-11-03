@@ -11,8 +11,23 @@ os.environ.pop("POA_VAULT_KEY", None)
 os.environ["OPENROUTER_API_KEY"] = ""
 os.environ["DSPY_CACHE"] = "0"
 
+import socket
+
 import pytest
 from PIL import Image, ImageDraw
+
+_connect = socket.socket.connect
+
+
+def _no_network(self, address):
+    """Tests never reach a model or the web: only local sockets may connect."""
+    host = address[0] if isinstance(address, tuple) else address
+    if isinstance(host, str) and (host.startswith(("127.", "/")) or host in ("localhost", "::1")):
+        return _connect(self, address)
+    raise RuntimeError(f"network access in a test: {address!r} (inject a scripted LM / fake kb)")
+
+
+socket.socket.connect = _no_network
 
 SSN = "123-45-6789"
 VETERAN = {

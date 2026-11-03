@@ -138,12 +138,14 @@ def simulator_lm():
 def suggest(case_id: str, rt: Live):
     """Autoplay: the eval's simulated veteran (the case's persona, intake_eval/simulator.py) writes
     the next reply from the chat so far. The page puts it in the text box; Send sends it. Like the
-    eval's runner (plan §3), it waits for idle: 409 while an agent is mid-turn."""
+    eval's runner (plan §3), it waits for idle: 409 while any turn is queued or running (claims
+    prep in the background included)."""
     from intake_eval.simulator import DSPySimulator, load_chat
 
     case = _case(rt, case_id)
-    if running := rt.running(case_id):
-        raise HTTPException(409, f"Wait: {', '.join(sorted(running)).replace('_', ' ')} is still working.")
+    if rt.busy(case_id):
+        running = ", ".join(sorted(rt.running(case_id))).replace("_", " ") or "a queued turn"
+        raise HTTPException(409, f"Wait: {running} is still working.")
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}
@@ -151,10 +153,11 @@ def suggest(case_id: str, rt: Live):
 
 @app.get("/api/cases/{case_id}/updates")
 def updates(case_id: str, rt: Live, since: int = 0):
-    """The outbox after `since`, in order: messages and cards. `running`: agents mid-turn."""
+    """The outbox after `since`, in order: messages and cards. `running`: agents mid-turn; `busy`:
+    any turn queued or running (autoplay waits for it)."""
     _case(rt, case_id)
     items = rt.updates(case_id, since)
-    return {"items": [o.model_dump() for o in items], "running": sorted(rt.running(case_id))}
+    return {"items": [o.model_dump() for o in items], "running": sorted(rt.running(case_id)), "busy": rt.busy(case_id)}
 
 
 # ------------------------------------------------------------------------------ the veteran's cards

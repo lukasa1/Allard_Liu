@@ -215,6 +215,11 @@ def test_autoplay_waits_while_an_agent_is_mid_turn(client, rt, lm, monkeypatch):
     lm.turn("intake", final(reply="Have you served in the military?"))
     cid = client.post("/api/cases", json={"persona_id": PERSONA}).json()["case_id"]
     rt.wait_until_idle()
+    monkeypatch.setattr(rt, "busy", lambda case_id: True)
     monkeypatch.setattr(rt, "running", lambda case_id: {"claims_prep"})
     r = client.post(f"/api/cases/{cid}/suggest")
     assert r.status_code == 409 and "claims prep is still working" in r.json()["detail"]
+    monkeypatch.setattr(rt, "running", lambda case_id: set())  # a turn queued, none running yet
+    r = client.post(f"/api/cases/{cid}/suggest")
+    assert r.status_code == 409 and "a queued turn is still working" in r.json()["detail"]
+    assert client.get(f"/api/cases/{cid}/updates").json()["busy"] is True

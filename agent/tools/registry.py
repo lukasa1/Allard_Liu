@@ -1,7 +1,7 @@
 """Tool registry and guard hook (L2).
 
 A tool is a name, a description, a Pydantic argument schema and its code. Every call goes:
-validate the arguments (`invalid_args: <field>: <why>` on failure) -> guard hook (`refused:
+`on_call` (the harness checks the turn's deadline) -> validate the arguments (`invalid_args: <field>: <why>` on failure) -> guard hook (`refused:
 <reason>` on refusal, logged through `on_refused`) -> run. Whatever happens comes back to the
 model as a string observation, so it can correct itself (L4). Tool code that raises returns
 `error: ...` the same way.
@@ -55,12 +55,16 @@ def _observation(value: Any) -> str:
 
 class Registry:
     def __init__(self, tools: list[ToolSpec], guard: Guard | None = None,
-                 on_refused: Callable[[str, dict, str], None] | None = None) -> None:  # fmt: skip
+                 on_refused: Callable[[str, dict, str], None] | None = None,
+                 on_call: Callable[[], None] | None = None) -> None:  # fmt: skip
         self.tools = {t.name: t for t in tools}
         self.guard = guard
         self.on_refused = on_refused
+        self.on_call = on_call  # runs first on every call, even an invalid one (the turn's deadline)
 
     def run(self, name: str, raw: dict[str, Any]) -> str:
+        if self.on_call:
+            self.on_call()
         spec = self.tools.get(name)
         if spec is None:
             return f"invalid_args: no tool named {name!r}"

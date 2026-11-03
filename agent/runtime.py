@@ -10,9 +10,14 @@
                                 events nobody owns wake the orchestrator; nothing else does
   executor                      one worker per case runs queued turns in order; claims prep
                                 runs on a second, background worker so the chat stays live
-  delivery                      every reply and card goes to the store's outbox; a turn whose
-                                case went to a person mid-turn (crisis, a request for a person)
-                                or that lost the case has its reply held back (logged)
+  delivery                      every reply and card goes to the store's outbox; a turn queued
+                                before a hand-off to a person by rule (crisis, a request for a
+                                person), an orchestrator wake on a case a rule parked, or a turn
+                                that lost the case has its reply held back (logged)
+  failures                      a crashed or failed turn, or claims prep out of continuations,
+                                parks the case at needs_human with a staff task naming the
+                                undecided flags; a support crash sends the canned reply and a
+                                staff task, and leaves the case where it is
 
 All case changes go through `patch`, which applies a change under the store's lock and then
 re-derives the stage (agent.stages.settle).
@@ -20,6 +25,7 @@ re-derives the stage (agent.stages.settle).
 
 from __future__ import annotations
 
+import dataclasses
 import threading
 import uuid
 from collections import deque
@@ -30,7 +36,7 @@ from typing import Any
 
 from agent import stages
 from agent.casefile import CaseFile, EvalCondition, Flag, SubagentResult, Task
-from agent.harness import OWNING, AgentSpec, Harness, Turn, TurnOutcome
+from agent.harness import CANNED_REPLY, OWNING, AgentSpec, Harness, Turn, TurnOutcome
 from agent.ingest import (
     CRISIS_MESSAGE,
     HANDOFF_MESSAGE,
@@ -45,7 +51,8 @@ from agent.traces import TraceLog
 
 MAX_CONTINUATIONS = 3  # claims prep turns that end before the stop rule (max_iters, early) are continued
 CHAT_EVENT_TYPES = ("message",)  # never in the orchestrator's memory block (no transcripts)
-QUOTING_WAKES = ("support_flag", "escalated")  # wakes whose data may quote the veteran (L6)
+# Wakes whose data may quote the veteran (L6); a sub-agent's result is model text written from it.
+QUOTING_WAKES = ("support_flag", "escalated", "subagent_result")
 
 
 @dataclass
@@ -55,6 +62,7 @@ class Job:
     kind: str  # wake | start | message | event | continue
     redacted: bool = False  # message: ingest hid an ID number or a date of birth
     front: bool = False  # queued ahead of the lane's waiting jobs (a turn's own follow-ups)
+    to_person: int = -1  # the case's rule hand-offs when queued (set by _enqueue); a later one holds the reply
 
 
 class Runtime:
@@ -91,8 +99,7 @@ class Runtime:
             kind = "withdraw" if wants_withdraw(msg.clean) else "wants_human"
             self._to_person(case_id, msg.clean, kind, WITHDRAW_MESSAGE if kind == "withdraw" else HANDOFF_MESSAGE)
             return
-        agent = route(case)
-        self._log_message(case_id, "veteran", agent, msg.clean, redacted=msg.redacted)
+        agent = route(case)  # logged when the turn runs (_reroute): the owner may change meanwhile
         if agent == case.owner:
             self.patch(case_id, lambda c: setattr(c, "awaiting_veteran", False), actor="veteran")
         self._enqueue(case_id, Job(agent, msg.clean, "message", msg.redacted))
@@ -104,11 +111,8 @@ class Runtime:
         if apply:
             self.patch(case_id, apply, actor=actor)
         event = self.store.append_event(case_id, type, data or {}, actor=actor)
-        case = self.store.get_case(case_id)
-        if case.owner == "intake":
-            self._enqueue(case_id, Job("intake", f"[event] {event.line()}", "event"))
-        else:
-            self._wake(case_id, event)
+        owner = self.store.get_case(case_id).owner
+        self._enqueue(case_id, Job("intake" if owner == "intake" else "orchestrator", event.line(), "event"))
         return event
 
     def updates(self, case_id: str, since: int = 0):
@@ -131,6 +135,11 @@ class Runtime:
     def running(self, case_id: str) -> set[str]:
         with self._cond:
             return set(self._running.get(case_id, ()))
+
+    def busy(self, case_id: str) -> bool:
+        """True while any turn for the case is queued or running."""
+        with self._cond:
+            return self._pending.get(case_id, 0) > 0
 
     # ---------------------------------------------------------------- case changes
 
@@ -215,6 +224,8 @@ class Runtime:
     def _enqueue(self, case_id: str, job: Job) -> None:
         lane = (case_id, "background" if job.agent == "claims_prep" else "main")
         with self._cond:
+            if job.to_person < 0:
+                job.to_person = self._to_person_count.get(case_id, 0)
             queue = self._queues.setdefault(lane, deque())
             queue.appendleft(job) if job.front else queue.append(job)
             self._pending[case_id] = self._pending.get(case_id, 0) + 1
@@ -231,78 +242,105 @@ class Runtime:
                     return
                 job = queue.popleft()
                 self._running.setdefault(case_id, set()).add(job.agent)
+            after: list[Job] = []
             try:
                 job = self._reroute(case_id, job)
-                self._run(case_id, job)
+                after = self._run(case_id, job)
             except BaseException as err:  # noqa: BLE001 - surfaced by wait_until_idle
                 with self._cond:
                     self._errors.append((case_id, err))
                 self.store.append_event(case_id, "turn_crashed", {"agent": job.agent, "error": repr(err)})
                 self._crashed(case_id, job, err)
             finally:
+                # Under one lock: the turn's follow-ups (a handoff's first turn, a sub-agent's result
+                # wake) never see this agent still running.
                 with self._cond:
                     self._running[case_id].discard(job.agent)
+                    for follow in after:
+                        self._enqueue(case_id, follow)
                     self._pending[case_id] -= 1
                     self._cond.notify_all()
 
     def _reroute(self, case_id: str, job: Job) -> Job:
         """A1: a message or a card/staff event goes to whoever should get it now, not when it was
-        queued (the owner may have handed back, or taken the case, meanwhile)."""
+        queued (the owner may have handed back, or taken the case, meanwhile). A message is logged
+        here, once, to the agent that answers it."""
         if job.kind not in ("message", "event"):
             return job
         case = self.store.get_case(case_id)
         if job.kind == "message":
             agent = route(case)
-            if agent == job.agent:
-                return job
-            self._log_message(case_id, "veteran", agent, job.incoming, redacted=job.redacted, rerouted_from=job.agent)
-            new = Job(agent, job.incoming, "message", job.redacted)
-        elif case.owner == "intake":
+            moved = {"rerouted_from": job.agent} if agent != job.agent else {}
+            self._log_message(case_id, "veteran", agent, job.incoming, redacted=job.redacted, **moved)
+        else:  # intake handles it while it owns the case; otherwise it wakes the orchestrator
+            agent = "intake" if case.owner == "intake" else "orchestrator"
+        if agent == job.agent:
             return job
-        else:  # the event was queued for intake, which no longer owns the case: it wakes the orchestrator
-            new = Job("orchestrator", job.incoming.removeprefix("[event] "), "wake")
+        new = dataclasses.replace(job, agent=agent)
         with self._cond:
             self._running[case_id].discard(job.agent)
             self._running[case_id].add(new.agent)
         return new
 
     def _crashed(self, case_id: str, job: Job, err: BaseException) -> None:
-        """A crashed turn leaves the case with a person, not stuck with an owner that never runs."""
+        """A crashed turn leaves the case with a person, not stuck with an owner that never runs.
+        Support owns nothing: its crash gets the canned reply and a staff task, and the case stays."""
+        why = f"{job.agent} turn crashed: {type(err).__name__}"
         try:
-            if not self.store.get_case(case_id).parked:
-                self.move(case_id, "needs_human", "harness", f"{job.agent} turn crashed: {type(err).__name__}")
+            if job.agent == "support":
+                if job.kind == "message":
+                    self.say(case_id, "support", CANNED_REPLY)
+                add_task(self, case_id, Task(kind="staff", text=f"{why}; check the veteran's last message"), "harness")
+            else:
+                self.to_staff(case_id, why)
         except Exception as again:  # noqa: BLE001 - the crash itself is already recorded and re-raised
             self.store.append_event(case_id, "turn_crashed", {"agent": "harness", "error": repr(again)})
 
-    def _run(self, case_id: str, job: Job) -> None:
+    def to_staff(self, case_id: str, why: str) -> None:
+        """The harness parks the case (a failed or crashed turn, claims prep out of continuations):
+        needs_human, and a staff task naming the flags nobody decided (held or open)."""
+        case = self.store.get_case(case_id)
+        if case.parked:
+            return
+        self.move(case_id, "needs_human", "harness", why)
+        flags = [f"{f.kind}: {f.text}" for f in case.flags if f.status != "handled"]
+        text = why + ("; undecided support flags: " + " | ".join(flags) if flags else "")
+        add_task(self, case_id, Task(kind="staff", text=text), "harness")
+
+    def _run(self, case_id: str, job: Job) -> list[Job]:
+        """Run one turn; returns its follow-up jobs (`_drain` queues them)."""
         spec = self.agents[job.agent]
         case = self.store.get_case(case_id)
         if job.agent in OWNING and case.owner != job.agent:
             self.store.append_event(case_id, "turn_skipped", {"agent": job.agent, "reason": "not the owner"})
-            return
+            return []
         key = (case_id, job.agent)
         self._turns[key] = self._turns.get(key, 0) + 1
-        turn = Turn(self, case_id, job.agent, job.incoming, self._turns[key],
-                    owner_at_start=case.owner == job.agent, kind=job.kind)  # fmt: skip
-        with self._cond:
-            to_person = self._to_person_count.get(case_id, 0)
+        text = f"[event] {job.incoming}" if (job.kind, job.agent) == ("event", "intake") else job.incoming
+        turn = Turn(self, case_id, job.agent, text, self._turns[key], owner_at_start=case.owner == job.agent,
+                    kind=job.kind)  # fmt: skip
         outcome = self.harness.run(spec, turn)
         if outcome.reply:
-            self._deliver(case_id, turn, outcome.reply, to_person)
+            self._deliver(case_id, turn, outcome.reply, job.to_person)
+        after: list[Job] = []
         if job.agent == "orchestrator":
             self._after_wake(case_id, turn, outcome)
         elif turn.owner_at_start:
-            self._after_owner_turn(case_id, spec, turn, outcome)
-        for deferred in reversed(turn.deferred):  # the turn's own follow-ups run next (D9)
+            after = self._after_owner_turn(case_id, spec, turn, outcome)
+        for deferred in turn.deferred:  # the turn's own follow-ups run next (D9), in order
             deferred.front = True
-            self._enqueue(case_id, deferred)
+        return list(reversed(turn.deferred)) + after
 
     def _deliver(self, case_id: str, turn: Turn, reply: str, to_person: int) -> None:
-        """D3: a reply written before a person took over (a crisis, a request for a person, or the
-        case taken from the agent) is not sent: the rule's message is the last word."""
+        """D3: a reply to a message queued before a person took over (a crisis, a request for a
+        person), or written after the case was taken from the agent, is not sent: the rule's
+        message is the last word. So is the orchestrator's reply on a case a rule parked."""
         case = self.store.get_case(case_id)
         with self._cond:
-            why = "the case went to a person by rule" if self._to_person_count.get(case_id, 0) != to_person else None
+            ruled = self._to_person_count.get(case_id, 0)
+        why = "the case went to a person by rule" if ruled != to_person else None
+        if why is None and turn.agent == "orchestrator" and case.parked and ruled:
+            why = f"the case is {case.side_state} after a hand-off to a person by rule"
         if why is None and turn.owner_at_start and case.owner != turn.agent and case.stop is None:
             why = f"{turn.agent} lost the case during the turn ({case.side_state or 'no owner'})"
         if why:
@@ -320,10 +358,11 @@ class Runtime:
         # move, a staff task); otherwise they stay open and show again at the next wake.
         if turn.flags_shown and turn.acted and outcome.status == "ok":
             self.patch(case_id, handled, actor="orchestrator")
-        if outcome.status != "ok" and turn.handoff is None and not self.store.get_case(case_id).parked:
-            self.move(case_id, "needs_human", "harness", f"orchestrator turn {outcome.status}: {outcome.detail}")
+        if outcome.status != "ok" and turn.handoff is None:
+            self.to_staff(case_id, f"orchestrator turn {outcome.status}: {outcome.detail}")
 
-    def _after_owner_turn(self, case_id: str, spec: AgentSpec, turn: Turn, outcome: TurnOutcome) -> None:
+    def _after_owner_turn(self, case_id: str, spec: AgentSpec, turn: Turn, outcome: TurnOutcome) -> list[Job]:
+        """The owner's stop rule: hand back (returns the result's wake), continue, or wait."""
         case = self.store.get_case(case_id)
         assert spec.stop is not None
         if spec.stop(case) or case.parked:
@@ -340,8 +379,7 @@ class Runtime:
             event = self.store.append_event(
                 case_id, "subagent_result", {"result": result.model_dump(), "stage": case.stage}, actor=spec.name
             )
-            self._wake(case_id, event)
-            return
+            return [self.wake_job(event)]
         if outcome.result is not None:
             self.store.append_event(case_id, "result_ignored", {"reason": "stop rule not met"}, actor=spec.name)
         if spec.on_limit == "continue":
@@ -354,10 +392,11 @@ class Runtime:
                 turn.deferred.append(Job(spec.name, note, "continue"))
             else:
                 detail = outcome.detail or f"stop rule not met after {MAX_CONTINUATIONS} continuations"
-                self.move(case_id, "needs_human", "harness", f"{spec.name} turn {outcome.status}: {detail}")
-            return
+                self.to_staff(case_id, f"{spec.name} turn {outcome.status}: {detail}")
+            return []
         if outcome.reply:
             self.patch(case_id, lambda c: setattr(c, "awaiting_veteran", True), actor=spec.name)
+        return []
 
 
 def make_runtime(data_dir: Path, lm, kb: QATool | None = None) -> Runtime:

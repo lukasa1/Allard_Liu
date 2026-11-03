@@ -16,6 +16,7 @@ One run, one runtime: each case has its own store, traces and documents (`make_r
 from __future__ import annotations
 
 import base64
+import os
 import time
 import traceback
 from collections.abc import Callable
@@ -37,9 +38,16 @@ from poa_skill.service import WorkflowError
 CONDITIONS: tuple[EvalCondition, ...] = EvalCondition.__args__  # ask_no_probes, ask, cfile
 MAX_STEPS = 300  # veteran messages + card actions + countersign per case
 FAILURES_TO_GIVE_UP = 3  # consecutive canned replies or simulator errors
-# The longest wait for idle: claims prep's first turn plus every continuation, each up to its
-# turn timeout, with a minute's slack (support and the orchestrator run in between).
-IDLE_TIMEOUT_S = claims_prep_spec().timeout_s * (1 + MAX_CONTINUATIONS) + 60
+
+
+def idle_timeout_s() -> float:
+    """The longest wait for idle: claims prep's first turn plus every continuation, each up to its
+    turn timeout plus one model call still in flight when it hits (LM_TIMEOUT_S), with a minute's
+    slack (support and the orchestrator run in between)."""
+    lm_timeout = float(os.environ.get("LM_TIMEOUT_S", "120"))
+    return (claims_prep_spec().timeout_s + lm_timeout) * (1 + MAX_CONTINUATIONS) + 60
+
+
 ATTORNEY = "simulated attorney"
 ACTIONABLE = ("secure_form", "signature_pad", "sign_button")  # a newer card replaces an older one
 VAULT_BRANCH = {
@@ -142,7 +150,7 @@ def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[
     seen, cards, unread, failures = 0, [], [], 0
     while run.steps < MAX_STEPS:
         run.steps += 1
-        rt.wait_until_idle(cid, timeout=IDLE_TIMEOUT_S)
+        rt.wait_until_idle(cid, timeout=idle_timeout_s())
         for item in rt.updates(cid, seen):
             seen = item.seq
             if item.kind == "message":

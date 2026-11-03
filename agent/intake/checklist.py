@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from agent.casefile import CaseFile, StopRule
 from agent.intake import rules
-from agent.intake.parsing import coerce
+from agent.intake.parsing import DISCHARGES, HEDGE, coerce
 from agent.intake.questions import QuestionBank, is_visible
 from agent.intake.schema import NON_HONORABLE, IntakeRecord
 
@@ -40,13 +40,21 @@ VAULT_FIELD = {
 }  # fmt: skip
 
 
-# Stop-rule fields: free text counts only when it is unambiguous (else the model asks again or
-# passes JSON true/false). rating_pct's int reading is always strict (parsing.parse_text).
-STRICT = {"is_veteran"}
+# Stop-rule fields (A1, D22): the model passes the structured value it understood (`value`), and
+# the veteran's words stay the raw answer. Free text alone counts only when it is plain ("yes",
+# "no", "70%", "honorable", "OTH"); a hedge ("I think", "probably") is unsure: ask again.
+STRICT = {"is_veteran", "service_periods", "other_service_periods", "receiving_va_pay", "rating_pct", "prior_attorney"}
+_HINT = {"bool": "true or false", "int": "an integer 0-100",
+         "service_periods": f"a list of periods, each discharge one of {', '.join(DISCHARGES)} or null"}  # fmt: skip
 # Screening fields the firm's stop rules (A1) can't do without: unknown sends the case to a person.
-UNRESOLVED = {"is_veteran": "whether the person served", "service_periods": "the service periods"}
+UNRESOLVED = {"is_veteran": "whether the person served", "service_periods": "the service periods",
+              "receiving_va_pay": "whether they get VA disability pay", "rating_pct": "their VA rating"}  # fmt: skip
 _VSO = re.compile(r"\b(vso|dav|vfw|american legion|amvets|service officer|veterans service)\b", re.IGNORECASE)
 _LAWYER = re.compile(r"\b(attorney|lawyer|law firm|accredited agent|claims agent)\b", re.IGNORECASE)
+
+
+class StrictError(ValueError):
+    """A stop-rule field's answer code won't read: the message tells the model what to do."""
 
 
 class ChecklistItem(BaseModel):
@@ -100,7 +108,7 @@ def _discharges(case: CaseFile) -> list[ChecklistItem]:
             items.append(ChecklistItem(id=qid, type=BANK.by_id[qid].type, how="chat",
                                        ask=f"The character of discharge is missing for: {which}. Ask what it was "
                                            f"(honorable, general, other than honorable, ...) and record_answer {qid} "
-                                           "again with the full list, discharge included."))  # fmt: skip
+                                           "again with the full list as `value`, discharge included."))  # fmt: skip
     return items
 
 
@@ -122,7 +130,7 @@ def _reopened(case: CaseFile) -> list[ChecklistItem]:
     """The reopen item: after a move back to pass 2, claim_conditions is asked again (with the
     orchestrator's reason) until it is recorded after the move."""
     ans, reopen = case.answers.get("claim_conditions"), case.reopen
-    if reopen is None or ans is None or ans.model_dump(mode="json") != reopen.before:
+    if reopen is None or not reopen.pending(ans):
         return []  # not reopened, re-recorded since, or unanswered (then it is a question anyway)
     q = BANK.by_id["add_condition"]
     return [ChecklistItem(id="claim_conditions", type=q.type, how="chat",
@@ -194,11 +202,41 @@ def question_type(key: str) -> tuple[str, tuple[str, ...]]:
     return q.type, q.options
 
 
-def parse(key: str, text: str) -> Any:
+def parse(key: str, text: str, value: Any = None) -> Any:
     """Parse an answer in code (L16): simple fields (yes/no, dates, branch, discharge, lists) are
-    read by parsing.coerce; free text is kept as given. Raises ValueError when it can't be read."""
+    read by parsing.coerce; free text is kept as given. `value` is the structured value the model
+    understood (used instead of `text` when given). Raises ValueError when it can't be read;
+    StrictError for a stop-rule field (STRICT) whose answer is hedged or not plain."""
     qtype, options = question_type(key)
-    if key == "prior_attorney" and _VSO.search(text) and not _LAWYER.search(text):
-        return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
-    value = coerce(qtype, text, options, strict=key in STRICT)
+    if key in STRICT:
+        value = _strict(key, qtype, text, value)
+    else:
+        value = coerce(qtype, text if value is None else value, options)
     return [v.model_dump() if isinstance(v, BaseModel) else v for v in value] if isinstance(value, list) else value
+
+
+def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
+    if hedge := HEDGE.search(text):
+        raise StrictError(f"the veteran sounds unsure ({hedge.group(0)!r}), and {key} decides whether the "
+                          "firm can take the case: ask again to confirm. Mark it unknown only if they say "
+                          "they don't know.")  # fmt: skip
+    if key == "prior_attorney" and value is None and _VSO.search(text) and not _LAWYER.search(text):
+        return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
+    try:
+        out = coerce(qtype, text if value is None else value, (), strict=True)
+        if value is not None and qtype == "bool" and (said := _plain_or_none(qtype, text)) is not None and said != out:
+            raise ValueError(f"the veteran said {text.strip()!r} but value is {value!r}")
+        return out
+    except ValueError as err:
+        raise StrictError(f"could not read {key}: {err}. {key} is a stop-rule field, so code reads only "
+                          "plain answers. Pass the structured value you understood in `value` "
+                          f"({_HINT[qtype.removesuffix('_append')]}) and keep the veteran's words in `a`. "
+                          "If their answer is really unclear, ask again; don't mark it unknown unless "
+                          "they say they don't know.") from err  # fmt: skip
+
+
+def _plain_or_none(qtype: str, text: str) -> Any:
+    try:
+        return coerce(qtype, text, (), strict=True)
+    except ValueError:
+        return None
