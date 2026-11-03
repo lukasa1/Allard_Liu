@@ -197,6 +197,12 @@ Candidate deviations from the build, for the lead to confirm:
   case a rule handed to a person; `staff_task` is allowed after the wake's handoff.
 - **D25:** `run_intake` at stage 4 after a new-condition flag also reopens `claim_conditions`, so pass
   2 can't end before the condition is recorded.
+- **D27:** the skills a step needs are put in the agent's context, chosen in code from the case
+  (intake by stage, the orchestrator's stage playbook, claims prep's two). The design loads skills on
+  demand; the first live run spent one model call (about 3 s) per turn re-reading them.
+- **D28:** an owner's turn that ends with no reply while the veteran waits is asked once more to
+  answer (`[nudge]`); a second empty turn sends the canned reply. `record_answer(unknown=true)` needs
+  the veteran's words. The first live run stalled when intake marked an unasked question unknown.
 - **D26:** a scripted demo (`intake serve --scripted`) plays one case with no model: the agents'
   turns come from `agent/scripted/demo.py`; the runtime, tools, guard, documents and `verify` are the
   real code. It shows the flow without a key; it says nothing about the agents' quality.

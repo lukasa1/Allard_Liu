@@ -11,7 +11,17 @@ from intake_fixtures import CONSENTS, SCREEN_STEPS, prefill_pass2, screened
 from agent.casefile import Answer, CaseFile, Conflict, StopRule
 from agent.harness import Turn
 from agent.intake import checklist, documents
-from agent.intake.agent import DraftArgs, FaxArgs, FormArgs, RecordArgs, SecureArgs, SubmitArgs, guard, preload, record_answer
+from agent.intake.agent import (
+    DraftArgs,
+    FaxArgs,
+    FormArgs,
+    RecordArgs,
+    SecureArgs,
+    SubmitArgs,
+    guard,
+    preload,
+    record_answer,
+)
 from agent.kb import NO_ANSWER
 from agent.runtime import make_runtime
 from agent.scripted.kb import FaqKB

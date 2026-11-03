@@ -240,7 +240,7 @@ def test_confirmation_codes_are_letters(rt, signature_uri):
 def test_fill_pdf_on_the_same_draft_keeps_the_preview(rt, signature_uri):
     """Live run 1: after the veteran's yes, the model re-drafted the fee agreement instead of
     opening the Sign card. The same draft again is not re-made; the note says to sign."""
-    cid, svc, turn = _drafted(rt, signature_uri)
+    _cid, svc, turn = _drafted(rt, signature_uri)
     before = svc.live("fee_agreement").id
     out = fill_pdf(turn, FillArgs(form="fee_agreement", fields={}))
     assert "get_signature now" in out["note"] and svc.live("fee_agreement").id == before
