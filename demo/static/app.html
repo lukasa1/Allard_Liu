@@ -44,7 +44,7 @@
   .tabs button.on { color:var(--ink); border-bottom-color:var(--ink); font-weight:600; }
   .pane { flex:1; overflow:auto; padding:12px 14px; display:none; }
   .pane.on { display:block; }
-  #pane-docs.on { display:flex; flex-direction:column; }
+  #pane-attorney.on { display:flex; flex-direction:column; }
   #pdf { flex:1; border:1px solid var(--line); border-radius:8px; width:100%; min-height:480px; margin-top:8px; }
   .steps { display:flex; flex-wrap:wrap; gap:4px; margin:0 0 10px; }
   .step { font-size:12px; padding:3px 8px; border-radius:999px; background:var(--soft); color:var(--muted); }
@@ -62,6 +62,14 @@
   .note .uncertain { color:var(--warn); font-weight:600; }
   .ev { font:12px/1.45 ui-monospace, monospace; border-bottom:1px solid var(--soft); padding:3px 0; overflow-wrap:anywhere; }
   .ev b { color:var(--ink); } .ev.refused b { color:var(--warn); }
+  .side { padding:8px 14px; border-bottom:1px solid var(--line); font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; display:flex; gap:8px; align-items:baseline; }
+  .side .muted { text-transform:none; letter-spacing:0; font-weight:400; font-size:12px; }
+  .side.vet { background:#eef4f1; color:var(--accent); border-radius:10px 10px 0 0; }
+  .side.firm { background:#f3eefb; color:#5b3a8c; border-radius:10px 10px 0 0; }
+  details.role { border-bottom:1px solid var(--line); padding:6px 14px; font-size:13px; background:#fffbeb; }
+  details.role summary { cursor:pointer; font-weight:600; }
+  details.role .body { max-height:38vh; overflow:auto; padding:4px 0 6px; }
+  .card iframe { width:100%; height:360px; border:1px solid var(--line); border-radius:8px; margin:6px 0; }
 </style>
 </head>
 <body>
@@ -77,25 +85,29 @@
 <div id="banner"></div>
 <main>
   <section>
-    <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran; the staff panel on the right plays the attorney.</div></div>
+    <div class="side vet">Veteran's screen <span class="muted">what the veteran sees: the chat and its cards</span></div>
+    <details class="role" id="role" hidden><summary id="role-title">You are playing…</summary><div class="body" id="pane-character"></div></details>
+    <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran here; on the right, the firm's side (you also play the attorney there).</div></div>
     <div id="status"></div>
     <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button><button type="button" class="ghost" id="suggest" disabled title="The simulated veteran writes the next reply">Autoplay</button></form>
   </section>
   <section>
+    <div class="side firm">Firm · internal <span class="muted">the veteran never sees this side</span></div>
     <div class="tabs">
-      <button data-tab="character">Character</button>
-      <button data-tab="case" class="on">Case</button>
+      <button data-tab="attorney" class="on">Attorney</button>
+      <button data-tab="case">Case</button>
+      <button data-tab="answers">Answers</button>
       <button data-tab="note">Face note</button>
-      <button data-tab="docs">Documents</button>
       <button data-tab="events">Event log</button>
     </div>
-    <div class="pane" id="pane-character"><p class="muted">Start a case: who you play as the veteran shows here.</p></div>
-    <div class="pane on" id="pane-case"><p class="muted">The stage, the orchestrator's decisions, tasks and cost appear here.</p></div>
-    <div class="pane" id="pane-note"><p class="muted">Claims prep writes the face note from the C-file after filing.</p></div>
-    <div class="pane" id="pane-docs">
+    <div class="pane on" id="pane-attorney">
+      <div class="staff" id="staff"><b>Attorney</b> <span class="muted">(the presenter plays the attorney)</span><p class="muted">No documents yet.</p></div>
       <div><button class="ghost" data-doc="21-22a">VA Form 21-22a</button> <button class="ghost" data-doc="fee_agreement">Fee agreement</button> <span class="muted" id="docmeta">No document yet.</span></div>
       <iframe id="pdf" title="Document"></iframe>
     </div>
+    <div class="pane" id="pane-case"><p class="muted">The stage, the orchestrator's decisions, filings, tasks, support and cost appear here.</p></div>
+    <div class="pane" id="pane-answers"><p class="muted">Every answer on the case file, with its source, appears here.</p></div>
+    <div class="pane" id="pane-note"><p class="muted">Claims prep writes the face note from the C-file after filing.</p></div>
     <div class="pane" id="pane-events"></div>
   </section>
 </main>
@@ -123,7 +135,7 @@ function say(text, who, agent) {
 }
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
-  document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
+  document.querySelectorAll("section > .pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + name));
 }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 document.querySelectorAll("[data-doc]").forEach(b => b.onclick = () => showDoc(b.dataset.doc));
@@ -149,12 +161,13 @@ function showDoc(form) {
 $("#start").onclick = async () => {
   clearInterval(timer); caseId = null; since = 0; panel = null; shownDoc = null;
   log.innerHTML = ""; $("#pdf").removeAttribute("src"); $("#docmeta").textContent = "No document yet.";
+  $("#role").hidden = true; showTab("attorney");
   const p = $("#persona").selectedOptions[0];
   say(`New case. You are playing ${p.textContent}: ${p.title}`, "sys");
   try {
     caseId = (await api("/api/cases", {persona_id: p.value})).case_id;
     const ch = await api(casePath("/character"));
-    secureSample = ch.secure; renderCharacter(ch); showTab("character");
+    secureSample = ch.secure; renderCharacter(ch);
     $("#text").disabled = false; $("#send").disabled = false; $("#suggest").disabled = false;
     timer = setInterval(poll, 1500); poll();
   } catch (e) { say(e.message, "sys"); }
@@ -244,10 +257,10 @@ function secureForm(c) {
   });
 }
 
-function preview(c) {
-  const card = addCard(c, `<h3>Preview: ${esc(FORM[c.form])} (v${c.version})</h3><p class="muted">${c.missing.length ? "Still missing: " + esc(c.missing.join(", ")) : "Complete. Check it, then tell the agent in chat if it's right."}</p><button class="ghost">Open the document</button>`);
-  $("button", card).onclick = () => { showTab("docs"); showDoc(c.form); };
-  shownDoc = c.form; showTab("docs");  // the panel fetched after this poll loads the new version
+function preview(c) {  // the veteran reads the draft in the card itself
+  const src = casePath(`/documents/${c.form}.pdf?v=${c.version}-draft`);
+  addCard(c, `<h3>Preview: ${esc(FORM[c.form])} (v${c.version})</h3><p class="muted">${c.missing.length ? "Still missing: " + esc(c.missing.join(", ")) : "Complete. Check it, then tell the agent in chat if it's right."}</p><iframe title="${esc(FORM[c.form])}" src="${src}"></iframe><a href="${src}" target="_blank" rel="noopener">Open full size</a>`);
+  shownDoc = c.form;  // the attorney tab follows the newest document too
 }
 
 // Signature pad: draw only; trimmed to the ink before upload.
@@ -301,14 +314,17 @@ function ev(e) {
   return `<div class="ev ${e.type === "refused" ? "refused" : ""}">#${e.seq} ${esc(e.at.slice(11, 19))} <b>${esc(e.type)}</b> by ${esc(e.actor)} ${esc(d.length > 400 ? d.slice(0, 400) + "…" : d)}</div>`;
 }
 function fmt(v) { return v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); }
-function renderCharacter(ch) {  // who the presenter plays: the simulated veteran's own facts
+function renderCharacter(ch) {  // who the presenter plays (the simulated veteran's own facts): not part of the app
   const rows = s => s.rows.map(([k, v]) => k ? `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>` : `<dd style="grid-column:1/-1">• ${esc(v)}</dd>`).join("");
-  $("#pane-character").innerHTML = `<h3>You are ${esc(ch.name)}</h3><p class="muted">${esc(ch.summary)} Answer the agents from these facts, in your own words; the secure form is filled in for you.</p>`
+  $("#role-title").textContent = `🎭 You are playing ${ch.name} (for the presenter; the app doesn't show this)`;
+  $("#pane-character").innerHTML = `<p class="muted">${esc(ch.summary)} Answer the agents from these facts, in your own words; the secure form is filled in for you.</p>`
     + ch.sections.map(s => `<h4>${esc(s.title)}</h4><dl class="kv">${rows(s)}</dl>`).join("");
+  $("#role").hidden = false; $("#role").open = true;
 }
 function renderPanel(p) {
   const versionsChanged = !panel || JSON.stringify(panel.documents) !== JSON.stringify(p.documents);
   const noteBefore = panel && panel.face_note.length;
+  const panel_prev = panel;
   panel = p;
   const steps = Object.entries(STAGES).map(([n, label]) => `<span class="step ${n < p.stage ? "done" : n == p.stage ? "now" : ""}">${n} ${label}</span>`).join("");
   const docs = Object.entries(p.documents).map(([f, d]) => `<li>${esc(FORM[f])}: <b>${esc(d.status)}</b> (v${d.version})${d.countersigned_by ? ` · countersigned by ${esc(d.countersigned_by)}` : ""}</li>`).join("");
@@ -319,11 +335,12 @@ function renderPanel(p) {
   const answers = Object.entries(p.answers).map(([k, a]) => `<dt>${esc(k.replace(/_/g, " "))}</dt><dd>${a.unknown ? "<i>unknown</i>" : esc(fmt(a.value))}<span class="src">${esc(a.source)}</span></dd>`).join("");
   const support = p.events.filter(e => ["support_log", "support_flag", "escalated"].includes(e.type));
   const pr = p.prep;
-  $("#pane-case").innerHTML = `
-    <div class="staff"><b>Staff · attorney</b> <span class="muted">(the presenter plays the attorney)</span>
+  $("#staff").innerHTML = `<b>Attorney</b> <span class="muted">(the presenter plays the attorney)</span>
       <ul class="plain">${docs || "<li class='muted'>No documents yet.</li>"}</ul>
       <button id="countersign" style="margin-top:6px" ${p.can_countersign ? "" : "disabled"}>Countersign both documents</button>
-      <span class="err" id="cs-err"></span></div>
+      <span class="err" id="cs-err"></span>${p.can_countersign ? ` <b>← waiting for you</b>` : ""}`;
+  $("#pane-answers").innerHTML = `<p class="muted">The case file's answers; the tag is each one's source (the veteran's chat, the secure form or a C-file page).</p><dl class="kv">${answers || "<dt class='muted'>Nothing yet.</dt>"}</dl>`;
+  $("#pane-case").innerHTML = `
     <div class="steps">${steps}</div>
     <dl class="kv"><dt>owner</dt><dd>${esc(p.owner || "none")}${p.running.length ? ` · running: ${esc(p.running.join(", "))}` : ""}</dd>
       <dt>side state</dt><dd>${esc(p.side_state || "none")}${p.side_reason ? ` (${esc(p.side_reason)})` : ""}</dd>
@@ -333,8 +350,8 @@ function renderPanel(p) {
     <h4>Filings (simulated)</h4><ul class="plain">${filings || "<li class='muted'>None yet.</li>"}</ul>
     <h4>Tasks</h4><ul class="plain">${tasks || "<li class='muted'>None.</li>"}</ul>
     <h4>Support</h4><div>${support.map(ev).join("") || "<p class='muted'>Nothing yet.</p>"}${flags ? `<ul class="plain">${flags}</ul>` : ""}</div>
-    <h4>Cost per agent (from the traces)</h4><dl class="kv">${cost || "<dt class='muted'>None yet.</dt>"}<dt><b>total</b></dt><dd><b>$${p.cost.total.toFixed(4)}</b></dd></dl>
-    <h4>Case file answers <span class="muted" style="text-transform:none">(tag = source)</span></h4><dl class="kv">${answers || "<dt class='muted'>Nothing yet.</dt>"}</dl>`;
+    <h4>Cost per agent (from the traces)</h4><dl class="kv">${cost || "<dt class='muted'>None yet.</dt>"}<dt><b>total</b></dt><dd><b>$${p.cost.total.toFixed(4)}</b></dd></dl>`;
+  if (p.can_countersign && !(panel_prev && panel_prev.can_countersign)) showTab("attorney");
   $("#countersign").onclick = async (e) => {
     e.target.disabled = true;
     try { await api(casePath("/countersign"), {}); poll(); } catch (err) { $("#cs-err").textContent = err.message; }
