@@ -1,11 +1,24 @@
-# POA skill: VA Form 21-22a for an intake agent
+# Veteran intake agent
 
-CS329Z class project. This repo is a **skill**, not an agent: a set of instructions plus tools
-that any intake agent can mount to complete one task, getting a veteran's **VA Form 21-22a**
-(*Appointment of Individual as Claimant's Representative*) filled and signed so a law firm's
-attorney can represent them before VA.
+CS329Z class project. This repo is the home of an **intake agent** for a law firm that represents
+veterans before VA. The agent itself hasn't been built yet. Its job will be to talk with a
+veteran, work out what they need, and get their paperwork done by calling on **skills**: a
+packaged set of instructions plus tools for one task.
 
-The agent decides *when* the task applies. The skill handles *how*:
+| Status | Piece |
+|---|---|
+| ✅ Built | **POA skill** (`poa_skill/`): VA Form 21-22a, described below |
+| ⏳ Next | The intake agent: conversation, routing to skills, handoff to firm staff |
+| ⏳ Later | More skills (other VA forms, records requests, intake questionnaires) |
+
+`demo/host_agent.py` is a stand-in host that mounts the POA skill so it can be tested end to
+end. It is **not** the agent; the real agent replaces it and mounts skills the same way.
+
+## The POA skill
+
+The POA skill completes one task: getting a veteran's **VA Form 21-22a** (*Appointment of
+Individual as Claimant's Representative*) filled and signed so the firm's attorney can represent
+them before VA. The agent decides *when* the task applies. The skill handles *how*:
 
 1. Capture the veteran's identity details, including SSN, through a secure form the model
    never sees.
@@ -13,7 +26,7 @@ The agent decides *when* the task applies. The skill handles *how*:
 3. Let the veteran review and edit the draft.
 4. Sign on one click, placing the veteran's saved signature.
 
-## How it works
+## How the POA skill works
 
 ### The three parts
 
@@ -79,7 +92,9 @@ Field sensitivity lives in `vault.FIELDS`:
 - **private** fields (street, ZIP, phone, email) are partly masked.
 - **plain** fields (name, city, state, branch) are shown in full.
 
-## Mounting the skill in an agent
+## Mounting a skill in the agent
+
+This is the contract the intake agent will use for every skill.
 
 ```python
 from poa_skill import PoaService, load_skill, redact
@@ -99,8 +114,8 @@ if call.name in skill.tool_names:
     # out.cards  -> render in your UI
 ```
 
-`demo/host_agent.py` is a complete example: about 100 lines, using an OpenAI-compatible client
-pointed at OpenRouter.
+`demo/host_agent.py` is a working stand-in for the agent: about 110 lines, using an
+OpenAI-compatible client pointed at OpenRouter. Start the real agent from its loop.
 
 ### What the host must provide
 
@@ -145,7 +160,8 @@ poa_skill/
   pdf/                fill.py (AcroForm fill), sign.py (signature stamping), transforms.py
   forms/              VA's blank 21-22a
 config/representative.json   the appointed attorney and firm (placeholders)
-demo/                 example host: host_agent.py, server.py, static/index.html
+demo/                 stand-in host for testing skills: host_agent.py, server.py, static/
+(agent/)              the intake agent, to be built
 tests/                form mapping, security properties, host-agent loop, HTTP flow
 ```
 
@@ -165,6 +181,12 @@ tests/                form mapping, security properties, host-agent loop, HTTP f
 no KMS, and a local file store.
 
 ## Building on it
+
+- **The intake agent (next):** build it as a new package (for example `agent/`) that replaces
+  `demo/host_agent.py`. It owns the conversation, decides which skill a request needs, mounts
+  skills through `load_skill()`, runs `redact()` on every user message, renders the cards the
+  skills return, and hands off to firm staff when unsure. Keep skills independent: each one is
+  instructions + tools + its own service, and none of them talks to the model directly.
 
 - **Different firm or attorney:** edit `config/representative.json`. It holds placeholders now
   (Attorney 1, "Law Firm"). Item 19's staff list is `affiliated_staff`.
