@@ -261,5 +261,8 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     assert any(
         line.startswith("   DEADLINE TO FILE AMA APPEAL 03/13/27") for line in p["face_note"]
     )
-    assert rt.harness.lm.unused() == {}
+    assert rt.harness.lm.unused() == {} and p["cost"]["total"] == 0  # no model ran
+    assert c.post(f"/api/cases/{cid}/suggest").status_code == 409  # the story is over
+    d.say("Thank you.")  # off the script: a fixed note, not the canned failure reply
+    assert d.poll()[-1]["payload"]["text"] == demo.OFF_SCRIPT
     app_module._scripted_runtime.cache_clear()

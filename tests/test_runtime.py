@@ -5,7 +5,7 @@ import dataclasses
 import threading
 
 import pytest
-from helpers import FILED, events, incoming, messages, opened, until
+from helpers import FILED, PREP_DONE, events, incoming, messages, opened, until
 
 from agent import stages
 from agent.casefile import CaseFile
@@ -117,6 +117,16 @@ def test_crisis_language_is_handled_in_code_before_any_model(rt, lm):
     case = rt.store.get_case(cid)
     assert (case.side_state, case.owner, case.tasks[0].kind) == ("needs_human", None, "urgent")
     assert "escalated" in incoming(lm.prompts("orchestrator")[-1])
+
+
+def test_crisis_language_on_a_case_routed_to_support_never_reaches_the_model(rt, lm):
+    """Stage 5, no owner: the message would go to support; the crisis check runs first."""
+    cid = rt.store.create_case(CaseFile(case_id="c5", stage=5, prep=PREP_DONE, filings=FILED)).case_id
+    lm.turn("orchestrator", final())
+    rt.message(cid, "I don't want to be here anymore.")
+    rt.wait_until_idle()
+    assert lm.prompts("support") == [] and messages(rt, cid)[-1] == ("rule", CRISIS_MESSAGE)
+    assert rt.store.get_case(cid).side_state == "needs_human"
 
 
 def test_a_message_queued_before_a_crisis_gets_no_model_reply(rt, lm):
