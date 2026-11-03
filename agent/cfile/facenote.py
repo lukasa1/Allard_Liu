@@ -178,13 +178,12 @@ def render(
     lines.append(Line(f"MOS: {'; '.join(facts.mos) if facts.mos else '(not found)'}", mos_src))
     combined = facts.combined_rating if facts.combined_rating is not None else 0
     rating_src = ("combined_rating",) if facts.combined_rating is not None else ("none:rating_decision:combined_rating",)
-    lines.append(Line(f"SC at time of signing {firm} - {combined}%", rating_src))
+    unrated = " (no rating decision in the C-file)" if facts.combined_rating is None else ""
+    lines.append(Line(f"SC at time of signing {firm} - {combined}%{unrated}", rating_src))
     lines.append(_sep(THICK))
     sc = sorted(enumerate(facts.sc_conditions), key=lambda ic: -(ic[1].rating_pct or 0))
-    lines.append(Line(
-        f"SC ({combined}%)|" + "".join(f" {cond_name(c.name)} {c.rating_pct}% |" for _, c in sc).rstrip("|").rstrip(),
-        rating_src + tuple(f"sc_conditions.{i}" for i, _ in sc),
-    ))  # fmt: skip
+    listed = "".join(f" {cond_name(c.name)} {c.rating_pct}% |" for _, c in sc).rstrip("|").rstrip() or " none"
+    lines.append(Line(f"SC ({combined}%)|{listed}", rating_src + tuple(f"sc_conditions.{i}" for i, _ in sc)))
     lines.append(_sep(THICK))
     itf = _short(itf_date) if itf_date else "(not filed yet)"
     lines.append(Line(f"{firm} Filed 0966 Intent on {itf}", ("case:itf",)))

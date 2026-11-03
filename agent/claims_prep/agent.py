@@ -391,4 +391,5 @@ def spec() -> AgentSpec:
     return AgentSpec(
         name="claims_prep", instructions=INSTRUCTIONS, tools=tools, context=context, guard=guard,
         stop=lambda c: c.prep.done or c.parked, max_iters=40, timeout_s=600, on_limit="continue",
+        preload=lambda c: ("face-note-format", "cite-check"),
     )  # fmt: skip

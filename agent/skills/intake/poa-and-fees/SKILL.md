@@ -1,6 +1,6 @@
 ---
 name: poa-and-fees
-description: Pass 1, stage 2: fill and sign the 21-22a and the fee agreement, wait for the attorney's countersign, then fax the fee agreement to VA OGC. Read when screening is done.
+description: Pass 1, stage 2: fill and sign the 21-22a and the fee agreement, wait for the attorney's countersign, then fax the fee agreement to VA OGC.
 ---
 
 # The 21-22a and the fee agreement (pass 1, stage 2)

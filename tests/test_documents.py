@@ -18,9 +18,11 @@ from agent.intake import checklist, documents
 from agent.intake.agent import (
     DraftArgs,
     FaxArgs,
+    FillArgs,
     RecordArgs,
     SubmitArgs,
     efax_ogc,
+    fill_pdf,
     record_answer,
     submit_va,
     update_draft,
@@ -233,3 +235,16 @@ def test_confirmation_codes_are_letters(rt, signature_uri):
     codes = [submit_va(turn, SubmitArgs(form="itf"))["confirmation"],
              efax_ogc(turn, FaxArgs(doc="fee_agreement"))["confirmation"]]  # fmt: skip
     assert all(re.fullmatch(r"(VA|FAX)-[A-Z]{10}", c) for c in codes)
+
+
+def test_fill_pdf_on_the_same_draft_keeps_the_preview(rt, signature_uri):
+    """Live run 1: after the veteran's yes, the model re-drafted the fee agreement instead of
+    opening the Sign card. The same draft again is not re-made; the note says to sign."""
+    cid, svc, turn = _drafted(rt, signature_uri)
+    before = svc.live("fee_agreement").id
+    out = fill_pdf(turn, FillArgs(form="fee_agreement", fields={}))
+    assert "get_signature now" in out["note"] and svc.live("fee_agreement").id == before
+    out = fill_pdf(turn, FillArgs(form="21-22a", fields=CONSENTS))
+    assert "get_signature now" in out["note"]
+    out = fill_pdf(turn, FillArgs(form="21-22a", fields={**CONSENTS, "authorize_address_change": True}))
+    assert "get_signature only after" in out["note"]  # different choices: a new draft

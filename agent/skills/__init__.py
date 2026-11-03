@@ -2,7 +2,9 @@
 one-line description, then the directions).
 
 Only the index (name + description) sits in an agent's prompt; `read_skill` loads one skill's
-directions when the model decides it needs them (progressive disclosure). The harness
+directions when the model decides it needs them (progressive disclosure). D27: the skills a step
+needs (chosen in code from the case, AgentSpec.preload) are put in the context up front, since a
+read costs a model call each turn. The harness
 (agent/harness.py) gives every agent the index in its prompt and a `read_skill` tool for its own
 folder. Where code enforces a rule (routing, the stage guard), the skill describes it for the
 model, and tests keep the two in sync.

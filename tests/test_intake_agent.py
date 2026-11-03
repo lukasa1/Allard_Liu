@@ -11,7 +11,7 @@ from intake_fixtures import CONSENTS, SCREEN_STEPS, prefill_pass2, screened
 from agent.casefile import Answer, CaseFile, Conflict, StopRule
 from agent.harness import Turn
 from agent.intake import checklist, documents
-from agent.intake.agent import DraftArgs, FaxArgs, FormArgs, SecureArgs, SubmitArgs, guard
+from agent.intake.agent import DraftArgs, FaxArgs, FormArgs, RecordArgs, SecureArgs, SubmitArgs, guard, preload, record_answer
 from agent.kb import NO_ANSWER
 from agent.runtime import make_runtime
 from agent.scripted.kb import FaqKB
@@ -329,3 +329,20 @@ def test_a_restart_mid_intake_resumes_from_the_store(rt, lm, tmp_path):
     missing = context.split("## Missing")[1].split("## Documents")[0]
     assert "is_veteran" not in missing and "other_service_periods" in missing
     assert rt2.store.get_case(cid).stage == 2
+
+
+def test_unknown_needs_the_veterans_words(rt):
+    """Live run 1: the model marked a question it never asked as unknown, then had nothing to say."""
+    cid = rt.store.create_case(CaseFile(case_id="c1", stage=4, owner="intake", prep=PREP_DONE, filings=FILED)).case_id
+    turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
+    out = record_answer(turn, RecordArgs(q="heard_about", a=" ", unknown=True))
+    assert out["saved"] is False and "ask the question in `reply`" in out["error"]
+    assert record_answer(turn, RecordArgs(q="heard_about", a="I'd rather not say", unknown=True))["saved"] == "heard_about"
+
+
+def test_the_step_s_skills_are_in_the_context(rt, lm):
+    """D27: code picks the skills for the step; their directions are in the context, no read needed."""
+    assert [preload(CaseFile(case_id="x", stage=s)) for s in (1, 2, 4)] == [
+        ("screen-veteran",), ("poa-and-fees",), ("close-gaps",)]  # fmt: skip
+    opened(rt, lm)
+    assert "### screen-veteran\n# " in lm.prompts("intake")[-1] and "## Directions" in lm.prompts("intake")[-1]

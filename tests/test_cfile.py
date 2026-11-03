@@ -125,3 +125,10 @@ def test_prior_rep_is_the_newest_form_without_revocation_details():
     revoked = CfileFacts(prior_reps=[facts.prior_reps[2]])
     head = render(revoked, fee_pct=30, itf_date=None, intake_dob=None).lines[0]
     assert (head.text, head.sources) == ("FA 30%; No prior rep", ("case:fee_agreement", "prior_reps.0", "none:poa_form:prior_representative"))
+
+
+def test_a_veteran_with_no_rating_decision_gets_a_plain_sc_line():
+    """Live run 1: "SC (0%)|" with nothing after it read as garbled to the orchestrator."""
+    note = render(truth_facts(get_persona("baseline_clean")), fee_pct=30, itf_date=None, intake_dob=None, firm="Law Firm")
+    assert "SC at time of signing Law Firm - 0% (no rating decision in the C-file)" in note.text
+    assert "SC (0%)| none" in note.text

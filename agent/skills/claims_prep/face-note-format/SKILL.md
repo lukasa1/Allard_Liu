@@ -1,6 +1,6 @@
 ---
 name: face-note-format
-description: What the firm's face note needs from the C-file, which facts to record for each line, and how render builds it. Read before recording facts.
+description: What the firm's face note needs from the C-file, which facts to record for each line, and how render builds it.
 ---
 
 # Face-note format

@@ -99,11 +99,15 @@ class RecordArgs(BaseModel):
                        "integer; service_periods / other_service_periods a list of {branch, component, start, "
                        "end, discharge} with discharge one of honorable, general, oth, bad_conduct, "
                        "dishonorable, uncharacterized, or null. Optional for other fields.")
-    unknown: bool = Field(False, description="true when the veteran doesn't know or declines to say")
+    unknown: bool = Field(False, description="true when the veteran said they don't know or decline to say "
+                          "(their words in `a`); never for a question you haven't asked")
 
 
 def record_answer(turn: Turn, args: RecordArgs) -> dict:
     key = args.q.removeprefix("confirm:")
+    if args.unknown and not args.a.strip():
+        return {"saved": False, "error": "unknown needs the veteran's own words saying they don't know or "
+                "won't say. You haven't asked yet: finish and ask the question in `reply`."}  # fmt: skip
     try:
         value = None if args.unknown else checklist.parse(key, args.a, args.value)
     except checklist.StrictError as err:
@@ -176,6 +180,14 @@ class FormArgs(BaseModel):
 
 def fill_pdf(turn: Turn, args: FillArgs) -> dict:
     svc = _svc(turn)
+    live = svc.live(args.form)
+    if live is not None and live.status == "draft":  # the same draft again: keep the preview
+        shown = svc.describe(live)
+        same = shown["consents"] == args.fields if args.form == "21-22a" else \
+            shown["terms"].get("fee_pct") == checklist.fee_pct(turn.case)
+        if same:
+            return {**shown, "note": "This draft is already drafted and showing. If the veteran clearly said "
+                    "yes to it, call get_signature now; otherwise ask them to check it."}  # fmt: skip
     if args.form == "21-22a":
         doc = svc.prepare(args.fields)
     else:
@@ -433,8 +445,18 @@ def tools(turn: Turn) -> list[ToolSpec]:
     ]  # fmt: skip
 
 
+def preload(case: CaseFile) -> tuple[str, ...]:
+    """D27: the skills this step needs."""
+    if case.stage >= 4:
+        return ("close-gaps",)
+    if case.stage == 1:
+        return ("screen-veteran",)
+    countersigned = case.documents and all(d.countersigned_at for d in case.documents.values())
+    return ("poa-and-fees", "intent-to-file") if countersigned else ("poa-and-fees",)
+
+
 def spec() -> AgentSpec:
     return AgentSpec(
         name="intake", instructions=INSTRUCTIONS, tools=tools, context=context, guard=guard,
-        stop=lambda c: c.stage in (3, 5) or c.parked, max_iters=8, timeout_s=120,
+        stop=lambda c: c.stage in (3, 5) or c.parked, max_iters=8, timeout_s=120, preload=preload,
     )  # fmt: skip

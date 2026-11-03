@@ -59,7 +59,7 @@ QUOTING_WAKES = ("support_flag", "escalated", "subagent_result")
 class Job:
     agent: str
     incoming: str
-    kind: str  # wake | start | message | event | continue
+    kind: str  # wake | start | message | event | continue | nudge
     redacted: bool = False  # message: ingest hid an ID number or a date of birth
     front: bool = False  # queued ahead of the lane's waiting jobs (a turn's own follow-ups)
     to_person: int = -1  # the case's rule hand-offs when queued (set by _enqueue); a later one holds the reply
@@ -335,7 +335,7 @@ class Runtime:
         if job.agent == "orchestrator":
             self._after_wake(case_id, turn, outcome)
         elif turn.owner_at_start:
-            after = self._after_owner_turn(case_id, spec, turn, outcome)
+            after = self._after_owner_turn(case_id, spec, turn, outcome, job)
         for deferred in turn.deferred:  # the turn's own follow-ups run next (D9), in order
             deferred.front = True
         return list(reversed(turn.deferred)) + after
@@ -371,7 +371,7 @@ class Runtime:
         if outcome.status != "ok" and turn.handoff is None:
             self.to_staff(case_id, f"orchestrator turn {outcome.status}: {outcome.detail}")
 
-    def _after_owner_turn(self, case_id: str, spec: AgentSpec, turn: Turn, outcome: TurnOutcome) -> list[Job]:
+    def _after_owner_turn(self, case_id: str, spec: AgentSpec, turn: Turn, outcome: TurnOutcome, job: Job) -> list[Job]:
         """The owner's stop rule: hand back (returns the result's wake), continue, or wait."""
         case = self.store.get_case(case_id)
         assert spec.stop is not None
@@ -403,6 +403,17 @@ class Runtime:
             else:
                 detail = outcome.detail or f"stop rule not met after {MAX_CONTINUATIONS} continuations"
                 self.to_staff(case_id, f"{spec.name} turn {outcome.status}: {detail}")
+            return []
+        if not outcome.reply and outcome.status == "ok" and job.kind in ("message", "event", "nudge"):
+            # The veteran is waiting and the turn sent nothing (D28): one more turn is asked to
+            # answer; if that one is empty too, the canned reply goes out, so the chat never stalls.
+            if job.kind == "nudge":
+                self._deliver(case_id, spec.name, CANNED_REPLY, job.to_person, turn.owner_at_start)
+                return []
+            what = untrusted("veteran message", turn.incoming) if job.kind == "message" else turn.incoming
+            note = (f"[nudge] Your last turn ended without a reply, and the veteran is waiting. Answer "
+                    f"what they last sent (below) and ask the next question in `reply`.\n{what}")  # fmt: skip
+            turn.deferred.append(Job(spec.name, note, "nudge", to_person=job.to_person))
             return []
         if outcome.reply:
             self.patch(case_id, lambda c: setattr(c, "awaiting_veteran", True), actor=spec.name)

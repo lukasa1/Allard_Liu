@@ -155,5 +155,5 @@ def context(turn: Turn) -> str:
 def spec() -> AgentSpec:
     return AgentSpec(
         name="orchestrator", instructions=INSTRUCTIONS, tools=tools, context=context, guard=guard,
-        max_iters=6, timeout_s=90, on_limit="needs_human",
+        max_iters=6, timeout_s=90, on_limit="needs_human", preload=lambda c: ("stage-playbook",),
     )  # fmt: skip

@@ -1,6 +1,6 @@
 ---
 name: screen-veteran
-description: Pass 1, stage 1: the screening questions before anything is signed, and the stop rules code enforces. Read at the start of pass 1.
+description: Pass 1, stage 1: the screening questions before anything is signed, and the stop rules code enforces.
 ---
 
 # Screen the veteran (pass 1, stage 1)

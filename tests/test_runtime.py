@@ -254,3 +254,20 @@ def test_a_repeated_failure_on_a_parked_case_leaves_one_staff_task(rt):
     rt.to_staff(cid, "claims_prep turn limit: 40 steps")
     assert [t.text for t in rt.store.get_case(cid).tasks] == ["orchestrator turn error: timed out",
                                                              "claims_prep turn limit: 40 steps"]  # fmt: skip
+
+
+def test_an_owner_turn_with_no_reply_is_nudged_once_then_canned(rt, lm):
+    """D28 (live run 1 stalled): the veteran is waiting and intake sent nothing."""
+    cid = opened(rt, lm)
+    lm.turn("intake", final(reply=""))
+    lm.turn("intake", final(reply="Sorry, which branch were you in?"))
+    rt.message(cid, "Yes, Army.")
+    rt.wait_until_idle()
+    assert messages(rt, cid)[-1] == ("intake", "Sorry, which branch were you in?")
+    nudge = incoming(lm.prompts("intake")[-1])
+    assert "[nudge]" in nudge and "Yes, Army." in nudge and "<untrusted" in nudge
+    lm.turn("intake", final(reply=""))
+    lm.turn("intake", final(reply=""))
+    rt.message(cid, "Army, 2004 to 2010.")
+    rt.wait_until_idle()
+    assert messages(rt, cid)[-1] == ("intake", CANNED_REPLY)

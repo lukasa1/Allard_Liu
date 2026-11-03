@@ -1,6 +1,6 @@
 ---
 name: close-gaps
-description: Pass 2, stage 4: after claims prep read the C-file, ask only what is still missing, confirm the C-file conflicts, then the narrative prompts. Read at the start of pass 2.
+description: Pass 2, stage 4: after claims prep read the C-file, ask only what is still missing, confirm the C-file conflicts, then the narrative prompts.
 ---
 
 # Close the gaps (pass 2, stage 4)
@@ -18,7 +18,8 @@ Work through the checklist in this order:
 3. **The rest of the firm's form** (`how: "chat"`). Contact fields (`how: "secure_form"`) go
    through `request_secure_info`; if the veteran has none (no email), record them as `unknown`.
 4. **Narrative prompts** for each claimed condition (`narrative:<condition>:<prompt id>`): ask
-   them one at a time, warmly, and record the veteran's own words.
+   two or three related ones per message, in order, warmly, and record each answer in the
+   veteran's own words (one `record_answer` per prompt; a prompt they didn't answer stays open).
 
 A new condition the orchestrator's goal mentions: record `claim_conditions` again with the full
 list, which adds its narrative prompts to the checklist.
