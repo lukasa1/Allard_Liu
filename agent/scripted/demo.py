@@ -18,16 +18,11 @@ from dataclasses import dataclass, field
 
 from agent.scripted.lm import ScriptedLM, call, final
 from agent.scripted.prep import prep_steps
+from intake_eval.runner import SECURE_FIELDS
 
 PERSONA = "recent_decision"
 MARINES = [{"branch": "marine corps", "component": "active", "start": "2002-06", "end": "2010-06",
             "discharge": "honorable"}]  # fmt: skip
-# The secure form's test values (synthetic): the page fills them in for the presenter.
-SECURE = {
-    "first_name": "Hector", "last_name": "Alvarez", "ssn": "321-54-9876", "date_of_birth": "1967-03-26",
-    "branch": "marine_corps", "address.line1": "200 Lake St", "address.city": "Milwaukee",
-    "address.state": "Wisconsin", "address.zip": "53202", "phone": "414-555-0142", "email": "hector@example.com",
-}  # fmt: skip
 OFF_SCRIPT = "(Scripted demo: that message isn't in the script, so no agent answers it. Press Next line for the story's next line.)"
 PASS1 = {"finished": "pass 1: 21-22a and ITF filed, fee agreement faxed"}
 
@@ -82,7 +77,7 @@ def story() -> Story:
          final(reply="Thanks. Have you ever had an attorney or agent represent you on a VA claim?"))  # fmt: skip
     # Account opening: the secure form, the 21-22a, the fee agreement.
     turn("intake", _r("prior_attorney", "No, I've never had a lawyer or anyone else represent me.", False),
-         call("request_secure_info", fields=list(SECURE), purpose="For your VA Form 21-22a (appointing our attorney)."),
+         call("request_secure_info", fields=list(SECURE_FIELDS), purpose="For your VA Form 21-22a (appointing our attorney)."),
          final(reply="You qualify for us to help. Please fill in the secure form: only our team sees those numbers."))  # fmt: skip
     turn("intake", call("fill_pdf", form="21-22a", fields={"authorize_7332_records": True,
                                                           "authorize_address_change": False}),

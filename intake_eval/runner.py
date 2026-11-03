@@ -64,6 +64,10 @@ def signature_png() -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+SECURE_FIELDS = ("first_name", "middle_initial", "last_name", "ssn", "date_of_birth", "branch", "address.line1",
+                 "address.city", "address.state", "address.zip", "phone", "email")  # fmt: skip
+
+
 def secure_form_values(p: Persona, fields: list[str]) -> dict[str, str]:
     t = p.truth
     first = t.service_periods[0].branch if t.service_periods else None

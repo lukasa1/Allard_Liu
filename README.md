@@ -251,7 +251,8 @@ values are filled in), sign, and countersign as the cards appear. The agents fol
 typing something else won't change their answers. One case at a time: Start case starts the story over.
 
 1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
-   **Start case**. You type as the veteran, or press **Autoplay** to have the eval's simulated
+   **Start case**. The **Character** tab shows who you play: the same facts and condition stories
+   the eval's simulated veteran plays from, and the secure form is filled in with them. You type as the veteran, or press **Autoplay** to have the eval's simulated
    veteran draft the next reply (you still press Send). Autoplay is disabled while any turn is
    queued or running, claims prep in the background included.
 2. Intake screens you, then shows the **secure form** for the ID numbers, the **21-22a preview**, a

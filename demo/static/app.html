@@ -83,11 +83,13 @@
   </section>
   <section>
     <div class="tabs">
+      <button data-tab="character">Character</button>
       <button data-tab="case" class="on">Case</button>
       <button data-tab="note">Face note</button>
       <button data-tab="docs">Documents</button>
       <button data-tab="events">Event log</button>
     </div>
+    <div class="pane" id="pane-character"><p class="muted">Start a case: who you play as the veteran shows here.</p></div>
     <div class="pane on" id="pane-case"><p class="muted">The stage, the orchestrator's decisions, tasks and cost appear here.</p></div>
     <div class="pane" id="pane-note"><p class="muted">Claims prep writes the face note from the C-file after filing.</p></div>
     <div class="pane" id="pane-docs">
@@ -139,7 +141,6 @@ function showDoc(form) {
   $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${esc(p.summary)}">${esc(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
   if (!cfg.ready) { $("#banner").textContent = cfg.message; $("#banner").style.display = "block"; $("#start").disabled = true; }
   if (cfg.scripted) {  // D26: no model; the agents follow agent/scripted/demo.py
-    secureSample = cfg.secure_sample;
     $("#banner").textContent = "Scripted demo: no model. Press Next line, then Send, and use the cards as they appear. The agents follow a script; everything else is the real code.";
     $("#banner").style.display = "block";
     $("#suggest").textContent = "Next line"; $("#suggest").title = "The story's next line for the veteran";
@@ -152,6 +153,8 @@ $("#start").onclick = async () => {
   say(`New case. You are playing ${p.textContent}: ${p.title}`, "sys");
   try {
     caseId = (await api("/api/cases", {persona_id: p.value})).case_id;
+    const ch = await api(casePath("/character"));
+    secureSample = ch.secure; renderCharacter(ch); showTab("character");
     $("#text").disabled = false; $("#send").disabled = false; $("#suggest").disabled = false;
     timer = setInterval(poll, 1500); poll();
   } catch (e) { say(e.message, "sys"); }
@@ -298,6 +301,11 @@ function ev(e) {
   return `<div class="ev ${e.type === "refused" ? "refused" : ""}">#${e.seq} ${esc(e.at.slice(11, 19))} <b>${esc(e.type)}</b> by ${esc(e.actor)} ${esc(d.length > 400 ? d.slice(0, 400) + "…" : d)}</div>`;
 }
 function fmt(v) { return v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); }
+function renderCharacter(ch) {  // who the presenter plays: the simulated veteran's own facts
+  const rows = s => s.rows.map(([k, v]) => k ? `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>` : `<dd style="grid-column:1/-1">• ${esc(v)}</dd>`).join("");
+  $("#pane-character").innerHTML = `<h3>You are ${esc(ch.name)}</h3><p class="muted">${esc(ch.summary)} Answer the agents from these facts, in your own words; the secure form is filled in for you.</p>`
+    + ch.sections.map(s => `<h4>${esc(s.title)}</h4><dl class="kv">${rows(s)}</dl>`).join("");
+}
 function renderPanel(p) {
   const versionsChanged = !panel || JSON.stringify(panel.documents) !== JSON.stringify(p.documents);
   const noteBefore = panel && panel.face_note.length;

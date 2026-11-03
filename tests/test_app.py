@@ -246,7 +246,7 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     for _ in range(4):
         next_line()
     assert d.post(
-        f"/secure/{d.card('secure_form')['request_id']}", {"values": cfg["secure_sample"]}
+        f"/secure/{d.card('secure_form')['request_id']}", {"values": c.get(f"/api/cases/{cid}/character").json()["secure"]}
     ) == {"errors": {}}
     next_line()
     d.post("/signature", {"data_uri": signature_uri})
@@ -266,3 +266,17 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     d.say("Thank you.")  # off the script: a fixed note, not the canned failure reply
     assert d.poll()[-1]["payload"]["text"] == demo.OFF_SCRIPT
     app_module._scripted_runtime.cache_clear()
+
+
+def test_the_character_tab_shows_who_the_presenter_plays(client, rt, lm):
+    """The presenter sees the persona's facts and stories (what the simulated veteran plays from)."""
+    lm.turn("orchestrator", call("run_intake", goal="Pass 1."), final(reply="Welcome!"))
+    lm.turn("intake", final(reply="Did you serve?"))
+    cid = client.post("/api/cases", json={"persona_id": "recent_decision"}).json()["case_id"]
+    rt.wait_until_idle()
+    ch = client.get(f"/api/cases/{cid}/character").json()
+    rows = {k: v for s in ch["sections"] for k, v in s["rows"]}
+    assert ch["name"] == "Hector Alvarez" and rows["Combined rating"] == "40%"
+    assert rows["Period 1"] == "Marine Corps active, 2002-06 to 2010-06, honorable discharge"
+    assert "Your story: left knee condition" in [s["title"] for s in ch["sections"]]
+    assert ch["secure"]["last_name"] == "Alvarez" and ch["secure"]["ssn"]

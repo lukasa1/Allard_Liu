@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 
+from agent.cfile.facenote import DISCHARGE_LABEL
 from agent.personas import Persona
 from agent.traces import cost
 
@@ -69,6 +70,56 @@ def persona_brief(persona: Persona) -> str:
         item22="yes" if persona.poa.get("authorize_address_change") else "no",
         style=persona.style or "Cooperative, a bit informal.",
     )
+
+
+def _yn(v) -> str:
+    return "unknown" if v is None else "yes" if v else "no"
+
+
+def character_card(persona: Persona) -> list[dict]:
+    """The demo's Character tab: the same facts the simulated veteran plays from, in plain words,
+    so a person playing the veteran knows how to answer. Sections of (label, text) rows."""
+    t = persona.truth
+    period = lambda p: (f"{p.branch.title()} {p.component or ''}, {p.start or '?'} to {p.end or '?'}, "
+                        f"{DISCHARGE_LABEL.get(p.discharge or '', 'unknown').lower()} discharge")  # fmt: skip
+    service = [("Served", _yn(t.is_veteran))]
+    service += [(f"Period {i}", period(p)) for i, p in enumerate(t.service_periods, 1)]
+    service += [("MOS", ", ".join(t.mos) or "-"), ("Retired from the military", _yn(t.retired)),
+                ("Exposures", ", ".join(t.exposures) or "none")]  # fmt: skip
+    va = [("Filed a VA claim before", _yn(t.filed_before)), ("Getting VA disability pay", _yn(t.receiving_va_pay))]
+    if t.receiving_va_pay:
+        va.append(("Combined rating", f"{t.rating_pct}%"))
+        va.append(("Rated conditions", ", ".join(f"{c.name} {c.rating_pct}%" for c in t.sc_conditions) or "-"))
+    va += [("Had an attorney or agent", _yn(t.prior_attorney) + (f" ({t.prior_attorney_name})" if t.prior_attorney_name else "")),
+           ("Conditions to claim", ", ".join(t.claim_conditions) or "-"),
+           ("Other conditions", ", ".join(t.other_conditions) or "none")]  # fmt: skip
+    life = [("Marital status", t.marital_status or "-"), ("Children under 18", _yn(t.children_under_18)),
+            ("Next of kin", t.next_of_kin or "-"), ("Earning over $1,600 a month", _yn(t.earning_over_1600)),
+            ("Gets Social Security", _yn(t.receives_ssa)), ("Heard about the firm from", t.heard_about or "-")]  # fmt: skip
+    sections = [{"title": "Service", "rows": service}, {"title": "VA history and the claim", "rows": va},
+                {"title": "Life and work", "rows": life}]  # fmt: skip
+    for cond, story in persona.stories.items():
+        said = persona.says.get(cond)
+        rows = [("You call it", said)] if said else []
+        rows += [(NARRATIVE_LABEL.get(k, k), v) for k, v in story.items()]
+        sections.append({"title": f"Your story: {cond}", "rows": rows})
+    act = [BEHAVIOR_TEXT.get(b, b) for b in persona.behaviors]
+    if persona.during_prep:
+        act.append(f"After the attorney countersigns, send: \"{persona.during_prep['message']}\"")
+    act += [(f"21-22a: let the attorney see drug/alcohol, HIV or sickle cell records: "
+             f"{_yn(persona.poa.get('authorize_7332_records'))}; update your address with VA: "
+             f"{_yn(persona.poa.get('authorize_address_change'))}."),
+            "Never type your SSN or date of birth in the chat: the secure form is filled in for you."]  # fmt: skip
+    sections.append({"title": "How to play", "rows": [("", a) for a in act]})
+    return [{"title": s["title"], "rows": [list(r) for r in s["rows"]]} for s in sections]
+
+
+NARRATIVE_LABEL = {
+    "h02": "Symptoms", "h03": "At their worst", "h04": "When it started", "h05": "How often",
+    "h06": "Since service", "h07": "Where you were", "h08": "What you were doing", "h09": "Conditions around you",
+    "h10": "What caused it", "h11": "Treated then?", "h12": "Effect on work", "h13": "Missed work",
+    "h14": "Daily life", "h15": "Before service", "h16": "Anything else",
+}  # fmt: skip
 
 
 class DSPySimulator:

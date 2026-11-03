@@ -117,7 +117,7 @@ def get_config(rt: MaybeRuntime):
     if scripted():
         from agent.scripted import demo
 
-        personas, out["secure_sample"] = [p for p in personas if p.id == demo.PERSONA], demo.SECURE
+        personas = [p for p in personas if p.id == demo.PERSONA]
     out["personas"] = [{"id": p.id, "name": p.display_name, "summary": p.summary} for p in personas]
     return out
 
@@ -186,6 +186,18 @@ def suggest(case_id: str, rt: Live):
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}
+
+
+@app.get("/api/cases/{case_id}/character")
+def character(case_id: str, rt: Live):
+    """The Character tab: who the presenter plays (the same facts the simulated veteran plays
+    from), and the secure form's test values, filled in for them. Synthetic data only."""
+    from intake_eval.runner import SECURE_FIELDS, secure_form_values
+    from intake_eval.simulator import character_card
+
+    persona = get_persona(_case(rt, case_id).persona_id)
+    return {"name": persona.display_name, "summary": persona.summary, "sections": character_card(persona),
+            "secure": secure_form_values(persona, list(SECURE_FIELDS))}  # fmt: skip
 
 
 @app.get("/api/cases/{case_id}/updates")
