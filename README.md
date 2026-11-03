@@ -71,7 +71,7 @@ poa_agent/
   skills/poa_21_22a/  SKILL.md for the intake subagent
   pdf/                fill.py, sign.py, transforms.py (ported from the Shire form engine)
   forms/              VA blank 21-22a
-config/representative.json   the appointed attorney and firm (Tabak Law)
+config/representative.json   the appointed attorney and firm (placeholders)
 demo/                 FastAPI host + single-page UI (secure form, signature pad, preview)
 tests/
 ```

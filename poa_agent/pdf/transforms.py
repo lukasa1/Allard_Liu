@@ -107,7 +107,7 @@ def _us10(p: str | None) -> str:
 
 
 def split_phone(p: str | None) -> tuple[str, str, str]:
-    """'+1 414-351-4400' -> ('414', '351', '4400'). A leading US country code is dropped."""
+    """'+1 555-555-0100' -> ('555', '555', '0100'). A leading US country code is dropped."""
     d = _us10(p)
     return (d[:3], d[3:6], d[6:10]) if len(d) >= 10 else ("", "", "")
 

@@ -29,16 +29,16 @@ def test_every_mapped_field_exists_in_the_blank():
     form.render_draft(VET, REP, form.Consents(True, True))
 
 
-def test_veteran_and_tabak_values_land_in_the_right_boxes():
+def test_veteran_and_firm_values_land_in_the_right_boxes():
     f = _fields(form.render_draft(VET, REP, form.Consents(True, False)))
     assert f["Veterans_Last_Name[0]"] == "TESTVETERAN"
     assert f["SocialSecurityNumber_LastFourNumbers[2]"] == "6789"  # page-3 header
     assert f["MailingAddress_ZIPOrPostalCode_LastFourNumbers[0]"] == "1234"
-    assert f["Last_Name[0]"] == "BRZEZINSKI"
-    assert f["MailingAddress_NumberAndStreet[2]"] == "PO BOX 427"
-    assert f["Telephone_Middle_Three_Numbers[1]"] == "351"
-    assert f["Provide_The_Name_Of_The_Firm_Or_Organization_Here[0]"] == "Tabak Law, LLC"
-    assert "Payton McCauley" in f["Provide_The_Names_Of_The_Individuals_Here[0]"]
+    assert f["Last_Name[0]"] == "1"
+    assert f["MailingAddress_NumberAndStreet[2]"] == "PO BOX 100"
+    assert f["Telephone_Middle_Three_Numbers[1]"] == "555"
+    assert f["Provide_The_Name_Of_The_Firm_Or_Organization_Here[0]"] == "Law Firm"
+    assert "Attorney 3" in f["Provide_The_Names_Of_The_Individuals_Here[0]"]
     assert f["AuthorizationForRepAccessToRecords[0]"] == "/1"
     assert f.get("AuthorizationForRepActClaimantsBehalf[0]") in (None, "/Off")
 
