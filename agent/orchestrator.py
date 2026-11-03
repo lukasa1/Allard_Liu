@@ -3,11 +3,12 @@
 It wakes on case_opened, subagent_result, support_flag, escalated and staff events nobody owns
 (agent/runtime.py). Each wake rebuilds its context from scratch: the skill index, the memory
 block (the case file and the last 10 events verbatim, never a transcript or the C-file) and the
-waking event. It makes at most one handoff per wake; the sub-agent's first turn runs after the
+waking event. Text from outside the firm in it (answers, flags, tasks, the face note, event data)
+is inside <untrusted> blocks (L6). It makes at most one handoff per wake; the sub-agent's first turn runs after the
 wake ends (D9).
 
 Tools: read_skill (from the harness), run_intake(goal), run_prep(goal), move_stage(to, reason)
-for moves back, needs_human and closed (D11), and staff_task(text) for a flag that goes to a
+for the move back to stage 4, needs_human and closed (D11), and staff_task(text) for a flag that goes to a
 person (L12). Its `reply` is the short update to the veteran at a handoff.
 """
 
@@ -22,7 +23,7 @@ from agent import stages
 from agent.casefile import CaseFile, Task
 from agent.harness import AgentSpec, Turn
 from agent.ingest import untrusted
-from agent.runtime import CHAT_EVENT_TYPES, Job
+from agent.runtime import CHAT_EVENT_TYPES, Job, add_task
 from agent.tools.registry import ToolSpec
 
 MEMORY_EVENTS = 10
@@ -40,8 +41,8 @@ class GoalArgs(BaseModel):
 
 
 class MoveArgs(BaseModel):
-    to: Literal["1", "2", "3", "4", "5", "needs_human", "closed"] = Field(
-        description="an earlier stage number, or needs_human / closed"
+    to: Literal["4", "needs_human", "closed"] = Field(
+        description="4 (back to pass 2, from stage 5), or needs_human / closed"
     )
     reason: str = Field(min_length=3)
 
@@ -68,7 +69,7 @@ def _handoff(turn: Turn, agent: str, goal: str) -> str:
     rt.patch(turn.case_id, apply, actor="orchestrator")
     if refusal:
         return f"refused: {refusal[0]}"
-    turn.handoff = agent
+    turn.handoff, turn.acted = agent, True
     turn.deferred.append(Job(agent, f"[handoff] Goal: {goal}", "start"))
     return f"Handed the case to {agent}; its first turn runs after this wake. Finish now."
 
@@ -82,11 +83,14 @@ def _move(turn: Turn, args: MoveArgs) -> str:
     event = turn.rt.move(turn.case_id, to, "orchestrator", args.reason)
     if event["type"] == "refused":
         return f"refused: {event['data']['reason']}"
+    turn.acted = True
     return f"moved: {json.dumps(event['data'])}"
 
 
 def _staff_task(turn: Turn, args: TaskArgs) -> str:
-    turn.rt.patch(turn.case_id, lambda c: c.tasks.append(Task(kind="staff", text=args.text)), actor="orchestrator")
+    turn.acted = True
+    if not add_task(turn.rt, turn.case_id, Task(kind="staff", text=args.text), actor="orchestrator"):
+        return "this staff task is already open"
     turn.rt.store.append_event(turn.case_id, "task_created", {"text": args.text}, actor="orchestrator")
     return "staff task created"
 
@@ -99,15 +103,16 @@ def tools(turn: Turn) -> list[ToolSpec]:
         ToolSpec("run_prep", "Hand the case to claims prep at stage 3 (21-22a and ITF filed): pull and read "
                  "the C-file, prefill, write the face note. One handoff per wake.", GoalArgs,
                  lambda a: _handoff(turn, "claims_prep", a.goal)),
-        ToolSpec("move_stage", "Move the case back to an earlier stage, or to needs_human or closed, with a "
-                 "reason. Forward moves happen in code.", MoveArgs, lambda a: _move(turn, a)),
+        ToolSpec("move_stage", "Move the case back from stage 5 to stage 4 (pass 2; intake must then ask "
+                 "about the reason), or to needs_human or closed, with a reason. Forward moves happen in "
+                 "code.", MoveArgs, lambda a: _move(turn, a)),
         ToolSpec("staff_task", "Create a task for a staff member (for example a flag a person should "
                  "decide). Does not change the stage.", TaskArgs, lambda a: _staff_task(turn, a)),
     ]  # fmt: skip
 
 
 def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
-    if turn.handoff:
+    if turn.handoff and name != "staff_task":  # a staff task and one handoff may share a wake
         return f"this wake already handed the case to {turn.handoff}; finish now"
     case = turn.case
     if name in ("run_intake", "run_prep"):
@@ -126,12 +131,18 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
 def context(turn: Turn) -> str:
     case = turn.case
     events = turn.rt.store.events(turn.case_id, exclude=CHAT_EVENT_TYPES, last=MEMORY_EVENTS)
-    open_flags = [case.flags[i].model_dump() for i in case.flags_to_decide()]
+    shown = case.flags_to_decide()
+    turn.flags_shown.extend(shown)  # marked handled when the wake ends (runtime._after_wake)
+    open_flags = [case.flags[i].model_dump() for i in shown]
+    memory = case.memory()
+    text = memory.pop("untrusted")
+    flags = untrusted("support flags (what the veteran told support)", json.dumps(open_flags)) if open_flags else "none"
+    lines = "\n".join(e.line() for e in events)
     return (
-        f"## Case file\n{json.dumps(case.memory(), indent=1)}\n\n"
-        "## Flags to decide this wake\n"
-        f"{untrusted('support flags (what the veteran told support)', json.dumps(open_flags)) if open_flags else 'none'}\n\n"
-        f"## Last {MEMORY_EVENTS} events (oldest first)\n" + "\n".join(e.line() for e in events)
+        f"## Case file\n{json.dumps(memory, indent=1)}\n{text}\n\n"
+        f"## Flags to decide this wake\n{flags}\n\n"
+        f"## Last {MEMORY_EVENTS} events (oldest first)\n"
+        + (untrusted("case events (their data may quote the veteran or the C-file)", lines) if lines else "(none)")
     )
 
 

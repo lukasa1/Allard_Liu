@@ -117,7 +117,7 @@ function scroll() { log.scrollTop = log.scrollHeight; }
 function say(text, who, agent) {
   const d = document.createElement("div"); d.className = "msg " + who;
   d.innerHTML = (agent ? `<span class="who">${esc(agent.replace("_", " "))}</span>` : "") + (who === "bot" ? linkify(text) : esc(text));
-  log.append(d); scroll();
+  log.append(d); scroll(); return d;
 }
 function showTab(name) {
   document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
@@ -164,6 +164,7 @@ async function poll() {
       else renderCard(item.payload);
     }
     $("#status").textContent = u.running.length ? `${u.running.join(", ").replace(/_/g, " ")} working…` : "";
+    $("#suggest").disabled = u.running.length > 0;  // autoplay waits for idle (the server says 409 too)
     renderPanel(await api(casePath("")));
   } catch (e) { $("#status").textContent = e.message; }
   finally { polling = false; }
@@ -172,7 +173,10 @@ $("#chat").addEventListener("submit", async (e) => {
   e.preventDefault();
   const t = $("#text").value.trim(); if (!t || !caseId) return;
   $("#text").value = "";
-  try { say((await api(casePath("/messages"), {text: t})).text, "user"); poll(); } catch (err) { say(err.message, "sys"); }
+  // Shown before the POST returns, so a reply (a crisis line) can't land above it; the server's
+  // redacted text (ID numbers hidden) replaces it when the POST returns.
+  const mine = say(t, "user");
+  try { mine.textContent = (await api(casePath("/messages"), {text: t})).text; poll(); } catch (err) { mine.remove(); say(err.message, "sys"); }
 });
 
 $("#suggest").onclick = async () => {  // autoplay: the eval's simulated veteran types the reply
@@ -323,7 +327,9 @@ function renderPanel(p) {
   $("#pane-events").innerHTML = p.events.map(ev).join("") || "<p class='muted'>No events yet.</p>";
   if (p.face_note.length) {
     $("#pane-note").innerHTML = `<div class="note">${p.face_note.map(l => `<div class="${l.includes("[UNCERTAIN") ? "uncertain" : ""}">${esc(l)}</div>`).join("")}</div>
-      <p class="muted">Every line cites C-file pages; verify ${p.prep.verified ? "passed" : "flagged the lines marked UNCERTAIN (staff tasks)"}.</p>`;
+      <p class="muted">${p.prep.verified ? "Verify passed: each line shows the C-file pages it cites (p. N), or the firm record."
+        : p.prep.uncertain.length ? "Verify escalated the lines marked UNCERTAIN (staff tasks); the others show the C-file pages they cite (p. N)."
+        : "Not verified yet: claims prep is still checking each line against the pages it cites."}</p>`;
     if (!noteBefore) showTab("note");
   }
   if (versionsChanged && shownDoc) showDoc(shownDoc);

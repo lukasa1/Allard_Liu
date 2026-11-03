@@ -161,10 +161,21 @@ def score_one(rt: SupportOnly, m: dict[str, Any]) -> SupportScore:
     )  # fmt: skip
 
 
+# Model calls per message, estimated: support's ReAct steps, an orchestrator wake for a flag or an
+# escalation, and kb_search's own call.
+EST_CALLS = {"support": 3, "orchestrator": 1, "kb_search": 1}
+
+
+def estimated_calls(n: int) -> str:
+    per = sum(EST_CALLS.values())
+    return f"about {per} model calls per message ({', '.join(f'{k} {v}' for k, v in EST_CALLS.items())}); {n} message(s): about {per * n}"
+
+
 def run_support_eval(messages: list[dict[str, Any]] | None = None, lm=None, kb=None,
-                     data_dir: Path | None = None) -> list[SupportScore]:  # fmt: skip
+                     data_dir: Path | None = None, max_cost: float | None = None) -> list[SupportScore]:  # fmt: skip
     """Score `messages` (default: the whole set). `lm`: default the live model (agent.config);
-    `kb`: default the web-search QA. Tests pass the scripted LM and a fake kb."""
+    `kb`: default the web-search QA. Tests pass the scripted LM and a fake kb. `max_cost`: stop
+    once the traced cost passes it (checked between messages, so one message may overshoot)."""
     from agent.config import load_env, make_lm
     from agent.qa import WebSearchQA
 
@@ -173,7 +184,14 @@ def run_support_eval(messages: list[dict[str, Any]] | None = None, lm=None, kb=N
     root = Path(data_dir or tempfile.mkdtemp(prefix="support-eval-"))
     harness = Harness(lm or make_lm(), TraceLog(root / "traces.jsonl"))
     rt = SupportOnly(Store(root / "cases.sqlite"), harness, kb or WebSearchQA())
-    return [score_one(rt, m) for m in messages]
+    scores = []
+    for m in messages:
+        scores.append(score_one(rt, m))
+        spent = sum(x.get("cost") or 0.0 for x in harness.traces.read() if x["kind"] == "lm")
+        if max_cost is not None and spent > max_cost:
+            print(f"  stopped after {len(scores)} message(s): the traced cost ${spent:.2f} passed --max-cost ${max_cost:.2f}")
+            break
+    return scores
 
 
 def _rate(values: list[bool | None]) -> str:

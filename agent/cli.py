@@ -35,11 +35,33 @@ def _conditions(text: str) -> list[str]:
     return wanted
 
 
-def _live(trials: int = 1):
+def unpriced(simulator: bool = True) -> list[str]:
+    """The configured model slugs with no price in config.PRICES: their calls are traced at $0."""
+    from agent.qa import DEFAULT_QA_MODEL
+
+    env = config.os.environ
+    agent = env.get("DSPY_MODEL") or config.DEFAULT_DSPY_MODEL
+    models = {agent, env.get("QA_MODEL", DEFAULT_QA_MODEL)} | ({env.get("DSPY_SIM_MODEL") or agent} if simulator else set())
+    return sorted(m for m in models if m not in config.PRICES)
+
+
+def check_prices(max_cost: float | None, simulator: bool = True) -> None:
+    """--max-cost can't hold for a model it can't price: refuse. Without --max-cost, warn."""
+    if not (bad := unpriced(simulator)):
+        return
+    if max_cost is not None:
+        raise SystemExit(f"--max-cost can't be enforced: no price in agent/config.py PRICES for {bad}, so "
+                         "their calls would count as $0. Add their prices, or run without --max-cost.")  # fmt: skip
+    print(f"WARNING: no price in agent/config.py PRICES for {bad}: the reported cost leaves their calls out.",
+          file=sys.stderr, flush=True)  # fmt: skip
+
+
+def _live(trials: int = 1, max_cost: float | None = None):
     """(make_rt, make_sim) on the live model, or exit with NO_KEY. Trials > 1 turn DSPy's response
     cache off, so trial 2 doesn't replay trial 1 (pass^k)."""
     if not config.os.environ.get("OPENROUTER_API_KEY"):
         raise SystemExit(NO_KEY)
+    check_prices(max_cost)
     if trials > 1:
         config.os.environ["DSPY_CACHE"] = "0"
     from agent.runtime import make_runtime
@@ -67,7 +89,7 @@ def cmd_simulate(args: argparse.Namespace) -> None:
     if len(conditions) != 1:
         raise SystemExit("simulate runs one condition: ask_no_probes, ask or cfile")
     condition = conditions[0]
-    make_rt, make_sim = _live()
+    make_rt, make_sim = _live(max_cost=args.max_cost)
     print(f"{persona.id} ({condition}): {estimated_calls(1)}", flush=True)
     data_dir = Path(tempfile.mkdtemp(prefix="simulate-"))
     run = run_case(persona, condition, lambda: make_rt(data_dir), make_sim(persona), max_cost=args.max_cost)
@@ -80,7 +102,7 @@ def cmd_eval(args: argparse.Namespace) -> None:
     from intake_eval.evaluate import aggregate, estimated_calls, headline_line, run_eval
 
     personas, conditions = load_personas(args.personas), _conditions(args.conditions)
-    make_rt, make_sim = _live(args.trials)
+    make_rt, make_sim = _live(args.trials, args.max_cost)
     runs = len(personas) * len(conditions) * args.trials
     print(f"{len(personas)} persona(s) x {len(conditions)} condition(s) x {args.trials} trial(s): "
           f"{estimated_calls(runs)}" + (f"; stops past ${args.max_cost:.2f}" if args.max_cost else ""), flush=True)  # fmt: skip
@@ -98,11 +120,20 @@ def cmd_eval(args: argparse.Namespace) -> None:
 def cmd_support_eval(args: argparse.Namespace) -> None:
     import json
 
-    from intake_eval.support_eval import load_messages, misses, run_support_eval, summarize
+    from intake_eval.support_eval import (
+        estimated_calls,
+        load_messages,
+        misses,
+        run_support_eval,
+        summarize,
+    )
 
     if not config.os.environ.get("OPENROUTER_API_KEY"):
         raise SystemExit(NO_KEY)
-    scores = run_support_eval(load_messages(luke_only=args.luke))
+    check_prices(args.max_cost, simulator=False)
+    messages = load_messages(luke_only=args.luke)
+    print(estimated_calls(len(messages)) + (f"; stops past ${args.max_cost:.2f}" if args.max_cost else ""), flush=True)
+    scores = run_support_eval(messages, max_cost=args.max_cost)
     print(json.dumps(summarize(scores), indent=2))
     wrong = misses(scores)
     print("\nMisses:" if wrong else "\nNo misses.")
@@ -135,7 +166,8 @@ def main(argv: list[str] | None = None) -> None:
 
     def max_cost_arg(p: argparse.ArgumentParser) -> None:
         p.add_argument("--max-cost", type=float, default=None,
-                       help="stop when the traced cost (USD, agents + simulated veteran) passes this")  # fmt: skip
+                       help="stop when the traced cost (USD, every model call) passes this; checked between "
+                            "steps, so one step may overshoot. Refused if a configured model has no price")  # fmt: skip
 
     p = sub.add_parser("simulate", help="watch one synthetic veteran go through a whole case (live model)")
     p.add_argument("--persona", default="baseline_clean")
@@ -155,6 +187,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("support-eval", help="score the customer-support sub-agent (live model)")
     p.add_argument("--luke", action="store_true", help="only the subset matching Luke's 50 messages")
     p.add_argument("--strict", action="store_true", help="exit 1 if any message is mishandled")
+    max_cost_arg(p)
     p.set_defaults(func=cmd_support_eval)
 
     p = sub.add_parser("personas", help="list the synthetic veterans")

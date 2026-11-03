@@ -42,7 +42,8 @@ from typing import Any
 from agent.casefile import CaseFile
 from agent.cfile.facts import CfileFacts, truth_facts
 from agent.claims_prep import facts as factlib
-from agent.claims_prep.agent import cfile, render_note
+from agent.claims_prep.agent import cfile, plain, render_note
+from agent.claims_prep.verify import mentions
 from agent.claims_prep.verify import missing as cite_missing
 from agent.intake import checklist
 from agent.intake.conditions import normalize_condition
@@ -223,11 +224,11 @@ def question_metrics(run: CaseRun, case: CaseFile) -> dict[str, Any]:
 def orchestrator_metrics(run: CaseRun, persona: Persona) -> dict[str, Any]:
     events = run.events
     refused = Counter(e.actor for e in events if e.type == "refused" and e.actor != "derive")
-    condition = persona.during_prep.get("condition", "").lower()
+    condition = persona.during_prep.get("condition", "")
     decisions = []
     for flag in (e for e in events if e.type == "support_flag"):
         later = [e for e in events if e.seq > flag.seq and e.actor == "orchestrator"]
-        if any(e.type == "handoff" and e.data["to"] == "intake" and condition in e.data["goal"].lower()
+        if any(e.type == "handoff" and e.data["to"] == "intake" and mentions(" ".join(e.data["goal"].lower().split()), condition)
                for e in later):  # fmt: skip
             decisions.append("reopen_intake")
         elif any(e.type == "task_created" for e in later):
@@ -266,7 +267,7 @@ def claims_prep_metrics(run: CaseRun, persona: Persona, case: CaseFile) -> dict[
     holds = [not cite_missing(f, pages.owner(f.cite.page).page(f.cite.page)) for f in table]
     want = render_note(run.rt, case, truth_facts(persona))
     expected = [line.text for line in want.lines if line.sources is not None]  # separators skipped
-    got = Counter(line.split("  [UNCERTAIN")[0] for line in prep.face_note.splitlines())
+    got = Counter(plain(line) for line in prep.face_note.splitlines())
     matched = sum((Counter(expected) & got).values())
     return {
         "facenote_line_accuracy": matched / len(expected) if expected else None,

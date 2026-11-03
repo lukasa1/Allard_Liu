@@ -27,6 +27,7 @@ from agent.casefile import STAGE_NAMES, CaseFile
 from agent.harness import AgentSpec, Turn, conversation
 from agent.ingest import redact_chat
 from agent.intake.agent import fee_line
+from agent.intake.conditions import normalize_condition
 from agent.kb import kb_tool
 from agent.tools.registry import NoArgs, ToolSpec
 
@@ -187,11 +188,16 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
     text = getattr(args, "text", None) or getattr(args, "reason", None)
     if text and redact_chat(text)[1]:
         return "ID numbers and dates of birth never go in the case file; leave them out"
-    if name == "flag_orchestrator" and (
-        same := [f.text for f in turn.case.flags if f.kind == args.kind and f.status != "handled"]
-    ):
-        return f"a {args.kind} flag is already with the orchestrator ({', '.join(same)}); don't flag it again"
+    if name == "flag_orchestrator" and any(f.kind == args.kind and _same(f.kind, f.text, args.text)
+                                           for f in turn.case.flags if f.status != "handled"):  # fmt: skip
+        return f"this {args.kind} flag is already with the orchestrator; don't flag it again"
     return None
+
+
+def _same(kind: str, a: str, b: str) -> bool:
+    """One flag per thing: a second, different new condition is a new flag."""
+    norm = normalize_condition if kind == "new_condition" else (lambda t: " ".join(t.lower().split()))
+    return norm(a) == norm(b)
 
 
 def spec() -> AgentSpec:

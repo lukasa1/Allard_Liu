@@ -22,16 +22,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from agent.casefile import STAGE_NAMES, Answer, CaseFile, DocState, Filing, now
+from agent.casefile import STAGE_NAMES, Answer, CaseFile, DocState, Filing, Task, now
 from agent.harness import AgentSpec, Turn, conversation
-from agent.ingest import redact_chat
+from agent.ingest import redact_chat, untrusted
 from agent.intake import checklist
-from agent.intake.documents import OGC_TASK, service
+from agent.intake.documents import OGC_TASK, masked_answers, refresh_drafts, service
 from agent.kb import kb_tool
 from agent.tools.registry import NoArgs, ToolSpec
-from poa_skill.fee_agreement import REQUIRED_CLIENT_FIELDS
+from poa_skill import fee_agreement
 from poa_skill.form_21_22a import REQUIRED_VETERAN_FIELDS
-from poa_skill.service import CONSENT_KEYS, FORMS
+from poa_skill.service import CONSENT_KEYS, FORMS, WorkflowError
 from poa_skill.tools import form_card, preview_card
 from poa_skill.vault import FIELDS
 
@@ -92,16 +92,24 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
         return {"saved": False, "error": f"could not read {args.a!r} for {key}: {err}. Ask again, or "
                 "pass the value as JSON, or set unknown if the veteran doesn't know."}  # fmt: skip
     answer = Answer(value=value, source=f"veteran, chat {now()[11:16]} UTC", raw=args.a, unknown=args.unknown)
+    unsure_confirm = args.q.startswith("confirm:") and args.unknown
 
     def apply(case: CaseFile) -> None:
-        case.answers[key] = answer
-        for c in case.conflicts:
-            if c.question == key and not c.resolved_at:
-                c.resolved_at = answer.at
+        open_ = [c for c in case.conflicts if c.question == key and not c.resolved_at]
+        if unsure_confirm and key in case.answers:  # keep the held answer; a person checks the C-file
+            case.tasks.extend(Task(kind="staff", text=f"The veteran couldn't say which is right for {key}: "
+                                   f"the C-file ({c.cite}) says {c.cfile!r}, the answer on file is "
+                                   f"{c.on_file!r}. Check with them.") for c in open_)  # fmt: skip
+        else:
+            case.answers[key] = answer
+        for c in open_:
+            c.resolved_at = answer.at
         checklist.refresh(case)
 
     case = turn.rt.patch(turn.case_id, apply, actor="intake")
     out: dict[str, Any] = {"saved": key, "value": value, "stage": case.stage}
+    if unsure_confirm:
+        out = {"kept": key, "note": "The answer on file stays; a staff task asks a person to check.", "stage": case.stage}
     if case.stop:
         out["stop_rule"] = case.stop.model_dump()
         out["note"] = f"A firm stop rule fired; the case is {case.side_state}. Tell the veteran kindly and finish."
@@ -112,7 +120,9 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
 
 
 def get_case(turn: Turn) -> dict:
-    return {"case": turn.case.memory(), "documents": _svc(turn).status()}
+    status = _svc(turn).status()
+    status["captured"] = untrusted("the secure form (masked)", json.dumps(status["captured"]))
+    return {"case": turn.case.memory(), "documents": status}
 
 
 # ------------------------------------------------------------------------------ documents
@@ -165,9 +175,15 @@ def update_draft(turn: Turn, args: DraftArgs) -> dict:
     doc = svc.live(args.form)
     if doc is None:
         return {"error": f"no {args.form} draft: call fill_pdf first"}
-    doc = svc.edit(doc.id, args.changes, actor="intake")
+    try:
+        doc = svc.edit(doc.id, args.changes, actor="intake")
+    except WorkflowError as err:
+        return {"error": str(err)}
+    turn.rt.patch(turn.case_id, masked_answers(svc, sorted(args.changes), f"veteran, chat {now()[11:16]} UTC"), "intake")
     _post(turn, preview_card(svc, doc))
-    return {**svc.describe(doc), "note": "The preview is updated. Ask the veteran to check it again."}
+    others = refresh_drafts(turn.rt, turn.case_id, svc)  # the other form's draft shows the change too
+    return {**svc.describe(doc), "also_refreshed": others,
+            "note": "The preview is updated. Ask the veteran to check it again."}  # fmt: skip
 
 
 def get_signature(turn: Turn, args: FormArgs) -> dict:
@@ -179,6 +195,9 @@ def get_signature(turn: Turn, args: FormArgs) -> dict:
         _post(turn, {"type": "signature_pad"})
         return {"status": "signature pad open", "note": "Wait for the veteran to draw and save a "
                 "signature, then call get_signature again."}  # fmt: skip
+    if args.form == "fee_agreement" and doc.terms.get("fee_pct") != checklist.fee_pct(turn.case):
+        return {"ready": False, "reason": "the fee terms changed since the draft (prior representation was "
+                "re-recorded): call fill_pdf for the fee agreement again and show the veteran the new terms"}  # fmt: skip
     ok, why = svc.ready_to_sign(doc.id)
     if not ok:
         return {"ready": False, "reason": why}
@@ -259,13 +278,19 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
         if case.documents.get(args.form) and case.documents[args.form].signed_at:
             return f"the {args.form} is already signed"
         veteran = _svc(turn).vault.veteran()
-        needed = REQUIRED_VETERAN_FIELDS if args.form == "21-22a" else REQUIRED_CLIENT_FIELDS
+        needed = REQUIRED_VETERAN_FIELDS if args.form == "21-22a" else fee_agreement.REQUIRED_CLIENT_FIELDS
         gaps = [k for k in needed if not _get(veteran, k)]
+        if args.form == "fee_agreement" and not fee_agreement.claim_number(veteran):
+            gaps.append(" or ".join(fee_agreement.CLAIM_NUMBER_FIELDS))  # 38 CFR 14.636(g)(1)
+        if args.form == "fee_agreement" and checklist.fee_pct(case) is None:
+            return "the fee isn't set yet: record prior_attorney first (the fee comes from the firm's rules)"
         if gaps:
             return f"call request_secure_info first for: {', '.join(gaps)}"
         if args.form == "21-22a" and set(args.fields) != set(CONSENT_KEYS):
             return f"ask the veteran about Items 20 and 22 first, then pass both: {', '.join(CONSENT_KEYS)}"
         return None
+    if name in ("get_signature", "submit_va", "efax_ogc") and case.stop:
+        return f"stop rule {case.stop.rule} fired: nothing more is signed or sent; a person decides"
     if name == "submit_va":
         if args.form in case.filings:
             return f"the {args.form} is already filed ({case.filings[args.form].confirmation})"
@@ -301,6 +326,7 @@ def context(turn: Turn) -> str:
     case = turn.rt.patch(turn.case_id, checklist.refresh, actor="intake")  # rebuilt every turn (L18)
     part, status = _part(case), _svc(turn).status()
     known = [f"- {k}: {'UNKNOWN' if a.unknown else json.dumps(a.value)} ({a.source})" for k, a in case.answers.items()]
+    tasks = [f"- {t.text} (due {t.due})" for t in case.tasks if not t.done_at]
     items = checklist.missing(case, part)
     docs = [{k: d[k] for k in ("kind", "status", "version", "missing", "consents", "terms")}
             for d in status["documents"] if d["status"] != "superseded"]  # fmt: skip
@@ -309,17 +335,20 @@ def context(turn: Turn) -> str:
     sections = {
         "This pass": f"{this_pass} Goal from the orchestrator: {case.goal}",
         "Case": f"stage {case.stage} ({STAGE_NAMES[case.stage]}); side state: {case.side_state}; stop rule: {stop}",
-        "Known fields (value, source)": "\n".join(known) or "(none)",
-        f"Missing ({part} checklist, {len(items)} left)": "\n".join(i.model_dump_json() for i in items) or "(none)",
+        "Known fields (value, source)": untrusted("answers from the veteran and the C-file", "\n".join(known))
+        if known else "(none)",
+        f"Missing ({part} checklist, {len(items)} left)": untrusted("checklist (C-file values and condition names "
+                                                                    "inside)", "\n".join(i.model_dump_json() for i in items))
+        if items else "(none)",
         "Documents": "\n".join([
-            f"secure form on file (masked): {json.dumps(status['captured'])}",
+            "secure form on file (masked): " + untrusted("the secure form (masked)", json.dumps(status["captured"])),
             f"signature on file: {status['signature_on_file']}; pending secure forms: {status['pending_secure_forms']}",
             f"documents: {json.dumps(docs)}",
             f"signed / countersigned: {json.dumps({k: v.model_dump() for k, v in case.documents.items()})}",
         ]),
         "Fee": fee_line(case),
         "Filings": json.dumps({k: v.model_dump() for k, v in case.filings.items()}) if case.filings else "none",
-        "Open tasks": "\n".join(f"- {t.text} (due {t.due})" for t in case.tasks if not t.done_at) or "none",
+        "Open tasks": untrusted("open tasks (may quote the veteran or the C-file)", "\n".join(tasks)) if tasks else "none",
         f"Last {HISTORY} messages": conversation(turn, HISTORY),
     }
     return "\n\n".join(f"## {title}\n{body}" for title, body in sections.items())

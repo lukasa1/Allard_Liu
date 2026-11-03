@@ -56,18 +56,41 @@ _BRANCH_RE = re.compile(
     r"\b(" + "|".join(re.escape(w) for w in sorted(_BRANCHES, key=len, reverse=True)) + r")\b",
     re.IGNORECASE,
 )
-_DISCHARGES = [  # longest first, so "other than honorable" never reads as "honorable"
-    ("other than honorable", "oth"),
-    ("under other than honorable", "oth"),
-    ("oth", "oth"),
-    ("bad conduct", "bad_conduct"),
-    ("dishonorable", "dishonorable"),
-    ("general under honorable", "general"),
-    ("general", "general"),
-    ("uncharacterized", "uncharacterized"),
-    ("entry level", "uncharacterized"),
-    ("honorable", "honorable"),
+DISCHARGES = ("honorable", "general", "oth", "bad_conduct", "dishonorable", "uncharacterized")
+# Discharge phrases (after hyphens and underscores became spaces), most specific first. Each match
+# is blanked out before the next, so "other than honorable" never also reads as "honorable".
+_DISCHARGE_RES = [
+    # A qualifier before "honorable" makes it non-honorable: OTH is the catch-all code (A1 then
+    # sends it to an attorney, which is a review, not a rejection).
+    (r"\b(under )?(other than|less than|not|non|un|wasn'?t|was not|isn'?t|is not) ?honorable\b", "oth"),
+    (r"\bdis ?honorable\b", "dishonorable"),
+    (r"\b(bad conduct|bcd)\b", "bad_conduct"),
+    (r"\bgeneral\b(\W*under honorable( conditions)?\b)?", "general"),
+    (r"\b(uncharacterized|entry level( separation)?|els)\b", "uncharacterized"),
+    (r"\both\b", "oth"),
+    (r"\bhonorabl[ey]\b", "honorable"),
 ]
+_NEGATED = re.compile(r"\b(not|never|no|wasn'?t|isn'?t|nor)\s+(an?\s+|a\s+)?$")
+
+
+def parse_discharge(text: str) -> str | None:
+    """The character of discharge named in `text` (one of DISCHARGES), or None when there is none
+    or it isn't clear (two different ones, "not general", "not sure"): then intake asks again."""
+    low = re.sub(r"\s+", " ", re.sub(r"[-_/]", " ", text.lower()))
+    if low.strip() in DISCHARGES:
+        return low.strip()
+    found = set()
+    for pattern, code in _DISCHARGE_RES:
+        for m in re.finditer(pattern, low):
+            if _NEGATED.search(low[: m.start()]):
+                return None  # "not dishonorable", "never got a general": unclear, ask again
+            found.add(code)
+        low = re.sub(pattern, " ", low)
+    if len(found) != 1 or _UNSURE.search(text):
+        return None
+    return found.pop()
+
+
 _COMPONENTS = [
     ("national guard", "guard"),
     ("guard", "guard"),
@@ -115,20 +138,39 @@ def _phrase_code(table: list[tuple[str, str]], low: str) -> str | None:
     return next((code for phrase, code in table if re.search(rf"\b{re.escape(phrase)}\b", low)), None)
 
 
-def parse_bool(text: str) -> bool | None:
+# A turn after the first word: "No combat, but I was in the Navy", "Nah just kidding, yes".
+_TURN = re.compile(r"\b(but|though|although|except|just kidding|kidding|j/?k|actually|wait)\b", re.IGNORECASE)
+
+
+def parse_bool(text: str, strict: bool = False) -> bool | None:
     """A leading yes/no first ("Yes I served, not sure what else you need" is a yes; "No idea" is
-    not a no); then unsure; then negations ("I did not") before affirmations ("I did")."""
+    not a no); then unsure; then negations ("I did not") before affirmations ("I did"). A no that
+    turns into a yes ("Never deployed, but yes I served") or a mix of both is unclear: None.
+
+    `strict` (a stop-rule field such as is_veteran): a no counts only when it is a bare no or is
+    about serving ("No, I never served"), not about something else ("Never deployed")."""
+    lead_no = _LEAD_NO.match(text)
     if _LEAD_YES.match(text) or _LEAD_OK.match(text):
-        return True
-    if _LEAD_NO.match(text):
-        return None if _UNSURE.search(text) else False  # "No, I'm not sure" is unsure
+        rest = text[(_LEAD_YES.match(text) or _LEAD_OK.match(text)).end():]
+        return None if _TURN.search(rest) and re.search(r"\b(no|not|never|nope)\b", rest, re.IGNORECASE) else True
+    if lead_no:
+        rest = text[lead_no.end():]
+        if _UNSURE.search(text) or _TURN.search(rest) or _YES.search(rest) or _LEAD_YES.search(rest):
+            return None  # "No, I'm not sure" is unsure; "No combat, but I was in the Navy" is not a no
+        return False if not strict or _about_serving(text) else None
     if _UNSURE.search(text):
         return None
-    if _NEG.search(text):
-        return False
-    if _YES.search(text):
-        return True
-    return None
+    neg, yes = _NEG.search(text), _YES.search(text)
+    if neg and yes:
+        return None  # "I never deployed but I served"
+    if neg:
+        return False if not strict or _about_serving(text) else None
+    return True if yes else None
+
+
+def _about_serving(text: str) -> bool:
+    return bool(re.fullmatch(r"\W*(no|nope|nah|never|not really)\W*", text, re.IGNORECASE)
+                or re.search(r"\b(serv\w*|veteran|military|enlist\w*|armed forces)\b", text, re.IGNORECASE))
 
 
 def parse_service_periods(text: str) -> list[ServicePeriod] | None:
@@ -141,7 +183,7 @@ def parse_service_periods(text: str) -> list[ServicePeriod] | None:
         )
         if branch is None or len(dates) < 2:
             continue
-        discharge = _phrase_code(_DISCHARGES, low)
+        discharge = parse_discharge(chunk)
         rest = low.replace("coast guard", "")  # so "Coast Guard" isn't read as the National Guard
         component = next(
             (code for phrase, code in _COMPONENTS if re.search(rf"\b{phrase}\b", rest)), "active"
@@ -195,17 +237,20 @@ def parse_list(text: str) -> list[str] | None:
     return items or (None if any(parts) else [])
 
 
-def parse_text(qtype: str, text: str, options: tuple[str, ...] = ()) -> Any:
-    """Rule-based reading of a plain answer. Returns None when the answer can't be read."""
+def parse_text(qtype: str, text: str, options: tuple[str, ...] = (), strict: bool = False) -> Any:
+    """Rule-based reading of a plain answer. Returns None when the answer can't be read. `strict`
+    is for stop-rule fields: only an unambiguous answer counts."""
     text = text.strip()
     if not text:
         return None
     match qtype:
         case "bool":
-            return parse_bool(text)
-        case "int":
-            m = re.search(r"\d+", text)
-            return int(m.group()) if m else None
+            return parse_bool(text, strict)
+        case "int":  # "I'm not 100, I'm 70" or "70, maybe 100 soon" is unclear: ask again
+            numbers = set(re.findall(r"\d+", text))
+            if len(numbers) != 1 or re.search(r"\b(not|isn'?t|wasn'?t|never|maybe|hope|soon)\b", text, re.IGNORECASE):
+                return None
+            return int(numbers.pop())
         case "str":
             return None if _is_only_unsure(text) else text.rstrip(".")
         case "enum":
@@ -256,18 +301,18 @@ def _norm_period(p: Any) -> Any:
         out["branch"] = _BRANCHES[out["branch"]]
     dis = out.get("discharge")
     if dis:
-        out["discharge"] = _phrase_code(_DISCHARGES, dis.replace("_", " ")) or dis
+        out["discharge"] = parse_discharge(dis) or dis  # unreadable: the model validation refuses it
     return out
 
 
-def coerce(qtype: str, value: Any, options: tuple[str, ...] = ()) -> Any:
+def coerce(qtype: str, value: Any, options: tuple[str, ...] = (), strict: bool = False) -> Any:
     """Validate and normalise a value for a field type. Raises ValueError if it doesn't fit."""
     if isinstance(value, str) and qtype not in ("str", "narrative", "enum"):
         stripped = value.strip()
         if stripped[:1] in "[{" or stripped in ("true", "false", "null") or stripped.isdigit():
             value = json.loads(stripped)
         else:
-            value = parse_text(qtype, stripped, options)
+            value = parse_text(qtype, stripped, options, strict)
     if value is None:
         raise ValueError("no value")
     match qtype:

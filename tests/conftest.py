@@ -9,8 +9,6 @@ os.environ.pop("POA_VAULT_KEY", None)
 # Empty (not unset) so a developer's .env can't switch tests to a live model: load_dotenv never
 # overrides a variable that already exists.
 os.environ["OPENROUTER_API_KEY"] = ""
-os.environ["INTAKE_PROVIDER"] = "offline"
-os.environ["LIGHTHOUSE_MODE"] = "stub"
 os.environ["DSPY_CACHE"] = "0"
 
 import pytest

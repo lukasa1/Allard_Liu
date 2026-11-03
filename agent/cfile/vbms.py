@@ -40,6 +40,8 @@ class Document:
         return range(self.first_page, self.first_page + len(self.pages))
 
     def page(self, n: int) -> str:
+        if n not in self.page_numbers:  # no wrap-around on a page before this document
+            raise KeyError(f"{self.doc_id} has {self.summary()['pages']}, not page {n}")
         return self.pages[n - self.first_page]
 
     def summary(self) -> dict:

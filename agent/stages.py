@@ -13,7 +13,9 @@
 Code derives the stage and the waiting state from the case file after every change (`settle`)
 and runs each proposed change through the same guard (`check_stage`, `check_side`) that checks
 the orchestrator's moves and handoffs. Moves inside one owner's stages happen automatically;
-a move to another owner only through a handoff (`check_handoff`). A fired stop rule parks the
+a move to another owner only through a handoff (`check_handoff`). The only move back is from
+stage 5 to stage 4 (F9: other moves back would need rebuilt stages); it leaves a pending reopen
+item in pass 2 (`CaseFile.reopen`), so stage 5 waits until intake asks about it. A fired stop rule parks the
 case: `closed` while nothing is filed (or `needs_human` when the rule leaves it to an attorney),
 `needs_human` after filing (a person decides on withdrawal).
 """
@@ -22,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent.casefile import PARKED, CaseFile
+from agent.casefile import PARKED, CaseFile, Reopen
 
 SIDE_STATES = ("waiting_on_veteran", "waiting_on_attorney", "waiting_on_va", *PARKED)
 SIGNED_FORMS = ("21-22a", "fee_agreement")
@@ -65,11 +67,13 @@ def check_stage(case: CaseFile, to: int, actor: str, reason: str | None = None) 
     """Guard for a stage move. `actor` is `derive` (code), `handoff`, or the agent moving it."""
     if to == case.stage:
         return None
-    if case.parked and actor != "staff":
+    if case.parked:
         return f"the case is {case.side_state}: only a person can move it"
     if to < case.stage:
-        if actor not in ("orchestrator", "staff"):
+        if actor != "orchestrator":
             return "only the orchestrator moves a case back"
+        if to != 4:
+            return "the only move back is to stage 4 (pass 2), from stage 5"
         if not reason:
             return "a move back needs a reason"
         if case.owner:
@@ -88,7 +92,7 @@ def check_side(case: CaseFile, to: str | None, actor: str, reason: str | None = 
     """Guard for entering (or leaving, `to=None`) a side state."""
     if to == case.side_state:
         return None
-    if case.parked and actor != "staff":
+    if case.parked:
         return f"the case is {case.side_state}: only a person can move it"
     if to in PARKED:
         if not reason:
@@ -157,9 +161,6 @@ def settle(case: CaseFile) -> list[dict[str, Any]]:
         to = case.stage + 1
         if entry_unmet(case, to):
             break
-        if refusal := check_stage(case, to, "derive"):
-            events.append({"type": "refused", "data": {"move": f"stage {to}", "actor": "derive", "reason": refusal}})
-            break
         events.append(_move_stage(case, to, "derive", "exit criteria met"))
     side = _derived_side(case)
     if side != case.side_state and case.side_state not in PARKED:
@@ -172,11 +173,10 @@ def settle(case: CaseFile) -> list[dict[str, Any]]:
 
 def _move_stage(case: CaseFile, to: int, actor: str, reason: str | None) -> dict[str, Any]:
     event = {"type": "stage_changed", "data": {"from": case.stage, "to": to, "actor": actor, "reason": reason}}
-    if to < case.stage:  # a reopened stage must show its exit criteria again: intake rebuilds them
-        if to <= 4:
-            case.checklist["pass2"] = None
-        if to <= 1:
-            case.checklist["screen"] = None
+    if to < case.stage:  # back to pass 2: intake rebuilds its checklist, with the reopen item
+        case.checklist["pass2"] = None
+        before = case.answers.get("claim_conditions")
+        case.reopen = Reopen(reason=reason or "moved back", before=before and before.model_dump(mode="json"))
     case.stage = to
     return event
 

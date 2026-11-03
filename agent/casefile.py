@@ -8,10 +8,13 @@ each agent's recent conversation is read from it (L3). The SSN is never here.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+from agent.ingest import untrusted
 
 Agent = Literal["orchestrator", "intake", "claims_prep", "support"]
 Owner = Literal["intake", "claims_prep"]  # the case-owning sub-agents (A3: one at a time)
@@ -109,11 +112,21 @@ class Flag(BaseModel):
 
 
 class StopRule(BaseModel):
-    rule: str  # not_veteran | rated_100 | non_honorable_period
+    rule: str  # not_veteran | rated_100 | non_honorable_period | screen_unresolved
     reason: str
     # Where the case goes while nothing is filed: closed, or a person (the attorney) decides.
     # Once anything is filed it is always needs_human.
     to: Literal["closed", "needs_human"] = "closed"
+
+
+class Reopen(BaseModel):
+    """The orchestrator moved the case back to stage 4 (pass 2). Until intake records
+    `claim_conditions` again (the answer differs from `before`), pass 2 shows it as missing, so
+    stage 5 waits."""
+
+    reason: str
+    at: str = Field(default_factory=now)
+    before: dict[str, Any] | None = None  # the claim_conditions answer at the move back
 
 
 class SubagentResult(BaseModel):
@@ -150,6 +163,7 @@ class CaseFile(BaseModel):
     prep: PrepState = Field(default_factory=PrepState)
     tasks: list[Task] = Field(default_factory=list)
     flags: list[Flag] = Field(default_factory=list)
+    reopen: Reopen | None = None  # the last move back to pass 2
 
     def filed(self, *names: str) -> bool:
         return all(n in self.filings for n in names)
@@ -168,12 +182,29 @@ class CaseFile(BaseModel):
         return self.side_state in PARKED
 
     def memory(self) -> dict[str, Any]:
-        """The case-file part of a memory block (L10): what the case is, not how agents talk."""
-        data = self.model_dump(mode="json", exclude={"created_at", "persona_id", "eval_condition"})
+        """The case-file part of a memory block (L10): what the case is, not how agents talk.
+
+        Text from outside the firm (the veteran's answers, C-file values, the face note, flags,
+        tasks, conflicts) is one `untrusted` block (L6), under the key "untrusted"; the raw text
+        an answer was parsed from is left out (no transcripts)."""
+        data = self.model_dump(mode="json", include={"case_id", "stage", "owner", "side_state", "side_reason",
+                                                     "goal", "awaiting_veteran", "stop", "documents", "filings",
+                                                     "reopen"})  # fmt: skip
         data["stage_name"] = STAGE_NAMES[self.stage]
         # Claims prep's working memory stays out: what it produced, not how it read.
-        data["prep"] = {"done": self.prep.done, "facts": len(self.prep.facts),
-                        **self.prep.model_dump(include={"face_note", "verified", "uncertain", "prefill_done"})}  # fmt: skip
-        data["open_tasks"] = [t.text for t in self.tasks if t.done_at is None]
-        del data["tasks"]
+        data["prep"] = {"done": self.prep.done, "facts": len(self.prep.facts), "verified": self.prep.verified,
+                        "prefill_done": self.prep.prefill_done, "face_note": bool(self.prep.face_note),
+                        "uncertain": len(self.prep.uncertain)}  # fmt: skip
+        data["answered"] = len(self.answers)
+        text = {
+            "answers": {k: a.model_dump(mode="json", exclude={"raw"}) for k, a in self.answers.items()},
+            "checklist": self.checklist,
+            "conflicts": [c.model_dump(mode="json") for c in self.conflicts],
+            "face_note": self.prep.face_note,
+            "uncertain": self.prep.uncertain,
+            "open_tasks": [t.text for t in self.tasks if t.done_at is None],
+            "flags": [f.model_dump(mode="json") for f in self.flags],
+        }
+        data["untrusted"] = untrusted("case-file text from the veteran, the C-file and the team",
+                                      json.dumps(text, indent=1))  # fmt: skip
         return data

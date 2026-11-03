@@ -41,6 +41,12 @@ RULES: dict[str, Rule] = {
             "character-of-discharge determination (38 CFR 3.12), so this is a review, not a rejection.",
         ),
         Rule(
+            "screen_unresolved",
+            "firm_policy",
+            "The veteran couldn't say whether they served, or their service periods: the stop "
+            "rules above can't be decided, so a person on the team follows up (plan A1).",
+        ),
+        Rule(
             "fee_pct",
             "firm_policy",
             "PLACEHOLDER, unconfirmed by the firm: 30% standard; 20% when a prior private attorney "

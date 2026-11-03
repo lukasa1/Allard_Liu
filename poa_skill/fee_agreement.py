@@ -22,6 +22,10 @@ EDITION = "synthetic v1"
 TITLE = "Attorney Fee Agreement and Conditions of Costs"
 VA_WITHHOLDING_MAX_PCT = 20  # 38 CFR 14.636(h): VA pays the attorney directly only up to 20%
 REQUIRED_CLIENT_FIELDS = {"first_name": "first name", "last_name": "last name"}
+# 38 CFR 14.636(g)(1): the agreement must show the VA file number; with none, the SSN is the claim
+# number. Either one is enough (`va_file_number` first).
+CLAIM_NUMBER_FIELDS = ("va_file_number", "ssn")
+CLAIM_NUMBER_LABEL = "VA file number or Social Security number"
 
 # Signature page (points, bottom-left origin): [x0, y0, x1, y1].
 CLIENT_SIG = [72, 560, 330, 590]
@@ -34,8 +38,22 @@ _MARGIN = 72
 _FONT, _BOLD, _SIZE, _LEAD = "Times-Roman", "Times-Bold", 11, 14
 
 
-def missing_fields(client: dict) -> list[str]:
-    return [label for key, label in REQUIRED_CLIENT_FIELDS.items() if not client.get(key)]
+def missing_fields(client: dict, fee_pct: int | None = 0) -> list[str]:
+    gaps = [label for key, label in REQUIRED_CLIENT_FIELDS.items() if not client.get(key)]
+    if not claim_number(client):
+        gaps.append(CLAIM_NUMBER_LABEL)
+    if fee_pct is None:
+        gaps.append("fee percentage")
+    return gaps
+
+
+def claim_number(client: dict) -> str:
+    """The VA file number line (14.636(g)(1)): the file number, else the SSN as the claim number.
+    Raw PII from the vault: it goes only into the encrypted PDF."""
+    if file_no := "".join(c for c in client.get("va_file_number") or "" if c.isdigit()):
+        return f"VA file number: {file_no}"
+    ssn = "".join(c for c in client.get("ssn") or "" if c.isdigit())
+    return f"VA claim number (Social Security number): {ssn[:3]}-{ssn[3:5]}-{ssn[5:]}" if len(ssn) == 9 else ""
 
 
 def _name(person: dict) -> str:
@@ -64,7 +82,7 @@ def sections(client: dict, rep: dict, fee_pct: int) -> list[tuple[str, str]]:
         ("Parties", (
             f"This agreement is between {_name(client)} (the Client) and {attorney} of {firm} (the "
             "Attorney), who the Client appoints on VA Form 21-22a to represent the Client in claims "
-            "for VA benefits."
+            f"for VA benefits. {claim_number(client) or 'VA file number: (none on file)'}."
         )),
         ("Fee", (
             f"The fee is {fee_pct}% of any past-due benefits VA awards the Client on the claims the "
@@ -125,6 +143,8 @@ def render_draft(client: dict, rep: dict, fee_pct: int) -> bytes:
         c.line(date[0], date[1], date[2], date[1])
         who = _name(client) if label == "Client" else f"{_name(rep)}, {rep.get('firm_name', '')}"
         c.drawString(sig[0], sig[1] - 14, f"{label} signature: {who}")
+        if label == "Client" and claim_number(client):
+            c.drawString(sig[0], sig[1] - 28, claim_number(client))
         c.drawString(date[0], date[1] - 14, "Date")
     c.save()
     return buf.getvalue()

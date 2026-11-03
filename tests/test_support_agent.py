@@ -165,11 +165,24 @@ def test_the_guard_keeps_ids_and_duplicates_out(rt, lm):
     rt.message(cid, "I also want to claim my knees. Will I get 70%?")
     rt.wait_until_idle()
     traj = lm.prompts("support", "extract")[0]
-    assert "refused: ID numbers" in traj and "refused: a new_condition flag is already with the orchestrator" in traj
+    assert "refused: ID numbers" in traj and "refused: this new_condition flag is already with the orchestrator" in traj
     assert "already handed to staff this turn" in traj and "123-45-6789" not in str(rt.store.events(cid))
     case = rt.store.get_case(cid)
     assert [f.text for f in case.flags] == ["knees"] and len(case.tasks) == 1
     assert "Will I get 70%?" in case.tasks[0].text  # the person sees what the veteran wrote
+
+
+def test_a_second_different_condition_is_its_own_flag(rt, lm):
+    """Flags dedupe on kind + the normalized condition, not on kind alone."""
+    cid = _stage_5(rt)
+    lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"),
+            call("flag_orchestrator", kind="new_condition", text="ringing in my ears"),
+            call("flag_orchestrator", kind="new_condition", text="Tinnitus"), final(reply="Passed on."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, "I also want to claim my knees and the ringing in my ears.")
+    rt.wait_until_idle()
+    assert "refused: this new_condition flag is already" in lm.prompts("support", "extract")[0]
+    assert [f.text for f in rt.store.get_case(cid).flags] == ["knees", "ringing in my ears"]
 
 
 def test_support_has_no_tool_that_changes_the_case():

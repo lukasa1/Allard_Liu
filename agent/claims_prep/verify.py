@@ -10,7 +10,10 @@ Separator lines have no sources and are skipped.
 Matching normalizes first: dates in every way documents write them (ISO, MM/DD/YYYY, YYYYMMDD,
 "March 14, 2024"), service months (YYYY-MM, YYYYMM, MM/YYYY), percentages ("10%", "10 percent")
 and condition names (`normalize_condition` and its synonyms). A rating is matched to its
-condition: the first percentage after the condition's name must be the fact's.
+condition: the first percentage after the condition's name must be the fact's. Values are
+anchored to their labels (a DOB after "date of birth", a start after "entered", an end after
+"separation date"), the MOS and a representative's name must be the whole field value, and a
+decision must list every condition the page decides.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from agent.claims_prep.facts import Fact
 from agent.intake.conditions import SYNONYMS, normalize_condition
 
 _PCT = re.compile(r"(\d{1,3})\s*(?:%|percent)")
-_OUTCOME = re.compile(r"\b(granted|increased|established|denied|continued|confirmed|deferred)\b")
+_OUTCOME = re.compile(r"\b(?:granted|increased|established|denied|continued|confirmed|deferred)\b")
 _OUTCOMES = {"granted": "granted", "increased": "granted", "established": "granted", "denied": "denied",
              "continued": "denied", "confirmed": "denied", "deferred": "deferred"}  # fmt: skip
 
@@ -59,21 +62,42 @@ def month_forms(ym: str) -> list[str]:
     return [ym, f"{year}{month}", f"{month}/{year}", f"{name} {year}"]
 
 
-def _found(page: str, form: str, after: str = "") -> bool:
-    """`form` as a whole token: 1/2/2004 is not inside 11/2/2004, nor 06/2004 inside 12/06/2004."""
-    return re.search(rf"(?<![\d/]){re.escape(form)}{after}(?![\d/])", page) is not None
+def _found(page: str, form: str, after: str = "", label: str = "") -> bool:
+    """`form` as a whole token: 1/2/2004 is not inside 11/2/2004, nor 06/2004 inside 12/06/2004.
+    With `label` (a regex), only right after it."""
+    return re.search(rf"{label}(?<![\d/]){re.escape(form)}{after}(?![\d/])", page) is not None
 
 
-def _has_date(page: str, iso: str) -> bool:
-    return any(_found(page, f) for f in date_forms(iso))
+def _has_date(page: str, iso: str, label: str = "") -> bool:
+    return any(_found(page, f, label=label) for f in date_forms(iso))
 
 
-def _has_month(page: str, ym: str) -> bool:
+def _has_month(page: str, ym: str, label: str = "") -> bool:
     """YYYYMM may run on into a day (the DD-214's YYYYMMDD)."""
-    return any(_found(page, f, r"(?:\d\d)?" if f.isdigit() else "") for f in month_forms(ym))
+    return any(_found(page, f, r"(?:\d\d)?" if f.isdigit() else "", label) for f in month_forms(ym))
 
 
-def _mentions(page: str, condition: str) -> list[int]:
+# The labels a value must follow (a DOB is not just any date on the DD-214). `[^:\d]{0,40}:?\s*`
+# skips the rest of the label: "date entered active duty this period (yyyymmdd): 20040601".
+def _label(*names: str) -> str:
+    return rf"(?:{'|'.join(names)})[^:\d]{{0,40}}:?\s*"
+
+
+_DOB = _label("date of birth", r"\bdob", r"\bborn(?: on)?")
+_START = _label("entered", r"\bfrom")
+_END = _label("separation date", "released", r"\bto", r"\bthrough")
+_DECIDED = re.compile(rf"service connection for (.+?) is {_OUTCOME.pattern}")
+# A label's value runs to the next numbered DD-214 block ("12a. ") or the next label of the form.
+_NEXT = r"(?=\s+\d{1,2}[a-z]?\.\s|\s+(?:type of|date|revocation|veteran)\b|\s*$)"
+
+
+def _field_is(page: str, label: str, value: str) -> bool:
+    """`value` is the whole value after `label` (the MOS is "88m motor transport operator", not
+    "88m"; the representative is "alan smith", not "smith")."""
+    return re.search(rf"{label}[^:]{{0,20}}:\s*{re.escape(value)}[.,;]?{_NEXT}", page) is not None
+
+
+def mentions(page: str, condition: str) -> list[int]:
     """Where the page names the condition (its canonical name or a synonym), as end offsets."""
     canon = normalize_condition(condition)
     phrases = {canon, condition.lower(), *(p for p in SYNONYMS.get(canon, []) if len(p) > 3)}
@@ -87,7 +111,7 @@ def _pct_after(page: str, at: int, window: int = 80) -> int | None:
 
 def _outcome_after(page: str, at: int, window: int = 40) -> str | None:
     m = _OUTCOME.search(page, at, at + window)
-    return _OUTCOMES[m.group(1)] if m else None
+    return _OUTCOMES[m.group()] if m else None
 
 
 def discharges(page: str) -> set[str]:
@@ -102,7 +126,7 @@ def discharges(page: str) -> set[str]:
 
 
 def _rated(page: str, condition: str, pct: int) -> bool:
-    return any(_pct_after(page, at) == pct for at in _mentions(page, condition))
+    return any(_pct_after(page, at) == pct for at in mentions(page, condition))
 
 
 def missing(f: Fact, page_text: str) -> list[str]:
@@ -114,17 +138,21 @@ def missing(f: Fact, page_text: str) -> list[str]:
             out.append(what)
 
     if f.kind == "dob":
-        need(_has_date(page, f.dob), f.dob)
+        need(_has_date(page, f.dob, _DOB), f"{f.dob} as the date of birth")
     elif f.kind == "service_period":
         need(f.branch.lower() in page, f.branch)
-        for ym in (f.start, f.end):
-            if ym:
-                need(_has_month(page, ym), ym)
+        need(_has_month(page, f.start, _START), f"{f.start} as the entry date")
+        if f.end:
+            need(_has_month(page, f.end, _END), f"{f.end} as the separation date")
+        else:
+            need("separation date" not in page, "no separation date (the page has one: record `end`)")
     elif f.kind == "discharge":
         need(f.character in discharges(page), f"discharge {f.character}")
-        need(_has_month(page, f.period_start), f"the period starting {f.period_start}")
+        need(_has_month(page, f.period_start, _START), f"the period starting {f.period_start}")
     elif f.kind == "mos":
-        need(_norm(f.mos) in page or _norm(f.mos).split()[0] in page.split(), f.mos)
+        labeled = "specialty" in page
+        need(_field_is(page, "specialty", _norm(f.mos)) if labeled else _found(page, _norm(f.mos)),
+             f"{f.mos} as the whole MOS (code and title)")  # fmt: skip
     elif f.kind == "rated_condition":
         need(_rated(page, f.condition, f.pct), f"{f.condition} {f.pct}%")
     elif f.kind == "combined_rating":
@@ -136,8 +164,11 @@ def missing(f: Fact, page_text: str) -> list[str]:
             need(f.form.lower() in page, f"form {f.form}")
         if f.filed:
             need(_has_date(page, f.filed), f"filed {f.filed}")
+        listed = {i.condition for i in f.issues}
+        for decided in _DECIDED.findall(page):
+            need(normalize_condition(decided) in listed, f"every decided issue (record {decided!r} too)")
         for issue in f.issues:
-            at = _mentions(page, issue.condition)
+            at = mentions(page, issue.condition)
             need(any(_outcome_after(page, a) == issue.outcome for a in at), f"{issue.condition} {issue.outcome}")
             if issue.outcome == "granted" and issue.pct is not None:
                 need(_rated(page, issue.condition, issue.pct), f"{issue.condition} {issue.pct}%")
@@ -145,7 +176,9 @@ def missing(f: Fact, page_text: str) -> list[str]:
         need(_has_date(page, f.date), f.date)
         need(_has_date(page, f.decision_date), f"decision {f.decision_date}")
     elif f.kind == "prior_representative":
-        need(_norm(f.name) in page, f.name)
+        labeled = "representative:" in page
+        need(_field_is(page, "representative", _norm(f.name)) if labeled else _found(page, _norm(f.name)),
+             f"{f.name} as the whole representative name")  # fmt: skip
         typed = {"vso": "organization" in page, "agent": "agent" in page,
                  "attorney": "attorney" in page and "organization" not in page}  # fmt: skip
         need(typed[f.rep_type], f"a {f.rep_type}")
@@ -159,7 +192,7 @@ def missing(f: Fact, page_text: str) -> list[str]:
         need(f.form.lower() in page, f.form)
         need(_has_date(page, f.filed), f"filed {f.filed}")
         for c in f.conditions:
-            need(bool(_mentions(page, c)), c)
+            need(bool(mentions(page, c)), c)
     return out
 
 

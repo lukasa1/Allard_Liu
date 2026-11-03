@@ -16,12 +16,15 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
 
 from agent.cfile.extract import _branch, _form_id, _iso, _outcome, _pct, _ym
 from agent.cfile.facts import CfileFacts, Decision, Issue, PendingFiling, PriorRep, is_firm
 from agent.intake.conditions import normalize_condition
 from agent.intake.schema import Component, Discharge, RatedCondition, ServicePeriod
+
+# C-file text that is copied into the case file: a name or title, never markup or instructions.
+_PLAIN = r"^[A-Za-z0-9 .,'&()/-]+$"
 
 
 class Cite(BaseModel):
@@ -64,6 +67,12 @@ class ServicePeriodFact(_Fact):
     def _norm_branch(cls, v: Any) -> Any:
         return _branch(v) or v if isinstance(v, str) else v
 
+    @model_validator(mode="after")
+    def _ordered(self) -> ServicePeriodFact:
+        if self.end and self.end < self.start:
+            raise ValueError(f"end {self.end} is before start {self.start}: are they swapped?")
+        return self
+
 
 class DischargeFact(_Fact):
     kind: Literal["discharge"]
@@ -74,7 +83,7 @@ class DischargeFact(_Fact):
 
 class MosFact(_Fact):
     kind: Literal["mos"]
-    mos: str = Field(min_length=1)
+    mos: str = Field(min_length=1, max_length=80, pattern=_PLAIN, description="the code and title, e.g. 88M Motor Transport Operator")
 
 
 class RatedConditionFact(_Fact):
@@ -121,7 +130,7 @@ class NotificationLetterFact(_Fact):
 
 class PriorRepFact(_Fact):
     kind: Literal["prior_representative"]
-    name: str = Field(min_length=2)
+    name: str = Field(min_length=2, max_length=100, pattern=_PLAIN)
     rep_type: Literal["attorney", "agent", "vso"]
     signed: str | None = Field(None, description="date signed, YYYY-MM-DD")
     revoked: str | None = Field(None, description="the revocation date, if the form has revocation details")

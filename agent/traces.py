@@ -3,7 +3,8 @@
 Each line carries the case, agent and turn (from a context variable the harness sets around a
 turn), the latency, the token counts and cost (from config.PRICES), and for tools the arguments,
 the guard's decision and the result. kb_search's own model call is an `lm` line of the agent
-that searched (agent/kb.py). Lines pass through SSN redaction before they are written.
+that searched (agent/kb.py). Lines pass through SSN, ID-number and date-of-birth redaction
+before they are written.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from dspy.utils.callback import BaseCallback
 from agent.casefile import now
 from agent.cfile.extract import strip_ssns
 from agent.config import PRICES
-from poa_skill import redact
+from agent.ingest import redact_chat
 
 
 @dataclass(frozen=True)
@@ -35,9 +36,10 @@ CURRENT: contextvars.ContextVar[TurnInfo | None] = contextvars.ContextVar("trace
 
 
 def scrub(value: Any) -> Any:
-    """Hide SSNs and ID numbers in every string inside `value` (numbers stay numbers)."""
+    """Hide SSNs, ID numbers and a typed date of birth in every string inside `value` (numbers
+    stay numbers)."""
     if isinstance(value, str):
-        return redact(strip_ssns(value))[0]
+        return redact_chat(strip_ssns(value))[0]
     if isinstance(value, dict):
         return {k: scrub(v) for k, v in value.items()}
     if isinstance(value, list | tuple):

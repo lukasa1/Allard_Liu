@@ -1,5 +1,5 @@
 # Labeled messages for the customer-support sub-agent (agent/support/), sent to a case no owner is
-# working (intake_eval/support_eval.py; the legacy regex support: intake_eval/legacy_support_eval.py).
+# working (intake_eval/support_eval.py).
 # Synthetic. Each entry:
 #   phase    attorney_review | closed | human_handoff   (the case that receives it: stage 5 with
 #            nobody working it, closed, needs_human)

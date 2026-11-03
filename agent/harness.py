@@ -26,10 +26,10 @@ import dspy
 from pydantic import BaseModel
 
 from agent.casefile import CaseFile, SubagentResult
-from agent.ingest import redact_chat, untrusted
+from agent.ingest import untrusted
 from agent.skills import read_skill, skill_index
 from agent.tools.registry import Registry, ToolSpec
-from agent.traces import CURRENT, TraceCallback, TraceLog, TurnInfo
+from agent.traces import CURRENT, TraceCallback, TraceLog, TurnInfo, scrub
 
 if TYPE_CHECKING:
     from agent.runtime import Job, Runtime
@@ -73,6 +73,8 @@ class Turn:
     kind: str = "event"  # the Job kind; a "message" turn's incoming is the veteran's words
     deferred: list[Job] = field(default_factory=list)  # queued after the turn ends
     handoff: str | None = None  # orchestrator: the one handoff of this wake
+    acted: bool = False  # orchestrator: a handoff, move or staff task went through this wake
+    flags_shown: list[int] = field(default_factory=list)  # orchestrator: flags its context listed
 
     @property
     def case(self) -> CaseFile:
@@ -150,10 +152,10 @@ class Harness:
             return spec.guard(turn, name, args) if spec.guard else None
 
         def refused(name: str, args: dict, reason: str) -> None:
-            # A refused call may carry what the guard keeps out (an SSN): never log it verbatim.
-            safe = {k: redact_chat(v)[0] if isinstance(v, str) else v for k, v in args.items()}
+            # A refused call may carry what the guard keeps out (an SSN, a date of birth), nested
+            # too: never log it verbatim.
             turn.rt.store.append_event(
-                turn.case_id, "refused", {"tool": name, "args": safe, "reason": reason}, actor=spec.name
+                turn.case_id, "refused", {"tool": name, "args": scrub(args), "reason": reason}, actor=spec.name
             )
 
         return Registry([read, *spec.tools(turn)], guard=guard, on_refused=refused)
@@ -186,8 +188,8 @@ class Harness:
         calls = [v for k, v in pred.trajectory.items() if k.startswith("tool_name_")]
         if len(calls) >= spec.max_iters and calls[-1] != "finish":
             return self._limit(spec, f"max_iters ({spec.max_iters})")
-        if time.monotonic() > turn.deadline:
-            return self._limit(spec, "timeout")
+        # A run that finished is kept even if its last model call ended past the deadline: only a
+        # TurnTimeout (raised at the next tool call) ends a turn as a limit.
         result = getattr(pred, "result", None)
         if result is not None:
             result = result.model_copy(update={"agent": spec.name})

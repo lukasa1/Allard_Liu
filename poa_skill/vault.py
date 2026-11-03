@@ -10,6 +10,8 @@ POA_VAULT_KEY, or a key file generated on first run under the data directory (gi
 A production deployment would swap this for a KMS-backed store; the interface stays the same.
 """
 
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -176,7 +178,8 @@ class Vault:
         if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", session_id):
             raise ValueError("bad session id")
         self.path = data_dir / "vault" / f"{session_id}.bin"
-        self._fernet = Fernet(key or load_key(data_dir))
+        self._key = key or load_key(data_dir)
+        self._fernet = Fernet(self._key)
 
     def _load(self) -> dict:
         if not self.path.exists():
@@ -230,6 +233,12 @@ class Vault:
     def masked(self) -> dict[str, str]:
         """What the agent is allowed to see."""
         return {n: _mask(n, v) for n, v in self._load()["fields"].items() if v}
+
+    def fingerprint(self) -> str:
+        """A keyed hash (HMAC with the vault key) of the identity fields: tells whether a draft
+        is stale without storing anything an attacker could brute-force back into an SSN."""
+        data = json.dumps(self._load()["fields"], sort_keys=True).encode()
+        return hmac.new(self._key, data, hashlib.sha256).hexdigest()
 
     def has_signature(self) -> bool:
         return bool(self._load()["signature"])

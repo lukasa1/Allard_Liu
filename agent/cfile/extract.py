@@ -130,7 +130,7 @@ def _outcome(v):
                           ("establish", "granted")):  # fmt: skip
         if re.search(rf"\b{word}", low):
             return outcome
-    return low  # anything else isn't an outcome: the issue is dropped and flagged (below)
+    return low  # not an outcome: the Issue schema then refuses the fact
 
 
 def _form_id(v):

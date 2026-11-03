@@ -208,3 +208,13 @@ def test_autoplay_suggests_the_simulated_veterans_next_reply(client, rt, lm, mon
     prompt = sim_lm.history[-1]["messages"][-1]["content"]
     assert "Welcome!" in prompt and "Have you served in the military?" in prompt
     assert rt.store.events(cid, types=("message",))[-1].data["from"] == "intake"  # nothing was sent
+
+
+def test_autoplay_waits_while_an_agent_is_mid_turn(client, rt, lm, monkeypatch):
+    lm.turn("orchestrator", call("run_intake", goal="Pass 1."), final(reply="Welcome!"))
+    lm.turn("intake", final(reply="Have you served in the military?"))
+    cid = client.post("/api/cases", json={"persona_id": PERSONA}).json()["case_id"]
+    rt.wait_until_idle()
+    monkeypatch.setattr(rt, "running", lambda case_id: {"claims_prep"})
+    r = client.post(f"/api/cases/{cid}/suggest")
+    assert r.status_code == 409 and "claims prep is still working" in r.json()["detail"]

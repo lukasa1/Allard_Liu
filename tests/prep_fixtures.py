@@ -41,8 +41,8 @@ def the_cfile(persona: str) -> vbms.CFile:
     return vbms.pull(persona, (FIRM, _today()))
 
 
-def cite(doc: vbms.Document) -> dict:
-    return {"doc_id": doc.doc_id, "page": doc.first_page}
+def cite(doc: vbms.Document, last: bool = False) -> dict:
+    return {"doc_id": doc.doc_id, "page": doc.page_numbers[-1] if last else doc.first_page}
 
 
 def truth_batch(persona: str) -> list[dict]:
@@ -69,7 +69,7 @@ def truth_batch(persona: str) -> list[dict]:
             out.append({"kind": "notification_letter", "date": d.notified, "decision_date": d.decision_date,
                         "cite": cite(dated[("notification_letter", d.notified)])})  # fmt: skip
     if t.combined_rating is not None:
-        newest = cite(of["rating_decision"][-1])
+        newest = cite(of["rating_decision"][-1], last=True)  # the code sheet is the decision's last page
         out.append({"kind": "combined_rating", "pct": t.combined_rating, "cite": newest})
         out += [{"kind": "rated_condition", "condition": c.name, "pct": c.rating_pct, "cite": newest} for c in t.sc_conditions]
     reps = [*t.prior_reps, None]  # the firm's own 21-22a comes last

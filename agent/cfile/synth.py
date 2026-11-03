@@ -1,9 +1,9 @@
 """Generate a synthetic C-file (a list of PDFs) for a persona; the simulated VBMS serves it.
 
 Real C-files are one large zip of many PDFs pulled from VBMS. This produces a small, readable
-stand-in with the documents a face note is built from (DD-214s, rating decisions with narrative
-and code sheet, notification letters, filing forms, prior 21-22a/21-22) plus one irrelevant
-document, so claims prep has to pick what matters. Every value is synthetic.
+stand-in with the documents a face note is built from (DD-214s, two-page rating decisions:
+decision and narrative, then the code sheet; notification letters, filing forms, prior
+21-22a/21-22) plus one irrelevant document, so claims prep has to pick what matters. Every value is synthetic.
 """
 
 from __future__ import annotations
@@ -40,7 +40,10 @@ def _long(iso: str) -> str:
     return date.fromisoformat(iso).strftime("%B %d, %Y").replace(" 0", " ")
 
 
-def _pdf(title: str, lines: list[str]) -> bytes:
+PAGE_BREAK = None  # in a document's lines: start a new page
+
+
+def _pdf(title: str, lines: list[str | None]) -> bytes:
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
     c.setTitle(title)
@@ -50,11 +53,12 @@ def _pdf(title: str, lines: list[str]) -> bytes:
     y -= 24
     c.setFont("Helvetica", 10)
     for line in lines:
-        if y < 60:
+        if line is PAGE_BREAK or y < 60:
             c.showPage()
             c.setFont("Helvetica", 10)
             y = 740
-        c.drawString(54, y, line)
+        if line is not PAGE_BREAK:
+            c.drawString(54, y, line)
         y -= 15
     c.save()
     return buf.getvalue()
@@ -136,8 +140,9 @@ def build_documents(p: Persona, facts: CfileFacts | None = None) -> list[tuple[s
             "",
             "NARRATIVE:",
             f"The veteran served in the {periods}.",
-            "",
-            "CODE SHEET",
+            PAGE_BREAK,  # the code sheet is its own page, so citations use global page numbers
+            "RATING CODE SHEET",
+            f"NAME OF VETERAN: {name}",
             f"COMBINED EVALUATION: {_combined(sc)}%",
             "SERVICE CONNECTED: " + "; ".join(f"{c.name.upper()} {c.rating_pct}%" for c in sc),
         ]

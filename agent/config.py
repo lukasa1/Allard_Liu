@@ -9,6 +9,8 @@
   QA_MODEL          OpenRouter model for kb_search (default anthropic/claude-haiku-5.5)
   QA_SEARCH_DOMAINS comma-separated domains web search is restricted to
   POA_DATA_DIR      where cases, traces, the vault and PDFs are kept (default .data)
+  LM_TIMEOUT_S      per model call, in seconds (default 120): a hung call can't hold a turn
+                    past its limit for long (the turn's own limit is checked at each tool call)
 """
 
 from __future__ import annotations
@@ -52,7 +54,8 @@ def make_lm(role: str = "agent"):
     if effort := reasoning_effort():
         kwargs["reasoning_effort"] = effort
     # temperature stays unset: reasoning models on OpenRouter reject sampling parameters.
-    return dspy.LM(model, max_tokens=16000, cache=cache, **kwargs)
+    timeout = float(os.environ.get("LM_TIMEOUT_S", "120"))
+    return dspy.LM(model, max_tokens=16000, cache=cache, timeout=timeout, **kwargs)
 
 
 def data_dir() -> Path:

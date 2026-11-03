@@ -26,17 +26,20 @@ from typing import Any, Protocol
 from PIL import Image, ImageDraw
 
 from agent.casefile import CaseFile, EvalCondition
+from agent.claims_prep.agent import spec as claims_prep_spec
 from agent.harness import CANNED_REPLY
 from agent.intake import documents
 from agent.personas import Persona
-from agent.runtime import Runtime
+from agent.runtime import MAX_CONTINUATIONS, Runtime
 from agent.store import Event
 from poa_skill.service import WorkflowError
 
 CONDITIONS: tuple[EvalCondition, ...] = EvalCondition.__args__  # ask_no_probes, ask, cfile
 MAX_STEPS = 300  # veteran messages + card actions + countersign per case
 FAILURES_TO_GIVE_UP = 3  # consecutive canned replies or simulator errors
-IDLE_TIMEOUT_S = 900  # a live claims-prep turn reads the whole C-file
+# The longest wait for idle: claims prep's first turn plus every continuation, each up to its
+# turn timeout, with a minute's slack (support and the orchestrator run in between).
+IDLE_TIMEOUT_S = claims_prep_spec().timeout_s * (1 + MAX_CONTINUATIONS) + 60
 ATTORNEY = "simulated attorney"
 ACTIONABLE = ("secure_form", "signature_pad", "sign_button")  # a newer card replaces an older one
 VAULT_BRANCH = {
@@ -152,13 +155,13 @@ def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[
                 kind = item.payload["type"]
                 cards = [c for c in cards if c["type"] != kind] + [item.payload]
         case = run.case
-        if over_budget():
+        if finished(case):  # a finished case isn't "stopped at cost", even when the last step passed it
+            return
+        if over_budget():  # checked between steps: one step (a whole agent turn) may overshoot
             run.stopped_at_cost = True
             return
         if failures >= FAILURES_TO_GIVE_UP:
             run.gave_up = True
-            return
-        if finished(case):
             return
         if cards:
             _use_card(run, persona, cards.pop(0))
@@ -207,8 +210,7 @@ def _use_card(run: CaseRun, persona: Persona, card: dict) -> None:
             documents.save_signature(rt, cid, signature_png())
             note = "[veteran draws and saves a signature]"
         else:
-            live = documents.service(rt, cid).live(card["form"])
-            if live is None or live.id != card["document_id"]:
+            if not documents.sign_card_open(rt, cid, card["form"]):  # the demo's check: newest card, live draft
                 run.transcript.append({"role": "app", "text": f"[Sign card for an old {card['form']} draft ignored]"})
                 return
             documents.sign(rt, cid, card["form"], consent_text=card["consent_text"], ip="127.0.0.1",

@@ -68,7 +68,7 @@ FORMS: dict[str, FormKind] = {
     ),
     "fee_agreement": FormKind(
         "fee_agreement", fee_agreement.TITLE, fee_agreement.FORM_ID, fee_agreement.EDITION, FEE_ESIGN_CONSENT,
-        missing=lambda v, d: fee_agreement.missing_fields(v),
+        missing=lambda v, d: fee_agreement.missing_fields(v, d.terms.get("fee_pct")),
         render=lambda v, rep, d: fee_agreement.render_draft(v, rep, d.terms["fee_pct"]),
         sign=fee_agreement.sign_draft, countersign=fee_agreement.countersign,
     ),
@@ -174,12 +174,28 @@ class PoaService:
     def _render(self, doc: Document) -> bytes:
         kind, veteran = kind_of(doc), self.vault.veteran()
         doc.missing = kind.missing(veteran, doc)
+        doc.vault_hmac = self.vault.fingerprint()
         return kind.render(veteran, self.rep, doc)
+
+    def refresh_drafts(self) -> list[Document]:
+        """Re-render every unsigned draft whose vault data changed since it was filled (a secure
+        form corrected a value), as a new version. Returns the drafts that changed."""
+        changed, current = [], self.vault.fingerprint()
+        for doc in self.docs.all():
+            if doc.status == "draft" and doc.vault_hmac != current:
+                doc.version += 1
+                doc.updated_at = now_iso()
+                self.docs.save(doc, self._render(doc))
+                self.docs.audit("draft_refreshed", document_id=doc.id, version=doc.version, missing=doc.missing)
+                changed.append(doc)
+        return changed
 
     def prepare(self, consents: dict | None = None, form_key: str = "21-22a", terms: dict | None = None) -> Document:
         """Fill a fresh draft of one form (the 21-22a takes the Item 20/22 consents; the fee
         agreement takes its terms). An earlier unsigned draft of that form is superseded."""
         kind = FORMS[form_key]
+        if form_key == "fee_agreement" and not isinstance((terms or {}).get("fee_pct"), int):
+            raise WorkflowError("the fee agreement needs its fee percentage first")
         consents = {k: (consents or {}).get(k) for k in CONSENT_KEYS} if form_key == "21-22a" else {}
         for d in self.docs.all():
             if d.status == "draft" and d.form_id == kind.form_id:
@@ -241,6 +257,8 @@ class PoaService:
             return False, "still missing: " + ", ".join(doc.missing)
         if not self.vault.has_signature():
             return False, "no saved signature"
+        if doc.vault_hmac and doc.vault_hmac != self.vault.fingerprint():
+            return False, "the secure-form data changed after this draft was filled: refresh the draft first"
         return True, "ready"
 
     def sign(self, doc_id: str, *, consent_text: str, ip: str, user_agent: str) -> Document:

@@ -9,6 +9,7 @@ from fake_lm import bad, call, final, pause
 from intake_fixtures import SCREEN_STEPS, countersign_both, prefill_pass2, sign_both
 from prep_fixtures import case_at_stage_3, fee_agreement, prep_steps
 
+from agent import stages
 from agent.casefile import CaseFile, Filing, PrepState
 from agent.harness import CANNED_REPLY
 from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
@@ -123,7 +124,9 @@ def test_messages_route_to_the_owner_or_support():
     assert route(CaseFile(case_id="c", owner="intake", side_state="waiting_on_attorney")) == "intake"
     assert route(CaseFile(case_id="c", owner="claims_prep")) == "support"
     assert route(CaseFile(case_id="c")) == "support"
-    assert route(CaseFile(case_id="c", owner="intake", side_state="needs_human")) == "support"
+    parked = CaseFile(case_id="c", owner="intake")
+    stages.move(parked, "needs_human", "rule", "crisis")  # parking clears the owner
+    assert route(parked) == "support"
 
 
 def test_a_flag_during_claims_prep_is_held_and_decided_with_its_result(rt, lm):
@@ -166,7 +169,7 @@ def test_a_flag_outside_stage_4_wakes_the_orchestrator_which_reopens_intake(rt, 
 
 
 def test_refused_moves_are_returned_logged_and_end_nothing(rt, lm):
-    lm.turn("orchestrator", call("run_prep", goal="Read the C-file."), call("move_stage", to="3", reason="skip ahead"),
+    lm.turn("orchestrator", call("run_prep", goal="Read the C-file."), call("move_stage", to="4", reason="skip ahead"),
             call("move_stage", to="closed", reason=""), call("run_intake", goal="Pass 1."),
             call("run_prep", goal="Read the C-file."), final(reply="Hi."))  # fmt: skip
     lm.turn("intake", final(reply="Did you serve?"))

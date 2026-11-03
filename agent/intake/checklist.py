@@ -6,7 +6,9 @@ The checklist is rebuilt from the case file's answers on every turn and after ev
           ones the secure form collects (they are the 21-22a's job in stage 2)
   pass2   pass 2: every visible question of the firm's form not yet settled (pass-1 questions
           that became relevant included, secure-form ones too), one `confirm:<question>` per open
-          C-file conflict, then the narrative prompts for each claimed condition
+          C-file conflict, then the narrative prompts for each claimed condition; after the
+          orchestrator moved the case back to pass 2, `claim_conditions` again (the reopen item)
+          until it is re-recorded
 
 In the eval condition `ask_no_probes` the verification probes are left out (casefile.EvalCondition).
 A field is settled when it has an answer or is marked unknown. Answers are keyed by question id;
@@ -15,6 +17,7 @@ narratives by `narrative:<condition>:<prompt id>`. The firm's stop rules run on 
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import BaseModel
@@ -35,6 +38,15 @@ VAULT_FIELD = {
     "city": "address.city", "state": "address.state", "zip": "address.zip",
     "cell_phone": "phone", "email": "email",
 }  # fmt: skip
+
+
+# Stop-rule fields: free text counts only when it is unambiguous (else the model asks again or
+# passes JSON true/false). rating_pct's int reading is always strict (parsing.parse_text).
+STRICT = {"is_veteran"}
+# Screening fields the firm's stop rules (A1) can't do without: unknown sends the case to a person.
+UNRESOLVED = {"is_veteran": "whether the person served", "service_periods": "the service periods"}
+_VSO = re.compile(r"\b(vso|dav|vfw|american legion|amvets|service officer|veterans service)\b", re.IGNORECASE)
+_LAWYER = re.compile(r"\b(attorney|lawyer|law firm|accredited agent|claims agent)\b", re.IGNORECASE)
 
 
 class ChecklistItem(BaseModel):
@@ -76,6 +88,22 @@ def _questions(case: CaseFile, part: str) -> list[ChecklistItem]:
     return items
 
 
+def _discharges(case: CaseFile) -> list[ChecklistItem]:
+    """A service period on file without a character of discharge keeps its question open: the
+    firm's stop rule (A1) must be decidable before anything is signed."""
+    items = []
+    for qid in ("service_periods", "other_service_periods"):
+        ans = case.answers.get(qid)
+        open_ = [p for p in (ans.value or []) if isinstance(p, dict) and not p.get("discharge")] if ans else []
+        if open_:
+            which = "; ".join(f"{p.get('branch')} {p.get('start')} to {p.get('end')}" for p in open_)
+            items.append(ChecklistItem(id=qid, type=BANK.by_id[qid].type, how="chat",
+                                       ask=f"The character of discharge is missing for: {which}. Ask what it was "
+                                           f"(honorable, general, other than honorable, ...) and record_answer {qid} "
+                                           "again with the full list, discharge included."))  # fmt: skip
+    return items
+
+
 def _conflicts(case: CaseFile) -> list[ChecklistItem]:
     return [
         ChecklistItem(
@@ -90,6 +118,18 @@ def _conflicts(case: CaseFile) -> list[ChecklistItem]:
     ]
 
 
+def _reopened(case: CaseFile) -> list[ChecklistItem]:
+    """The reopen item: after a move back to pass 2, claim_conditions is asked again (with the
+    orchestrator's reason) until it is recorded after the move."""
+    ans, reopen = case.answers.get("claim_conditions"), case.reopen
+    if reopen is None or ans is None or ans.model_dump(mode="json") != reopen.before:
+        return []  # not reopened, re-recorded since, or unanswered (then it is a question anyway)
+    q = BANK.by_id["add_condition"]
+    return [ChecklistItem(id="claim_conditions", type=q.type, how="chat",
+                          ask=f"The case was reopened: {reopen.reason}. {q.ask} Then record_answer "
+                              "claim_conditions with the full list (the new condition included).")]  # fmt: skip
+
+
 def _narratives(case: CaseFile) -> list[ChecklistItem]:
     items = []
     for condition in record(case).claim_conditions:
@@ -102,8 +142,8 @@ def _narratives(case: CaseFile) -> list[ChecklistItem]:
 
 def missing(case: CaseFile, part: str) -> list[ChecklistItem]:
     if part == "screen":
-        return _questions(case, "screen")
-    return _questions(case, "pass2") + _conflicts(case) + _narratives(case)
+        return _questions(case, "screen") + _discharges(case)
+    return _questions(case, "pass2") + _discharges(case) + _conflicts(case) + _reopened(case) + _narratives(case)
 
 
 def stop_rule(rec: IntakeRecord) -> StopRule | None:
@@ -124,7 +164,17 @@ def refresh(case: CaseFile) -> None:
     if case.stage >= 4:
         case.checklist["pass2"] = [i.id for i in missing(case, "pass2")]
     if case.stop is None:
-        case.stop = stop_rule(record(case))
+        case.stop = stop_rule(record(case)) or _unresolved(case)
+
+
+def _unresolved(case: CaseFile) -> StopRule | None:
+    """Pass 1 (before anything is filed): is_veteran or service_periods marked unknown means the
+    stop rules can't be decided, so a person on the team follows up."""
+    gaps = [label for qid, label in UNRESOLVED.items() if (a := case.answers.get(qid)) and a.unknown]
+    if not gaps or case.stage > 2:
+        return None
+    return StopRule(rule="screen_unresolved", reason=f"{rules.RULES['screen_unresolved'].text} Unknown: "
+                    f"{', '.join(gaps)}.", to="needs_human")  # fmt: skip
 
 
 def fee_pct(case: CaseFile) -> int | None:
@@ -148,5 +198,7 @@ def parse(key: str, text: str) -> Any:
     """Parse an answer in code (L16): simple fields (yes/no, dates, branch, discharge, lists) are
     read by parsing.coerce; free text is kept as given. Raises ValueError when it can't be read."""
     qtype, options = question_type(key)
-    value = coerce(qtype, text, options)
+    if key == "prior_attorney" and _VSO.search(text) and not _LAWYER.search(text):
+        return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
+    value = coerce(qtype, text, options, strict=key in STRICT)
     return [v.model_dump() if isinstance(v, BaseModel) else v for v in value] if isinstance(value, list) else value

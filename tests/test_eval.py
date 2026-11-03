@@ -292,6 +292,21 @@ def test_live_commands_refuse_to_run_without_the_key(argv, capsys):
     assert "OPENROUTER_API_KEY" in str(exc.value)
 
 
+@pytest.mark.parametrize("argv", [["eval", "--max-cost", "1"], ["simulate", "--max-cost", "1"],
+                                  ["support-eval", "--max-cost", "1"]])  # fmt: skip
+def test_max_cost_is_refused_for_a_model_without_a_price(argv, monkeypatch, capsys):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    monkeypatch.setenv("DSPY_MODEL", "openrouter/some/unpriced-model")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv)
+    assert "--max-cost can't be enforced" in str(exc.value) and "unpriced-model" in str(exc.value)
+    monkeypatch.delenv("DSPY_MODEL")
+    cli.check_prices(1.0)  # the default models are priced
+    monkeypatch.setenv("QA_MODEL", "unpriced/qa")
+    cli.check_prices(None)  # without --max-cost: a warning, not a refusal
+    assert "unpriced/qa" in capsys.readouterr().err
+
+
 def test_the_dspy_simulator_replies_in_character_and_counts_its_calls():
     from dspy.utils.dummies import DummyLM
 

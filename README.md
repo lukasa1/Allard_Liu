@@ -19,7 +19,7 @@ and number in the repo is made up, and `config/representative.json` holds placeh
 
 ```bash
 uv sync
-uv run pytest -q                 # 203 tests, no key, no network (scripted fake model)
+uv run pytest -q                 # 223 tests, no key, no network (scripted fake model)
 cp .env.example .env             # set OPENROUTER_API_KEY for anything live
 uv run intake serve              # the web demo: http://localhost:8000
 uv run intake --help             # serve | simulate | eval | support-eval | personas
@@ -55,7 +55,8 @@ web chat / cards / staff panel ──▶ runtime (agent/runtime.py) ──▶ co
 Side states, entered only through the guard: `waiting_on_veteran`, `waiting_on_attorney` (the
 owner keeps the case), `waiting_on_va`, `needs_human` and `closed`. Code derives the stage after
 every tool call and event. Moves inside one owner's stages are automatic; a move to another owner
-only by a handoff; the orchestrator's `move_stage` covers moves back and side states (D11). Every
+only by a handoff; the orchestrator's `move_stage` covers side states and one move back, from stage 5
+to stage 4 (D11, D20). That move leaves a reopen item that pass 2 must resolve. Every
 refused move is logged and its reason goes back to the model.
 
 ### Runtime protocol
@@ -94,18 +95,26 @@ pages it read this turn.
   redacted; crisis language sends the Veterans Crisis Line text and an urgent task (D3); a request
   for a person or to end the representation goes to a person by rule (D2). The rule replies are in
   `agent/ingest.py`.
-- **The firm's stop rules** (not a veteran, rated 100%, any non-honorable period) run in code
-  (A1): `closed` before filing, `needs_human` after it.
+- **The firm's stop rules** run in code (A1, `agent/intake/checklist.stop_rule`): not a veteran
+  and rated 100% go to `closed` before filing and `needs_human` after it; a non-honorable period
+  goes to `needs_human` always, even before filing (an attorney decides; D16). Non-honorable
+  means a period whose discharge is **other than honorable, bad conduct or dishonorable**
+  (`schema.NON_HONORABLE`); general (under honorable conditions) and uncharacterized discharges
+  do not stop the case.
 - **Signing is the veteran's click** in the host; no tool can sign. The SSN goes only through the
   secure form into the encrypted vault, and the model sees masked values. `submit_va` is refused
   until the 21-22a is countersigned, `efax_ogc` until the fee agreement is signed and
   countersigned. One staff action countersigns both; the stamp is saved as a new PDF version, and
   the version the veteran signed keeps its hash.
 - **Citations:** `render` returns each face-note line with the facts it came from, and `verify`
-  checks every cited page contains the value (dates, percentages and condition names normalized).
-  A line that can't be cited goes back to the model, or is escalated as `[UNCERTAIN]`. Prefill is
-  refused until `verify` passes. When the C-file conflicts with an answer, the DD-214 wins on
-  discharge; any other conflict is recorded for pass 2 and a staff task (A2).
+  checks every cited page shows the value where its label puts it (the DOB after "date of birth",
+  the start after "entered", the end after "separation date"; the whole MOS and representative
+  name; every condition a decision decides), with dates, percentages and condition names
+  normalized. A line that can't be cited goes back to the model, or is escalated as
+  `[UNCERTAIN]`. The stored face note shows each line's pages (`[p. 2, 5]`, or `[firm record]`).
+  Prefill is refused until `verify` has passed or every failing line is escalated as uncertain,
+  and it writes only facts whose cited page holds them. When the C-file conflicts with an answer,
+  the DD-214 wins on discharge; any other conflict is recorded for pass 2 and a staff task (A2).
 - **Untrusted text** (the veteran's words, C-file pages, search hits, kb answers) is wrapped as
   data before it enters a context (`ingest.untrusted`); what a tool may do is still decided by the
   guards.
@@ -121,8 +130,10 @@ pages it read this turn.
   cite-check. Support: answer-questions, case-status, hand-to-a-person.
 - **Memory store** (`agent/store.py`, SQLite): the `cases` table holds the case file as JSON plus
   flat columns (stage, owner, side state); `events` is the append-only event log; the outbox holds
-  every reply and card. Changes are patches under a per-case lock; no model call holds the lock. A
-  restarted process resumes from the store.
+  every reply and card. Changes are patches under a per-case lock; no model call holds the lock.
+  After a restart, an intake conversation resumes from the store (the next message rebuilds the
+  turn's context from the case file); queued and running turns (a wake, claims prep's background
+  turn or its continuation) are in memory and do not survive a restart.
 - **Traces** (`agent/traces.py`): DSPy callbacks write one JSON line per model call and per tool
   call (case, agent, turn, tokens, cost, the tool's guard decision and result) to `traces.jsonl`.
   Cost uses the price table in `agent/config.py`.
@@ -141,7 +152,7 @@ the lead's POA skill (`poa_skill/`). Where we differ:
 | D3 | The crisis check runs in code on every message, in every stage | A crisis can come up mid-intake, not only in support |
 | D6 | A `waiting_on_attorney` side state and one staff action that countersigns both documents | The demo and the eval need a way to simulate the attorney |
 | D7 | No offline agents: tests use a scripted fake LM through the real code | One implementation; the demo and eval are paid |
-| D8 | Haiku 5.5 through OpenRouter; the KB is our own web search on official sites | The lead's document library stays out of the public repo |
+| D8 | Haiku 5.5 through OpenRouter; the KB is our own web search on official sites, plus `law.cornell.edu` (`agent/qa.py`) | The lead's document library stays out of the public repo; Cornell LII serves 38 CFR and 38 USC as readable pages |
 | D9 | `run_*` starts the sub-agent; its result arrives later as an event | A chat turn waits for the veteran's next HTTP request |
 | D10 | Claims prep keeps every page read within one turn (no stubbing of old reads) | The synthetic C-files are small |
 | D11 | An orchestrator `move_stage(to, reason)` tool | The design allows moves back and side states but has no tool for them |
@@ -153,6 +164,23 @@ Candidate deviations from the build, for the lead to confirm:
   not by code: the reply is a model output a guard can't inspect.
 - **D15:** a prior representative is any 21-22 or 21-22a in the C-file without revocation details,
   VSOs included (the firm's SOP rule).
+- **D16:** a non-honorable period stops to `needs_human` even before filing; the plan (§2) says
+  `closed`. An attorney decides, since most of these discharges need a VA character-of-discharge
+  determination (38 CFR 3.12) rather than a rejection.
+- **D17:** `record_answer` has no `source` argument: code sets the source (`veteran, chat HH:MM
+  UTC`; prefill writes `C-file p. N`), so the model can't mislabel where an answer came from.
+- **D18:** prefill runs once `verify` has passed **or** every failing line is escalated as
+  uncertain (it writes only facts whose cites hold), not only after a clean pass.
+- **D19:** kb_search's answer accuracy is not evaluated yet: the support eval checks that a kb
+  answer cites its source, not that it is right.
+- **D22:** veteran status or service periods left unknown in pass 1 stop the case to `needs_human`
+  (`screen_unresolved`). A qualified "honorable" ("less than", "not") reads as other than honorable.
+  A secure-form or `update_draft` change re-renders stale drafts, and signing refuses a draft whose
+  vault fingerprint changed.
+- **D20:** the only move back is from stage 5 to stage 4 (reopening intake for a new condition).
+  Moves back to earlier stages are future work (F9).
+- **D21:** if a crisis or a person request arrives while a turn is running, that turn's model reply
+  is held back (logged as `reply_held`). The rule message is the only one the veteran gets.
 - Support returns no typed result: its flags and escalations are events.
 - The eval headline counts structured questions settled from chat, not questions asked (the
   model's wording can't be counted); citation precision uses `verify`'s own page check.
@@ -168,7 +196,8 @@ read-only support alongside.
 
 1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
    **Start case**. You type as the veteran, or press **Autoplay** to have the eval's simulated
-   veteran draft the next reply (you still press Send).
+   veteran draft the next reply (you still press Send). Autoplay waits until no agent is
+   mid-turn.
 2. Intake screens you, then shows the **secure form** for the ID numbers, the **21-22a preview**, a
    signature pad and a **Sign** card, then the **fee agreement** preview and its Sign card.
 3. You also play the attorney: **Countersign both documents** in the staff box (refused at any
@@ -206,16 +235,20 @@ steps (`runner.py`).
 uv run intake simulate --persona baseline_clean --max-cost 1    # one case, printed
 uv run intake eval --personas baseline_clean --conditions cfile --name smoke --max-cost 1
 uv run intake eval --name full --max-cost 20                    # 17 personas x 3 conditions
-uv run intake support-eval
+uv run intake support-eval --max-cost 1
 ```
 
-Each run prints an estimated number of model calls first (about 270 per case), and **`--max-cost`**
-(USD, from the traces, agents plus the simulated veteran) stops the run once it is passed. Output:
-`results/<name>/report.md`, `summary.json`, transcripts and each case's traces.
+Each run prints an estimated number of model calls first (about 270 per case; about 5 per
+support message), and **`--max-cost`** (USD, from the traces: agents, kb_search and the simulated
+veteran) stops the run once it is passed. It is checked between steps (a case step, or a support
+message), so the step that crosses it finishes first. A model slug with no price in
+`agent/config.py` would count as $0, so `--max-cost` is refused for it, and without `--max-cost`
+the command warns. Output: `results/<name>/report.md`, `summary.json`, transcripts and each case's
+traces.
 
 ## Tests
 
-`uv run pytest -q`: 203 tests in about 40 s, no key and no network. `tests/fake_lm.py` scripts
+`uv run pytest -q`: 223 tests in about 40 s, no key and no network. `tests/fake_lm.py` scripts
 each agent's tool calls through the real harness, registry and guards; `tests/fake_kb.py` stands in
 for web search. They pin the guards and stage moves, stop rules, citations and `verify`, crisis /
 withdraw / a person by rule, signing and countersign integrity, SSNs never in a context or trace,
@@ -233,7 +266,9 @@ The lead's skill for VA Form 21-22a, generalized here to the fee agreement too: 
 model never sees (encrypted vault, masked values), the filled PDF and an editable preview, and
 click-to-sign with the exact consent text shown, a stamped signature, and an append-only audit log
 without PII. There is deliberately no signing tool. Its own tests are `tests/test_form.py` and
-`tests/test_workflow.py`. Change the firm and attorney in `config/representative.json`.
+`tests/test_workflow.py`. Intake calls `PoaService` directly (`agent/intake/documents.py`);
+the skill's own generic tool layer (`poa_skill/tools.py`: `TOOLS`, `run_tool`, `openai_tools`)
+covers the 21-22a only and is not used by the agents. Change the firm and attorney in `config/representative.json`.
 
 ## Code map
 

@@ -137,10 +137,13 @@ def simulator_lm():
 @app.post("/api/cases/{case_id}/suggest")
 def suggest(case_id: str, rt: Live):
     """Autoplay: the eval's simulated veteran (the case's persona, intake_eval/simulator.py) writes
-    the next reply from the chat so far. The page puts it in the text box; Send sends it."""
+    the next reply from the chat so far. The page puts it in the text box; Send sends it. Like the
+    eval's runner (plan §3), it waits for idle: 409 while an agent is mid-turn."""
     from intake_eval.simulator import DSPySimulator, load_chat
 
     case = _case(rt, case_id)
+    if running := rt.running(case_id):
+        raise HTTPException(409, f"Wait: {', '.join(sorted(running)).replace('_', ' ')} is still working.")
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}
@@ -204,21 +207,12 @@ class SignClick(BaseModel):
     consent_text: str
 
 
-def _sign_card_open(rt: Runtime, case_id: str, form: str) -> bool:
-    """The form's newest card is a Sign card for its current draft (a preview after it, e.g. from
-    update_draft, means the veteran must review the change before signing)."""
-    cards = [o.payload for o in rt.updates(case_id) if o.kind == "card"
-             and o.payload.get("form") == form and o.payload["type"] in ("sign_button", "document_preview")]  # fmt: skip
-    live = documents.service(rt, case_id).live(form)
-    return bool(cards and live) and cards[-1]["type"] == "sign_button" and cards[-1]["document_id"] == live.id
-
-
 @app.post("/api/cases/{case_id}/sign/{form}")
 def sign(case_id: str, form: str, body: SignClick, request: Request, rt: Live):
     if form not in FORMS:
         raise HTTPException(404, f"no form {form!r}")
     _active(_case(rt, case_id))
-    if not _sign_card_open(rt, case_id, form):
+    if not documents.sign_card_open(rt, case_id, form):
         raise HTTPException(409, "This Sign button is no longer valid: the document changed after it was shown.")
     try:
         documents.sign(rt, case_id, form, body.consent_text, ip=request.client.host if request.client else "",

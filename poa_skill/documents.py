@@ -43,6 +43,7 @@ class Document:
     terms: dict = field(default_factory=dict)  # fee agreement: {"fee_pct": N}
     countersigned_at: str | None = None
     countersign_audit: dict = field(default_factory=dict)
+    vault_hmac: str = ""  # Vault.fingerprint() of the data this draft was rendered from
 
 
 class DocumentStore:

@@ -72,14 +72,19 @@ def test_the_guard_refuses_illegal_moves_with_reasons():
     case = _case(stage=2)
     assert "skip" in stages.check_stage(case, 4, "orchestrator")
     assert "forward moves happen in code" in stages.check_stage(_case(stage=1, checklist={"screen": []}), 2, "orchestrator")
-    assert "needs a reason" in stages.check_stage(case, 1, "orchestrator")
-    assert "only the orchestrator" in stages.check_stage(case, 1, "intake", "why")
-    assert "holds the case" in stages.check_stage(_case(stage=2, owner="intake"), 1, "orchestrator", "why")
-    assert stages.check_stage(case, 1, "orchestrator", "redo screening") is None
+    at_5 = _case(stage=5)
+    assert "needs a reason" in stages.check_stage(at_5, 4, "orchestrator")
+    assert "only the orchestrator" in stages.check_stage(at_5, 4, "intake", "why")
+    assert "holds the case" in stages.check_stage(_case(stage=5, owner="intake"), 4, "orchestrator", "why")
+    assert stages.check_stage(at_5, 4, "orchestrator", "new condition") is None
+    # F9: the only move back is to pass 2 (a move to stage 1-3 would strand the case)
+    assert "only move back is to stage 4" in stages.check_stage(case, 1, "orchestrator", "redo screening")
+    assert "only move back is to stage 4" in stages.check_stage(at_5, 2, "orchestrator", "redo")
     assert "filed with VA" in stages.check_side(_case(filings=_filed("21-22a")), "closed", "orchestrator", "no")
     assert "derived" in stages.check_side(case, "waiting_on_va", "orchestrator", "x")
     parked = _case(stage=2, side_state="needs_human")
     assert "only a person" in stages.check_stage(parked, 1, "orchestrator", "x")
+    assert "only a person" in stages.check_side(parked, None, "derive")
 
 
 def test_handoffs_are_guarded_one_owner_at_a_time():

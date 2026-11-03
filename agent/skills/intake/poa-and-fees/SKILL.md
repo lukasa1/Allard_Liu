@@ -44,7 +44,7 @@ messages meanwhile. `submit_va` and `efax_ogc` are refused until the countersign
 
 ## 4. After the `[event] countersigned`
 
-In the same turn: `submit_va(form="21-22a")`, then `submit_va(form="itf")` (see
-`intent-to-file`), then `efax_ogc(doc="fee_agreement")`: VA's Office of General Counsel must get
-the fee agreement within 30 days of signing (38 CFR 14.636(g)). A deadline task tracks it until
+In the same turn, in this order: `submit_va(form="21-22a")`, then `efax_ogc(doc="fee_agreement")`
+(VA's Office of General Counsel must get the fee agreement within 30 days of signing, 38 CFR
+14.636(g)), then `submit_va(form="itf")` last (see `intent-to-file`): filing the ITF ends pass 1. A deadline task tracks it until
 it is sent. Tell the veteran what was filed and that the firm now requests their VA claims file.

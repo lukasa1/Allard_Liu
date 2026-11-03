@@ -13,7 +13,8 @@ veteran was told it was passed on, and code marks them handled when the wake end
     about the new condition: <text>" to the goal.
   - The case is at stage 5 (ready for attorney review) and the veteran clearly wants to add a
     condition to this claim: `move_stage` to 4 with the reason, then `run_intake` with a goal to
-    ask about that condition and its narrative prompts.
+    ask about that condition and its narrative prompts. The reason shows in intake's checklist,
+    and the case can't reach stage 5 again until intake records the conditions again.
   - Unclear, or it sounds like a different kind of claim (a spouse's benefits, a separate
     appeal): `staff_task`, so the attorney decides first.
 - **contact_change**: `staff_task` (staff confirm the new details with the veteran; never collect

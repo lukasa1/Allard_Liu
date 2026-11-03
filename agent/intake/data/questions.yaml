@@ -384,15 +384,15 @@ narrative:
   - {id: h02, ask: "What symptoms do you have from your {condition}?"}
   - {id: h03, ask: "At their worst, how bad do the symptoms of your {condition} get? Describe a flare-up or a bad day."}
   - {id: h04, ask: "When did the {condition} symptoms start: during service, right after, or gradually over time?"}
-  - {id: h05, ask: "How often do you have these symptoms: daily, weekly or monthly?"}
-  - {id: h06, ask: "Have the symptoms continued since service, and have they gotten better or worse?"}
+  - {id: h05, ask: "How often do you have the symptoms of your {condition}: daily, weekly or monthly?"}
+  - {id: h06, ask: "Have the symptoms of your {condition} continued since service, and have they gotten better or worse?"}
   - {id: h07, ask: "Where were you stationed or deployed when the {condition} began?"}
-  - {id: h08, ask: "Were you on a ship, a base, in the field, in a vehicle, or in a combat zone at the time?"}
-  - {id: h09, ask: "What were the conditions around you, like noise, cramped spaces, extreme weather or hazardous materials?"}
+  - {id: h08, ask: "When your {condition} began, were you on a ship, a base, in the field, in a vehicle, or in a combat zone?"}
+  - {id: h09, ask: "What were the conditions around you when your {condition} began, like noise, cramped spaces, extreme weather or hazardous materials?"}
   - {id: h10, ask: "What event, injury or exposure in service do you think led to your {condition}? What happened?"}
-  - {id: h11, ask: "Did you report it or get treatment at the time? Why or why not?"}
+  - {id: h11, ask: "Did you report your {condition} or get treatment for it at the time? Why or why not?"}
   - {id: h12, ask: "How does your {condition} affect your ability to work?"}
-  - {id: h13, ask: "Have you missed work or been less productive because of it?"}
-  - {id: h14, ask: "How does it affect your daily activities, relationships or quality of life?"}
-  - {id: h15, ask: "How were things before your military service compared to now?"}
+  - {id: h13, ask: "Have you missed work or been less productive because of your {condition}?"}
+  - {id: h14, ask: "How does your {condition} affect your daily activities, relationships or quality of life?"}
+  - {id: h15, ask: "For your {condition}, how were things before your military service compared to now?"}
   - {id: h16, ask: "Is there anything else you want the VA to know about your {condition}?"}

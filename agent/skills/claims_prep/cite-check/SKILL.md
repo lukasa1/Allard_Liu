@@ -11,6 +11,12 @@ each fact's cited page shows the fact's key values. It normalizes first: dates i
 10 percent) and condition names. A rating must be the first percentage after its condition's
 name, and a decision issue's outcome must follow its condition.
 
+Values must sit where their label puts them: the date of birth after "date of birth" (not the
+entry date), a period's start after "entered" and its end after "separation date" (record `end`
+when the page has one; start is never after end), the MOS and a representative's name as the
+whole field value (code and title: "88M Motor Transport Operator", not "88M"; "Alan Smith", not
+"Smith"), and a decision lists every condition its DECISION section decides.
+
 ## A failed line
 
 Each failure names the line and the fact: "fact F3 cites p. 2, which does not show 1985-04-07".
