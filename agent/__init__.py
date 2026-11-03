@@ -9,6 +9,7 @@ agent/intake/          the intake sub-agent: agent.py (its AgentSpec), checklist
                        plus the question bank, parsing and rules (the old controller and brains
                        are legacy, unused by the new intake)
 agent/kb.py            kb_search, the knowledge-base tool shared by intake and support
+agent/support/         the customer-support sub-agent (read-only; flags to the orchestrator)
 agent/poa.py           the intake subagent's POA step: mounts poa_skill (the 21-22a skill)
 agent/lighthouse/      VA Lighthouse API tools (stub / recorded / sandbox)
 agent/qa.py            answers veterans' questions (web search limited to official sites)

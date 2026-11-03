@@ -3,8 +3,8 @@
   open_case / message / event   the only ways in (the web chat, card actions, staff actions)
   route (D1)                    the case's owner gets the veteran's messages (intake, including
                                 while it waits on the attorney); otherwise support
-  crisis (D3), person (D2)      checked in code on every message before any model: the crisis
-                                line, or a hand-off to a person, then needs_human
+  crisis (D3), person (D2)      checked in code on every message, in every state, before any
+                                model: the crisis line, or a hand-off to a person, then needs_human
   wakes                         case_opened, subagent_result, support_flag, escalated and staff
                                 events nobody owns wake the orchestrator; nothing else does
   executor                      one worker per case runs queued turns in order; claims prep
@@ -76,7 +76,7 @@ class Runtime:
         if msg.crisis:
             self._to_person(case_id, msg.clean, "crisis", CRISIS_MESSAGE, urgent=True)
             return
-        if not case.parked and (msg.wants_human or wants_withdraw(msg.clean)):
+        if msg.wants_human or wants_withdraw(msg.clean):  # in every state: a person reads it
             kind = "withdraw" if wants_withdraw(msg.clean) else "wants_human"
             self._to_person(case_id, msg.clean, kind, WITHDRAW_MESSAGE if kind == "withdraw" else HANDOFF_MESSAGE)
             return
@@ -235,7 +235,7 @@ class Runtime:
         self._turns[key] = self._turns.get(key, 0) + 1
         turn = Turn(self, case_id, job.agent, job.incoming, self._turns[key],
                     owner_at_start=case.owner == job.agent)  # fmt: skip
-        flags_seen = [i for i, f in enumerate(case.flags) if f.status != "handled"]
+        flags_seen = case.flags_to_decide()
         outcome = self.harness.run(spec, turn)
         if outcome.reply:
             self.say(case_id, job.agent, outcome.reply)
@@ -294,16 +294,17 @@ class Runtime:
 
 
 def make_runtime(data_dir: Path, lm, kb: QATool | None = None) -> Runtime:
-    """The runtime with the orchestrator, intake, claims prep and (until step 5 replaces it) the
-    support stub. `kb`: the kb_search engine; by default the web-search QA (agent/qa.py)."""
-    from agent import orchestrator, stubs
+    """The runtime with the orchestrator, intake, claims prep and support. `kb`: the kb_search
+    engine; by default the web-search QA (agent/qa.py)."""
+    from agent import orchestrator
     from agent.claims_prep import agent as claims_prep
     from agent.intake import agent as intake
     from agent.qa import make_qa
+    from agent.support import agent as support
 
     harness = Harness(lm, TraceLog(Path(data_dir) / "traces.jsonl"))
     agents = {"orchestrator": orchestrator.spec(), "intake": intake.spec(), "claims_prep": claims_prep.spec(),
-              "support": stubs.support_spec()}  # fmt: skip
+              "support": support.spec()}  # fmt: skip
     return Runtime(Store(Path(data_dir) / "cases.sqlite"), harness, agents, kb=kb or make_qa("openrouter"))
 
 

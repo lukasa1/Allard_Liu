@@ -53,7 +53,7 @@ from agent.legacy_orchestrator import DSPyPolicy, OfflinePolicy, Orchestrator
 from agent.personas import Persona, get_persona
 from agent.poa import OfflinePoaStep, PoaTurn, is_signed, make_dspy_poa_step, signed_document_id
 from agent.qa import make_qa
-from agent.support import ACK, SupportAgent, find_flags, snapshot
+from agent.legacy_support import ACK, SupportAgent, find_flags, snapshot
 from poa_skill import PoaService
 from poa_skill.service import WorkflowError, load_representative
 

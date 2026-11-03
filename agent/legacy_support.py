@@ -1,4 +1,6 @@
-"""Customer support subagent: answers the veteran when no other subagent is talking with them.
+"""LEGACY (until step 8): the regex support of the old CaseSession; the new agent is agent/support/.
+
+Customer support subagent: answers the veteran when no other subagent is talking with them.
 
 Routing (the session does it, following the architecture): while the intake subagent or the POA
 step is working the case, it answers the veteran's questions itself, since it already has the

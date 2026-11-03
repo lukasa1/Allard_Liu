@@ -1,5 +1,5 @@
 """The orchestrator and the runtime protocol end to end (plan §2-§3, L10-L13), with the real
-intake and claims prep, the support stub, and the scripted fake LM."""
+intake, claims prep and support, and the scripted fake LM."""
 
 import dataclasses
 import threading
@@ -212,10 +212,11 @@ def test_a_request_for_a_person_or_to_withdraw_goes_to_a_person_by_rule(rt, lm):
     rt.wait_until_idle()
     assert _messages(rt, cid)[-1] == ("rule", HANDOFF_MESSAGE)
     assert rt.store.get_case(cid).side_state == "needs_human"
-    lm.turn("support", final(reply="A person will call you."))  # parked: support answers
-    rt.message(cid, "I want to cancel my representation.")
+    lm.turn("orchestrator", final())
+    rt.message(cid, "I want to cancel my representation.")  # parked: still a person, by rule
     rt.wait_until_idle()
-    assert _messages(rt, cid)[-1] == ("support", "A person will call you.")
+    assert _messages(rt, cid)[-1] == ("rule", WITHDRAW_MESSAGE)
+    assert len(rt.store.get_case(cid).tasks) == 2 and not lm.prompts("support")
 
     rt2_cid = _case_at(rt, owner="intake")
     lm.turn("orchestrator", final())

@@ -150,6 +150,12 @@ class CaseFile(BaseModel):
     def missing(self, part: str) -> list[str] | None:
         return self.checklist.get(part)
 
+    def flags_to_decide(self) -> list[int]:
+        """Indexes of the flags the orchestrator decides now: open ones, and held ones once claims
+        prep has handed back (held flags wait for prep's result, §3)."""
+        return [i for i, f in enumerate(self.flags)
+                if f.status == "open" or (f.status == "held" and self.owner != "claims_prep")]  # fmt: skip
+
     @property
     def parked(self) -> bool:
         return self.side_state in PARKED

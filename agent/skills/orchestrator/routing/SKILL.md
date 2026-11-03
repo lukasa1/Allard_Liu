@@ -9,8 +9,8 @@ You never route messages; code does, on every message, before any model:
 
 1. **Crisis language** in any stage: the veteran gets the Veterans Crisis Line from code, a staff
    task is created, the case goes to `needs_human`, and you wake on `escalated`.
-2. **A request for a person, or to end the representation**, while the case isn't parked: a
-   person is asked by rule, the case goes to `needs_human`, and you wake on `escalated`.
+2. **A request for a person, or to end the representation**, in any state: a person is asked by
+   rule, the case goes to `needs_human` (unless it is already parked), and you wake on `escalated`.
 3. Otherwise:
    - **intake owns the case** (pass 1 or pass 2, including while it waits for the attorney's
      countersign): the message goes to intake, questions included;

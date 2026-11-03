@@ -60,7 +60,7 @@ def lm():
 
 @pytest.fixture
 def rt(tmp_path, lm):
-    """The runtime (orchestrator, intake, the claims-prep and support stubs) on a fresh store,
+    """The runtime (orchestrator, intake, claims prep, support) on a fresh store,
     driven by the scripted LM. kb_search uses the offline FAQ: no test touches the network."""
     from agent.qa import OfflineQA
     from agent.runtime import make_runtime

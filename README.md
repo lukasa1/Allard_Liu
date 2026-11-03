@@ -26,7 +26,7 @@ C-files). Add an OpenRouter key to switch the agents to an LLM (DSPy). **Synthet
 | ✅ | **POA skill** (`poa_skill/`): VA Form 21-22a, secure capture, click-to-sign (described below) |
 | ✅ | **Lighthouse tools** (`agent/lighthouse/`): VSHE + Benefits Claims, stub / recorded / sandbox |
 | ✅ | **QA** (`agent/qa.py`): OpenRouter web search limited to official sites; offline FAQ |
-| ✅ | **Customer support** (`agent/support.py`): read-only; status, QA, flags to staff |
+| ✅ | **Customer support** (`agent/support/`): read-only agent loop; status, kb_search, flags to the orchestrator |
 | ✅ | **Memory**: the case and every subagent's working memory saved each turn; `CaseSession.resume` continues after a restart |
 | ✅ prototype | **C-file → face note** (`agent/cfile/`): Benefits Documents stub, extraction, the firm's template |
 | ✅ | **Evaluation** (`intake_eval/`): simulated veterans with hidden ground truth, 4 conditions, pass^k |
@@ -351,7 +351,7 @@ agent/
   poa.py              the intake subagent's POA step: mounts poa_skill (DSPy ReAct, or scripted)
   lighthouse/         VA Lighthouse tools: stub (VA response shapes), recorded, sandbox
   qa.py               veteran questions: web search on official sites, offline FAQ
-  support.py          customer-support subagent: read-only snapshot, status, QA, flags
+  support/            customer-support sub-agent (legacy_support.py: the old regex one)
   cfile/              synthetic C-files + Benefits Documents stub, extraction, face-note template
   personas.py, data/personas/   the synthetic test veterans
   cli.py              `uv run intake ...`

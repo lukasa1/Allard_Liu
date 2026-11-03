@@ -125,7 +125,7 @@ def guard(turn: Turn, name: str, args: BaseModel) -> str | None:
 def context(turn: Turn) -> str:
     case = turn.case
     events = turn.rt.store.events(turn.case_id, exclude=CHAT_EVENT_TYPES, last=MEMORY_EVENTS)
-    open_flags = [f.model_dump() for f in case.flags if f.status != "handled"]
+    open_flags = [case.flags[i].model_dump() for i in case.flags_to_decide()]
     return (
         f"## Case file\n{json.dumps(case.memory(), indent=1)}\n\n"
         f"## Flags to decide this wake\n{json.dumps(open_flags) if open_flags else 'none'}\n\n"

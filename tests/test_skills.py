@@ -66,3 +66,17 @@ def test_the_claims_prep_skills_name_its_tools_and_what_prefill_settles():
     kinds = set(FACT.json_schema()["discriminator"]["mapping"])
     assert all(f"`{k}`" in text for k in kinds), kinds - {k for k in kinds if f"`{k}`" in text}
     assert all(q in text for q in QUESTIONS) and "revocation" in text and "uncertain" in text
+
+
+def test_the_support_skills_name_its_tools_and_never_promise_a_date():
+    from agent.harness import Turn
+    from agent.support import agent as support
+
+    skills = load_skills("support")
+    text = "\n".join(s.body for s in skills.values())
+    assert set(skills) == {"answer-questions", "case-status", "hand-to-a-person"}
+    names = {t.name for t in support.tools(Turn(None, "c", "support", "", 1))}
+    assert all(n in text for n in names), names - {n for n in names if n in text}
+    assert all(f"`{k}`" in text for k in ("new_condition", "contact_change", "complaint"))
+    assert "Never promise a VA date" in skills["case-status"].body and "988" in text
+    assert all(f"| stage {n}" in skills["case-status"].body for n in (3, 4, 5))

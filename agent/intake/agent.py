@@ -286,7 +286,7 @@ def _get(d: dict, dotted: str):
 # ------------------------------------------------------------------------------ context
 
 
-def _fee_line(case: CaseFile) -> str:
+def fee_line(case: CaseFile) -> str:
     pct = checklist.fee_pct(case)
     if pct is None:
         return "not set yet (prior representation unknown)"
@@ -314,7 +314,7 @@ def context(turn: Turn) -> str:
             f"documents: {json.dumps(docs)}",
             f"signed / countersigned: {json.dumps({k: v.model_dump() for k, v in case.documents.items()})}",
         ]),
-        "Fee": _fee_line(case),
+        "Fee": fee_line(case),
         "Filings": json.dumps({k: v.model_dump() for k, v in case.filings.items()}) if case.filings else "none",
         "Open tasks": "\n".join(f"- {t.text} (due {t.due})" for t in case.tasks if not t.done_at) or "none",
         f"Last {HISTORY} messages": conversation(turn, HISTORY),

@@ -1,4 +1,4 @@
-"""The input guards (agent/ingest.py), the support subagent's rules (agent/support.py) and the
+"""The input guards (agent/ingest.py), the support subagent's rules (agent/legacy_support.py) and the
 offline QA's routing (agent/qa.py), tested directly on hand-built inputs (no CaseSession)."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import pytest
 
 from agent.ingest import HIDDEN, Ingested, detect_crisis, ingest, redact_chat, wants_human
 from agent.qa import OfflineQA, WebSearchQA
-from agent.support import FOR_A_PERSON, SupportAgent, status_text
+from agent.legacy_support import FOR_A_PERSON, SupportAgent, status_text
 
 # ------------------------------------------------------------------------------ crisis
 

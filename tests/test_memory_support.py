@@ -118,7 +118,7 @@ def test_crisis_in_a_parked_case_still_goes_to_a_person(tmp_path):
 
 
 def test_support_eval_set_passes():
-    from intake_eval.support_eval import misses, run_support_eval, summarize
+    from intake_eval.legacy_support_eval import misses, run_support_eval, summarize
 
     scores = run_support_eval()
     summary = summarize(scores)

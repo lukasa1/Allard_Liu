@@ -133,7 +133,7 @@ def cmd_eval(args: argparse.Namespace) -> None:
 def cmd_support_eval(args: argparse.Namespace) -> None:
     import json
 
-    from intake_eval.support_eval import misses, run_support_eval, summarize
+    from intake_eval.legacy_support_eval import misses, run_support_eval, summarize
 
     scores = run_support_eval()
     print(json.dumps(summarize(scores), indent=2))
