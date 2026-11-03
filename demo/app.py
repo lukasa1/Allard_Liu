@@ -61,10 +61,12 @@ def scripted() -> bool:
 
 @lru_cache(maxsize=1)
 def _scripted_runtime() -> Runtime:
+    from agent.scripted.demo import OFF_SCRIPT
     from agent.scripted.kb import FaqKB
     from agent.scripted.lm import ScriptedLM
 
-    return make_runtime(config.data_dir() / "demo-scripted", ScriptedLM(), kb=FaqKB())
+    # An unpriced model name: the traces cost nothing, as no model runs.
+    return make_runtime(config.data_dir() / "demo-scripted", ScriptedLM("scripted", fallback=OFF_SCRIPT), kb=FaqKB())
 
 
 def get_runtime() -> Runtime | None:
@@ -178,7 +180,9 @@ def suggest(case_id: str, rt: Live):
 
         sent = len([e for e in rt.store.events(case_id, types=("message",)) if e.data["from"] == "veteran"])
         lines = demo.story().veteran
-        return {"text": lines[sent] if sent < len(lines) else "Thank you."}
+        if sent >= len(lines):
+            raise HTTPException(409, "The story is over: the case is ready for attorney review. Start case plays it again.")
+        return {"text": lines[sent]}
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}

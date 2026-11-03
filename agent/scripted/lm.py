@@ -94,9 +94,11 @@ class _Engine(DummyEngine):
 
 
 class ScriptedLM(DummyLM):
-    def __init__(self, model: str = "openrouter/anthropic/claude-haiku-5.5") -> None:
+    def __init__(self, model: str = "openrouter/anthropic/claude-haiku-5.5", fallback: str | None = None) -> None:
+        """`fallback`: the reply of a turn the script doesn't have (the scripted demo); without
+        it such a turn fails, as a test should."""
         super().__init__([])
-        self.model = model
+        self.model, self.fallback = model, fallback
         self._engine_spec = _Engine(self)
         self._async_engine_spec = AsyncDummyEngine(self._engine_spec)
         self.turns: dict[str, deque[_Turn]] = {}
@@ -138,6 +140,8 @@ class ScriptedLM(DummyLM):
         turn = self.current.get(agent)
         if kind == "react" and (turn is None or not turn.steps):
             queue = self.turns.get(agent)
+            if not queue and self.fallback is not None:
+                queue = deque([_Turn(deque([Final(self.fallback)]))])
             if not queue:
                 raise AssertionError(f"no scripted turn left for {agent}; incoming:\n{user[-600:]}")
             turn = self.current[agent] = queue.popleft()

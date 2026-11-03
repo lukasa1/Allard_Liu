@@ -28,6 +28,7 @@ SECURE = {
     "branch": "marine_corps", "address.line1": "200 Lake St", "address.city": "Milwaukee",
     "address.state": "Wisconsin", "address.zip": "53202", "phone": "414-555-0142", "email": "hector@example.com",
 }  # fmt: skip
+OFF_SCRIPT = "(Scripted demo: that message isn't in the script, so no agent answers it. Press Next line for the story's next line.)"
 PASS1 = {"finished": "pass 1: 21-22a and ITF filed, fee agreement faxed"}
 
 
