@@ -32,7 +32,7 @@ class Document:
     session_id: str
     form_id: str
     edition: str
-    status: str  # draft | signed | superseded
+    status: str  # draft | signed | countersigned | superseded
     consents: dict
     missing: list[str]
     created_at: str
@@ -40,6 +40,9 @@ class Document:
     version: int = 1
     signed_at: str | None = None
     signature_audit: dict = field(default_factory=dict)
+    terms: dict = field(default_factory=dict)  # fee agreement: {"fee_pct": N}
+    countersigned_at: str | None = None
+    countersign_audit: dict = field(default_factory=dict)
 
 
 class DocumentStore:
@@ -66,8 +69,14 @@ class DocumentStore:
             return None
         return Document(**json.loads(p.read_text()))
 
-    def pdf(self, doc_id: str) -> bytes:
-        return self._fernet.decrypt((self.dir / f"{doc_id}.pdf.bin").read_bytes())
+    def save_version(self, doc: Document, label: str, pdf: bytes) -> None:
+        """A later version (e.g. "countersigned") beside the one `save` wrote, which stays as is."""
+        (self.dir / f"{doc.id}.{label}.pdf.bin").write_bytes(self._fernet.encrypt(pdf))
+        (self.dir / f"{doc.id}.json").write_text(json.dumps(asdict(doc), indent=2))
+
+    def pdf(self, doc_id: str, label: str | None = None) -> bytes:
+        name = f"{doc_id}.{label}.pdf.bin" if label else f"{doc_id}.pdf.bin"
+        return self._fernet.decrypt((self.dir / name).read_bytes())
 
     def all(self) -> list[Document]:
         if not self.dir.exists():

@@ -29,7 +29,7 @@ from agent import stages
 from agent.casefile import CaseFile, Flag, SubagentResult, Task
 from agent.harness import OWNING, AgentSpec, Harness, Turn, TurnOutcome
 from agent.ingest import ingest, wants_withdraw
-from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE
+from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE, QATool
 from agent.store import Event, Store
 from agent.traces import TraceLog
 
@@ -49,10 +49,11 @@ class Job:
 
 
 class Runtime:
-    def __init__(self, store: Store, harness: Harness, agents: dict[str, AgentSpec]) -> None:
+    def __init__(self, store: Store, harness: Harness, agents: dict[str, AgentSpec], kb: QATool | None = None) -> None:
         self.store = store
         self.harness = harness
         self.agents = agents
+        self.kb = kb  # the kb_search engine (agent/kb.py): question -> QAResult
         self._cond = threading.Condition()
         self._queues: dict[tuple[str, str], deque[Job]] = {}
         self._active: set[tuple[str, str]] = set()
@@ -288,12 +289,16 @@ class Runtime:
             self.patch(case_id, lambda c: setattr(c, "awaiting_veteran", True), actor=spec.name)
 
 
-def make_runtime(data_dir: Path, lm) -> Runtime:
-    """The runtime with the orchestrator and (until steps 3-5 replace them) the sub-agent stubs."""
+def make_runtime(data_dir: Path, lm, kb: QATool | None = None) -> Runtime:
+    """The runtime with the orchestrator, intake and (until steps 4-5 replace them) the claims-prep
+    and support stubs. `kb`: the kb_search engine; by default the web-search QA (agent/qa.py)."""
     from agent import orchestrator, stubs
+    from agent.intake import agent as intake
+    from agent.qa import make_qa
 
     harness = Harness(lm, TraceLog(Path(data_dir) / "traces.jsonl"))
-    return Runtime(Store(Path(data_dir) / "cases.sqlite"), harness, {"orchestrator": orchestrator.spec(), **stubs.specs()})
+    agents = {"orchestrator": orchestrator.spec(), "intake": intake.spec(), **stubs.specs()}
+    return Runtime(Store(Path(data_dir) / "cases.sqlite"), harness, agents, kb=kb or make_qa("openrouter"))
 
 
 def route(case: CaseFile) -> str:

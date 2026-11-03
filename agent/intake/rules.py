@@ -41,10 +41,18 @@ RULES: dict[str, Rule] = {
             "(38 CFR 3.12), so this is a review, not a rejection.",
         ),
         Rule(
+            "non_honorable_period",
+            "firm_policy",
+            "Any service period other than honorable, bad conduct or dishonorable: an attorney "
+            "decides whether the firm takes the case (plan A1). Legally most of these need a VA "
+            "character-of-discharge determination (38 CFR 3.12), so this is a review, not a rejection.",
+        ),
+        Rule(
             "fee_pct",
             "firm_policy",
-            "30% standard; 20% when a prior private attorney or agent represented the veteran. VA "
-            "withholds at most 20% (38 CFR 14.636(h)); the firm collects the rest from the client.",
+            "PLACEHOLDER, unconfirmed by the firm: 30% standard; 20% when a prior private attorney "
+            "or agent represented the veteran. VA withholds at most 20% (38 CFR 14.636(h)); above "
+            "that the client pays the firm directly.",
         ),
         Rule(
             "no_fee_before_decision",
@@ -72,7 +80,9 @@ def early_stop(record: IntakeRecord, answered: set[str]) -> Outcome | None:
 
 
 def fee_pct(record: IntakeRecord) -> int:
-    """Firm policy (see RULES["fee_pct"]). Referral-source discounts come from the lead, not intake."""
+    """The fee % offered to a new client. A PLACEHOLDER for firm policy: the firm's SOP only says
+    how to read the % off an existing C-file, not how the firm chooses it for a new client (plan
+    Q1, unconfirmed). Nothing else may rely on the "prior attorney -> 20%" rule."""
     return 20 if record.prior_attorney else 30
 
 

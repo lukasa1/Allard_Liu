@@ -173,7 +173,7 @@ class Vault:
     def __init__(
         self, session_id: str, data_dir: Path = DEFAULT_DATA_DIR, key: bytes | None = None
     ):
-        if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", session_id):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{4,64}", session_id):
             raise ValueError("bad session id")
         self.path = data_dir / "vault" / f"{session_id}.bin"
         self._fernet = Fernet(key or load_key(data_dir))

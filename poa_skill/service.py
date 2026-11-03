@@ -1,28 +1,36 @@
-"""The 21-22a workflow, shared by the agent's tools (tools.py) and the host app (demo/server.py).
+"""The signing workflow for the representation documents, shared by the agent's tools and the
+host app: VA Form 21-22a and the (synthetic) fee agreement, each a `FormKind`.
 
 Who can do what is the security model:
   agent  asks for secure capture, prepares/edits the draft, offers it for signature.
   user   types PII into the secure form, draws a signature, clicks Sign.
+  staff  countersigns a signed document (one action for both documents in the demo).
 The agent has no path to raw PII and no way to sign: `sign()` is only reachable from the host's
-click handler, which records the user's own intent.
+click handler, which records the user's own intent, and `countersign()` from the staff panel.
 """
 
 import json
 import secrets
-from dataclasses import asdict
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 
+from poa_skill import fee_agreement
 from poa_skill import form_21_22a as form
 from poa_skill.documents import Document, DocumentStore, now_iso, sha256
 from poa_skill.vault import DEFAULT_DATA_DIR, FIELDS, Vault
 
 REP_CONFIG = Path(__file__).resolve().parent.parent / "config" / "representative.json"
 
-# Shown on the Sign button's card and recorded verbatim in the audit trail.
+# Shown on the Sign button's card and recorded verbatim in the audit trail, one per form.
 ESIGN_CONSENT = (
     "By clicking Sign, I adopt my saved signature as my signature on this VA Form 21-22a, "
     "appointing the representative named in Item 16A, and I agree to sign electronically."
+)
+FEE_ESIGN_CONSENT = (
+    "By clicking Sign, I adopt my saved signature as my signature on this Attorney Fee Agreement "
+    "and Conditions of Costs, I agree to its fee and cost terms, and I agree to sign electronically."
 )
 
 # Fields the agent or the user may change on a draft without the secure form. Secret fields
@@ -33,6 +41,43 @@ CONSENT_KEYS = ("authorize_7332_records", "authorize_address_change")
 
 class WorkflowError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class FormKind:
+    """One signable document: how it is rendered, what it needs, how it is signed and
+    countersigned, and the e-sign consent the signer is shown."""
+
+    key: str  # "21-22a" | "fee_agreement"
+    label: str
+    form_id: str
+    edition: str
+    consent: str
+    missing: Callable[[dict, "Document"], list[str]]  # (veteran, doc) -> plain-language gaps
+    render: Callable[[dict, dict, "Document"], bytes]  # (veteran, rep, doc) -> draft PDF
+    sign: Callable[[bytes, str, str], bytes]  # (draft, signature data URI, ISO date)
+    countersign: Callable[[bytes, str, str], bytes]  # (signed, attorney name, ISO date)
+
+
+FORMS: dict[str, FormKind] = {
+    "21-22a": FormKind(
+        "21-22a", "VA 21-22a", form.FORM_ID, form.EDITION, ESIGN_CONSENT,
+        missing=lambda v, d: form.missing_fields(v, form.Consents(**d.consents)),
+        render=lambda v, rep, d: form.render_draft(v, rep, form.Consents(**d.consents)),
+        sign=form.sign_draft, countersign=form.countersign,
+    ),
+    "fee_agreement": FormKind(
+        "fee_agreement", fee_agreement.TITLE, fee_agreement.FORM_ID, fee_agreement.EDITION, FEE_ESIGN_CONSENT,
+        missing=lambda v, d: fee_agreement.missing_fields(v),
+        render=lambda v, rep, d: fee_agreement.render_draft(v, rep, d.terms["fee_pct"]),
+        sign=fee_agreement.sign_draft, countersign=fee_agreement.countersign,
+    ),
+}  # fmt: skip
+_BY_FORM_ID = {k.form_id: k for k in FORMS.values()}
+
+
+def kind_of(doc: "Document") -> FormKind:
+    return _BY_FORM_ID[doc.form_id]
 
 
 def load_representative(path: Path = REP_CONFIG) -> dict:
@@ -115,42 +160,47 @@ class PoaService:
     def describe(self, doc: Document) -> dict:
         return {
             "document_id": doc.id,
-            "form": "VA 21-22a",
+            "form": kind_of(doc).label,
+            "kind": kind_of(doc).key,
             "status": doc.status,
             "version": doc.version,
             "missing": doc.missing,
             "consents": doc.consents,
+            "terms": doc.terms,
             "signed_at": doc.signed_at,
+            "countersigned_at": doc.countersigned_at,
         }
 
     def _render(self, doc: Document) -> bytes:
-        consents = form.Consents(**doc.consents)
-        veteran = self.vault.veteran()
-        doc.missing = form.missing_fields(veteran, consents)
-        return form.render_draft(veteran, self.rep, consents)
+        kind, veteran = kind_of(doc), self.vault.veteran()
+        doc.missing = kind.missing(veteran, doc)
+        return kind.render(veteran, self.rep, doc)
 
-    def prepare(self, consents: dict) -> Document:
-        """Fill a fresh draft. Any earlier unsigned draft is superseded so only one is live."""
-        consents = {k: consents.get(k) for k in CONSENT_KEYS}
+    def prepare(self, consents: dict | None = None, form_key: str = "21-22a", terms: dict | None = None) -> Document:
+        """Fill a fresh draft of one form (the 21-22a takes the Item 20/22 consents; the fee
+        agreement takes its terms). An earlier unsigned draft of that form is superseded."""
+        kind = FORMS[form_key]
+        consents = {k: (consents or {}).get(k) for k in CONSENT_KEYS} if form_key == "21-22a" else {}
         for d in self.docs.all():
-            if d.status == "draft":
+            if d.status == "draft" and d.form_id == kind.form_id:
                 d.status = "superseded"
                 self.docs.save(d, self.docs.pdf(d.id))
         ts = now_iso()
         doc = Document(
             id=self.docs.new_id(),
             session_id=self.session_id,
-            form_id=form.FORM_ID,
-            edition=form.EDITION,
+            form_id=kind.form_id,
+            edition=kind.edition,
             status="draft",
             consents=consents,
             missing=[],
             created_at=ts,
             updated_at=ts,
+            terms=dict(terms or {}),
         )
         pdf = self._render(doc)
         self.docs.save(doc, pdf)
-        self.docs.audit("draft_prepared", document_id=doc.id, missing=doc.missing)
+        self.docs.audit("draft_prepared", document_id=doc.id, form=kind.key, missing=doc.missing)
         return doc
 
     def edit(self, doc_id: str, changes: dict, actor: str) -> Document:
@@ -165,7 +215,7 @@ class PoaService:
         errors = self.vault.put(field_changes)  # collect once: edits update the record too
         if errors:
             raise WorkflowError(f"invalid values: {errors}")
-        for k in CONSENT_KEYS:
+        for k in CONSENT_KEYS if doc.form_id == form.FORM_ID else ():
             if k in changes:
                 doc.consents[k] = bool(changes[k])
         doc.version += 1
@@ -198,12 +248,13 @@ class PoaService:
         ok, why = self.ready_to_sign(doc_id)
         if not ok:
             raise WorkflowError(why)
-        if consent_text != ESIGN_CONSENT:
-            raise WorkflowError("the signer must be shown the current e-sign consent")
         doc = self.docs.get(doc_id)
+        kind = kind_of(doc)
+        if consent_text != kind.consent:
+            raise WorkflowError("the signer must be shown the current e-sign consent")
         draft = self.docs.pdf(doc_id)
         signature = self.vault.signature()
-        signed = form.sign_draft(draft, signature, date.today().isoformat())
+        signed = kind.sign(draft, signature, date.today().isoformat())
         doc.status = "signed"
         doc.signed_at = now_iso()
         doc.updated_at = doc.signed_at
@@ -220,10 +271,38 @@ class PoaService:
         self.docs.audit("document_signed", document_id=doc.id, **doc.signature_audit)
         return doc
 
+    def countersign(self, doc_id: str, *, attorney: str, by: str) -> Document:
+        """STAFF-ONLY. Stamp the attorney's countersignature (name and date, as text) onto a copy
+        of the signed PDF and save it as a new version. The veteran-signed version and its
+        `signed_pdf_sha256` stay unchanged."""
+        doc = self.docs.get(doc_id)
+        if doc is None or doc.status != "signed":
+            raise WorkflowError(f"only a signed document can be countersigned ({doc.status if doc else 'none'})")
+        signed = self.docs.pdf(doc_id)
+        stamped = kind_of(doc).countersign(signed, attorney, date.today().isoformat())
+        doc.status, doc.version = "countersigned", doc.version + 1
+        doc.countersigned_at = doc.updated_at = now_iso()
+        doc.countersign_audit = {
+            "attorney": attorney,
+            "by": by,
+            "signed_pdf_sha256": sha256(signed),
+            "countersigned_pdf_sha256": sha256(stamped),
+        }
+        self.docs.save_version(doc, "countersigned", stamped)
+        self.docs.audit("document_countersigned", document_id=doc.id, version=doc.version, **doc.countersign_audit)
+        return doc
+
+    def live(self, form_key: str) -> Document | None:
+        """The form's current document (the newest that isn't superseded), or None."""
+        docs = [d for d in self.docs.all() if d.form_id == FORMS[form_key].form_id and d.status != "superseded"]
+        return docs[-1] if docs else None
+
     def document_pdf(self, doc_id: str) -> bytes:
-        if self.docs.get(doc_id) is None:
+        """The latest version: countersigned if it is, else as signed (or the draft)."""
+        doc = self.docs.get(doc_id)
+        if doc is None:
             raise WorkflowError("no such document")
-        return self.docs.pdf(doc_id)
+        return self.docs.pdf(doc_id, "countersigned" if doc.status == "countersigned" else None)
 
     def document(self, doc_id: str) -> dict:
         doc = self.docs.get(doc_id)

@@ -1,18 +1,18 @@
-"""The orchestrator and the runtime protocol end to end (plan §2-§3, L10-L13), with the
-sub-agent stubs and the scripted fake LM."""
+"""The orchestrator and the runtime protocol end to end (plan §2-§3, L10-L13), with the real
+intake, the claims-prep and support stubs, and the scripted fake LM."""
 
 import dataclasses
 import threading
 import time
 
 from fake_lm import bad, call, final, pause
+from intake_fixtures import SCREEN_STEPS, countersign_both, prefill_pass2, sign_both
 
-from agent.casefile import CaseFile, DocState, Filing, PrepState
+from agent.casefile import CaseFile, Filing, PrepState
 from agent.harness import CANNED_REPLY
 from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE
 from agent.runtime import WITHDRAW_MESSAGE, route
 
-T = "2026-11-03T10:00:00+00:00"
 FILED = {"21-22a": Filing(confirmation="A"), "itf": Filing(confirmation="B")}
 
 
@@ -31,15 +31,6 @@ def _messages(rt, cid):
     return [(o.agent, o.payload["text"]) for o in rt.updates(cid) if o.kind == "message"]
 
 
-def _sign(case):
-    case.documents = {f: DocState(signed_at=T) for f in ("21-22a", "fee_agreement")}
-
-
-def _countersign(case):
-    for d in case.documents.values():
-        d.countersigned_at, d.countersigned_by = T, "Attorney A"
-
-
 def _case_at(rt, **fields) -> str:
     return rt.store.create_case(CaseFile(case_id="c1", **fields)).case_id
 
@@ -56,15 +47,13 @@ def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
     cid = _opened_with_intake(rt, lm)
     assert rt.store.get_case(cid).side_state == "waiting_on_veteran"
 
-    lm.turn("intake", call("record_answer", question_id="served", value="yes"),
-            call("record_answer", question_id="discharge", value="honorable"),
-            call("record_answer", question_id="rating", value="30"), final(reply="Please sign both documents."))  # fmt: skip
-    rt.message(cid, "Yes, Army, honorable, rated 30%.")
+    lm.turn("intake", *SCREEN_STEPS, final(reply="Please sign both documents."))
+    rt.message(cid, "Yes, Army 2004-06 to 2010-05, honorable. Never filed, never had a lawyer.")
     rt.wait_until_idle()
     assert rt.store.get_case(cid).stage == 2
 
     lm.turn("intake", final(reply="Thanks! Our attorney is reviewing both documents."))
-    rt.event(cid, "signed", {"forms": ["21-22a", "fee_agreement"]}, actor="veteran", apply=_sign)
+    rt.event(cid, "signed", {"forms": ["21-22a", "fee_agreement"]}, actor="veteran", apply=sign_both)
     rt.wait_until_idle()
     assert rt.store.get_case(cid).side_state == "waiting_on_attorney"
 
@@ -73,22 +62,26 @@ def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
     rt.wait_until_idle()
 
     pass1 = {"finished": "pass 1: 21-22a and ITF filed, fee agreement faxed", "wrote": ["filings"], "needs": [], "flags": []}
-    lm.turn("intake", call("submit_va", form="21-22a"), call("submit_va", form="itf"), call("efax_ogc"),
-            final(reply="Filed with VA!", result=pass1))  # fmt: skip
+    gate = threading.Event()
+    lm.turn("intake", call("submit_va", form="21-22a"), call("submit_va", form="itf"),
+            call("efax_ogc", doc="fee_agreement"), final(reply="Filed with VA!", result=pass1))  # fmt: skip
     lm.turn("orchestrator", call("run_prep", goal="Pull and read the C-file, prefill, face note."),
             final(reply="We've asked VA for your file."))  # fmt: skip
-    lm.turn("claims_prep", call("finish_prep"), final(result={"finished": "face note verified"}))
+    lm.turn("claims_prep", pause(gate), call("finish_prep"), final(result={"finished": "face note verified"}))
     lm.turn("orchestrator", call("run_intake", goal="Pass 2: ask only the gaps."), final())
-    lm.turn("intake", final(reply="Which conditions do you want to claim?"))
-    rt.event(cid, "countersigned", {"by": "Attorney A"}, actor="staff", apply=_countersign)
+    lm.turn("intake", final(reply="Any other conditions besides tinnitus?"))
+    rt.event(cid, "countersigned", {"by": "Attorney 1"}, actor="staff", apply=countersign_both)
+    _until(lambda: any(s.agent == "claims_prep" for s in lm.seen))
+    rt.patch(cid, lambda c: prefill_pass2(c, leave=("other_conditions",)), actor="claims_prep")  # step 4's prefill
+    gate.set()
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
-    assert (case.stage, case.owner, case.prep.done) == (4, "intake", True)
+    assert (case.stage, case.owner, case.prep.done, case.checklist["pass2"]) == (4, "intake", True, ["other_conditions"])
 
-    lm.turn("intake", call("record_answer", question_id="conditions", value="back"),
+    lm.turn("intake", call("record_answer", q="other_conditions", a="None"),
             final(reply="Thank you, that's everything.", result={"finished": "pass 2: gaps closed"}))  # fmt: skip
     lm.turn("orchestrator", final())
-    rt.message(cid, "My back.")
+    rt.message(cid, "No others.")
     rt.wait_until_idle()
 
     case = rt.store.get_case(cid)
@@ -102,7 +95,7 @@ def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
     assert _messages(rt, cid)[0] == ("orchestrator", "Welcome!")
     assert set(rt.harness.traces.cost_by_agent(cid)) == {"orchestrator", "intake", "claims_prep"}
     # The orchestrator's memory block never holds a transcript.
-    assert not any("How long" in p or "My back" in p for p in lm.prompts("orchestrator"))
+    assert not any("How long" in p or "No others" in p for p in lm.prompts("orchestrator"))
 
 
 def test_a_handoff_runs_the_sub_agents_first_turn_after_the_wake(rt, lm):
@@ -154,7 +147,8 @@ def test_a_flag_outside_stage_4_wakes_the_orchestrator_which_reopens_intake(rt, 
     rt.message(cid, "I also want to claim my knees too.")
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
-    assert (case.stage, case.owner, case.checklist["pass2"], case.flags[0].status) == (4, "intake", None, "handled")
+    assert (case.stage, case.owner, case.flags[0].status) == (4, "intake", "handled")
+    assert case.checklist["pass2"]  # the move back reset it; intake's turn rebuilt it
 
 
 def test_refused_moves_are_returned_logged_and_end_nothing(rt, lm):
@@ -218,10 +212,10 @@ def test_a_request_for_a_person_or_to_withdraw_goes_to_a_person_by_rule(rt, lm):
 
 def test_a_stop_rule_closes_the_case_and_returns_the_pass(rt, lm):
     cid = _opened_with_intake(rt, lm)
-    lm.turn("intake", call("fire_stop_rule", rule="rated_100", reason="already rated 100%"),
-            call("record_answer", question_id="served", value="yes"), final(reply="We can't take this case."))  # fmt: skip
+    lm.turn("intake", call("record_answer", q="is_veteran", a="No, I never served"),
+            call("record_answer", q="filed_before", a="no"), final(reply="We can't take this case."))  # fmt: skip
     lm.turn("orchestrator", final())
-    rt.message(cid, "I'm already rated 100%.")
+    rt.message(cid, "I never served, I'm asking for my dad.")
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
     assert (case.side_state, case.owner) == ("closed", None)

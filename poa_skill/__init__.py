@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from poa_skill.guard import redact
-from poa_skill.service import ESIGN_CONSENT, PoaService, WorkflowError
+from poa_skill.service import ESIGN_CONSENT, FEE_ESIGN_CONSENT, FORMS, PoaService, WorkflowError
 from poa_skill.tools import TOOLS, ToolOutcome, openai_tools, run_tool
 
 SKILL_DIR = Path(__file__).parent / "skills" / "poa_21_22a"
@@ -61,6 +61,8 @@ def load_skill() -> Skill:
 
 __all__ = [
     "ESIGN_CONSENT",
+    "FEE_ESIGN_CONSENT",
+    "FORMS",
     "PoaService",
     "Skill",
     "ToolOutcome",

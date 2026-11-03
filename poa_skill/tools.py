@@ -13,7 +13,7 @@ clicks Sign in the host UI (PoaService.sign).
 
 from dataclasses import dataclass, field
 
-from poa_skill.service import EDITABLE, ESIGN_CONSENT, PoaService, WorkflowError
+from poa_skill.service import EDITABLE, ESIGN_CONSENT, PoaService, WorkflowError, kind_of
 from poa_skill.vault import FIELDS
 
 _EDITABLE_DOC = ", ".join(sorted(EDITABLE))
@@ -124,7 +124,7 @@ class ToolOutcome:
     is_error: bool = False
 
 
-def _form_card(req: dict) -> dict:
+def form_card(req: dict) -> dict:
     return {
         "type": "secure_form",
         "request_id": req["id"],
@@ -141,9 +141,10 @@ def _form_card(req: dict) -> dict:
     }
 
 
-def _preview_card(svc: PoaService, doc) -> dict:
+def preview_card(svc: PoaService, doc) -> dict:
     return {
         "type": "document_preview",
+        "form": kind_of(doc).key,
         "document_id": doc.id,
         "version": doc.version,
         "missing": doc.missing,
@@ -167,7 +168,7 @@ def run_tool(svc: PoaService, name: str, args: dict) -> ToolOutcome:
                     "note": "The secure form is open for the user. Don't ask for these values "
                     "in chat. You'll be told when it's submitted.",
                 },
-                [_form_card(req)],
+                [form_card(req)],
             )
 
         if name == "prepare_poa_21_22a":
@@ -177,11 +178,11 @@ def run_tool(svc: PoaService, name: str, args: dict) -> ToolOutcome:
                     "authorize_address_change": bool(args["authorize_address_change"]),
                 }
             )
-            return ToolOutcome(svc.describe(doc), [_preview_card(svc, doc)])
+            return ToolOutcome(svc.describe(doc), [preview_card(svc, doc)])
 
         if name == "update_poa_draft":
             doc = svc.edit(args["document_id"], dict(args["changes"]), actor="agent")
-            return ToolOutcome(svc.describe(doc), [_preview_card(svc, doc)])
+            return ToolOutcome(svc.describe(doc), [preview_card(svc, doc)])
 
         if name == "request_signature_capture":
             return ToolOutcome(

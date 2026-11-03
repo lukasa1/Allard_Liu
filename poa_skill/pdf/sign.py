@@ -96,13 +96,23 @@ def _overlay(pdf_bytes: bytes, page_index: int, draw) -> bytes:
     return out.getvalue()
 
 
-def stamp_signature(pdf_bytes: bytes, field_name: str, data_uri: str) -> bytes:
-    """Overlay a drawn signature into the named /Sig field's rect. Raises ValueError if the
-    field is missing or the image holds no ink: a signing step must never silently no-op."""
+def _widget(pdf_bytes: bytes, field_name: str) -> tuple[int, list[float]]:
     loc = find_sig_widget(pdf_bytes, field_name)
     if not loc:
         raise ValueError(f"signature field {field_name!r} not found")
-    page_index, (x0, y0, x1, y1) = loc
+    return loc
+
+
+def stamp_signature(pdf_bytes: bytes, field_name: str, data_uri: str) -> bytes:
+    """Overlay a drawn signature into the named /Sig field's rect. Raises ValueError if the
+    field is missing or the image holds no ink: a signing step must never silently no-op."""
+    return stamp_signature_at(pdf_bytes, *_widget(pdf_bytes, field_name), data_uri)
+
+
+def stamp_signature_at(pdf_bytes: bytes, page_index: int, rect: list[float], data_uri: str) -> bytes:
+    """Overlay a drawn signature into `rect` ([x0, y0, x1, y1], points) on one page: for
+    generated PDFs, which have no signature widgets."""
+    x0, y0, x1, y1 = rect
     img = trim_to_ink(decode_drawn(data_uri))
     if img is None:
         raise ValueError("signature image is blank")
@@ -119,17 +129,18 @@ def stamp_signature(pdf_bytes: bytes, field_name: str, data_uri: str) -> bytes:
     return _overlay(pdf_bytes, page_index, draw)
 
 
-def stamp_text(pdf_bytes: bytes, field_name: str, text: str) -> bytes:
-    """Print plain text (e.g. "N/A") into a /Sig field's rect: signature boxes can't hold
-    AcroForm text, so an overlay is the only way to mark one as not applicable."""
-    loc = find_sig_widget(pdf_bytes, field_name)
-    if not loc:
-        raise ValueError(f"signature field {field_name!r} not found")
-    page_index, (x0, y0, _, y1) = loc
+def stamp_text(pdf_bytes: bytes, field_name: str, text: str, indent: float = 120) -> bytes:
+    """Print plain text (e.g. "N/A", or an attorney's countersignature) into a /Sig field's
+    rect: signature boxes can't hold AcroForm text, so an overlay is the only way."""
+    return stamp_text_at(pdf_bytes, *_widget(pdf_bytes, field_name), text, indent)
+
+
+def stamp_text_at(pdf_bytes: bytes, page_index: int, rect: list[float], text: str, indent: float = 0) -> bytes:
+    x0, y0, _, y1 = rect
     rh = y1 - y0
 
     def draw(c):
         c.setFont("Times-Roman", min(14, rh * 0.6))
-        c.drawString(x0 + 120, y0 + rh * 0.3, text)
+        c.drawString(x0 + indent, y0 + rh * 0.3, text)
 
     return _overlay(pdf_bytes, page_index, draw)

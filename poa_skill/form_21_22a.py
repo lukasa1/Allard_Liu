@@ -209,3 +209,15 @@ def sign_draft(draft_pdf: bytes, signature_data_uri: str, signed_on_iso: str) ->
         strict=True,
     )
     return stamp_signature(dated, VETERAN_SIG_FIELD, signature_data_uri)
+
+
+def countersign(signed_pdf: bytes, attorney_name: str, signed_on_iso: str) -> bytes:
+    """The attorney's countersignature, stamped as text: "/s/ <name>" in Item 25A and the date
+    in 25B. Applied to a copy of the veteran-signed PDF (a new version; the signed one is kept)."""
+    m, d, y = t.split_dob(signed_on_iso)
+    dated = fill_acroform(
+        signed_pdf,
+        {_P2 + "Date_Signed_Month[2]": m, _P2 + "Date_Signed_Day[2]": d, _P2 + "Date_Signed_Year[2]": y},
+        strict=True,
+    )
+    return stamp_text(dated, REP_SIG_FIELD, f"/s/ {attorney_name}", indent=4)

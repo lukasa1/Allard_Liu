@@ -32,9 +32,22 @@ def now() -> str:
 
 
 class Answer(BaseModel):
-    value: Any
+    value: Any  # the parsed value (None when unknown)
     source: str  # "veteran, chat <time>" | "C-file p. N" | "secure form"
     at: str = Field(default_factory=now)
+    raw: str | None = None  # the text the value was parsed from, kept verbatim
+    unknown: bool = False  # the veteran doesn't know or declined: counts as settled
+
+
+class Conflict(BaseModel):
+    """The C-file disagrees with an answer on file (A2). Claims prep's prefill records it; pass 2
+    asks the veteran, and the veteran's new answer to `question` resolves it."""
+
+    question: str  # the question id in questions.yaml
+    on_file: Any  # the answer intake already had
+    cfile: Any  # what the C-file says
+    cite: str  # "C-file p. N"
+    resolved_at: str | None = None
 
 
 class DocState(BaseModel):
@@ -85,8 +98,11 @@ class Flag(BaseModel):
 
 
 class StopRule(BaseModel):
-    rule: str  # not_veteran | rated_100 | all_periods_non_honorable ...
+    rule: str  # not_veteran | rated_100 | non_honorable_period
     reason: str
+    # Where the case goes while nothing is filed: closed, or a person (the attorney) decides.
+    # Once anything is filed it is always needs_human.
+    to: Literal["closed", "needs_human"] = "closed"
 
 
 class SubagentResult(BaseModel):
@@ -116,6 +132,7 @@ class CaseFile(BaseModel):
     # None: not built yet (so never "complete").
     checklist: dict[str, list[str] | None] = Field(default_factory=dict)
     stop: StopRule | None = None
+    conflicts: list[Conflict] = Field(default_factory=list)  # C-file vs intake (claims prep writes)
     documents: dict[str, DocState] = Field(default_factory=dict)  # "21-22a" | "fee_agreement"
     filings: dict[str, Filing] = Field(default_factory=dict)  # "21-22a" | "itf" | "fee_agreement"
     prep: PrepState = Field(default_factory=PrepState)

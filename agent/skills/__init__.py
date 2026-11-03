@@ -8,7 +8,7 @@ folder. Where code enforces a rule (routing, the stage guard), the skill describ
 model, and tests keep the two in sync.
 
   orchestrator/  stage-playbook, routing, flags
-  intake/        screen-veteran, intent-to-file, close-gaps   (+ poa_skill: poa-21-22a)
+  intake/        screen-veteran, poa-and-fees, intent-to-file, close-gaps
   claims_prep/   face-note-format, cfile-vs-intake
   support/       case-status, answer-questions, hand-to-a-person
 """

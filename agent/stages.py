@@ -14,7 +14,8 @@ Code derives the stage and the waiting state from the case file after every chan
 and runs each proposed change through the same guard (`check_stage`, `check_side`) that checks
 the orchestrator's moves and handoffs. Moves inside one owner's stages happen automatically;
 a move to another owner only through a handoff (`check_handoff`). A fired stop rule parks the
-case: `closed` while nothing is filed, `needs_human` after (a person decides on withdrawal).
+case: `closed` while nothing is filed (or `needs_human` when the rule leaves it to an attorney),
+`needs_human` after filing (a person decides on withdrawal).
 """
 
 from __future__ import annotations
@@ -148,7 +149,7 @@ def settle(case: CaseFile) -> list[dict[str, Any]]:
     if case.parked:
         return events
     if case.stop:
-        to = "needs_human" if case.filings else "closed"
+        to = "needs_human" if case.filings else case.stop.to
         reason = f"stop rule {case.stop.rule}: {case.stop.reason}"
         events.append(move(case, to, "derive", reason))
         return events

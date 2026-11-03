@@ -40,3 +40,14 @@ def test_the_routing_skill_matches_the_code_rules():
     routing = read_skill("orchestrator", "routing")
     assert "waiting for the attorney" in routing or "countersign" in routing
     assert "support" in routing and "Crisis" in routing and "held" in routing
+
+
+def test_the_intake_skills_name_its_tools():
+    from agent.intake import agent as intake
+    from agent.harness import Turn
+
+    text = "\n".join(s.body for s in load_skills("intake").values())
+    names = {t.name for t in intake.tools(Turn(None, "c", "intake", "", 1))} - {"get_case"}
+    assert set(load_skills("intake")) == {"screen-veteran", "poa-and-fees", "intent-to-file", "close-gaps"}
+    assert all(n in text for n in names), names - {n for n in names if n in text}
+    assert "waiting_on_attorney" in text and "stop rule" in text.lower() and "confirm" in text

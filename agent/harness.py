@@ -26,6 +26,7 @@ import dspy
 from pydantic import BaseModel
 
 from agent.casefile import CaseFile, SubagentResult
+from agent.ingest import redact_chat
 from agent.skills import read_skill, skill_index
 from agent.tools.registry import Registry, ToolSpec
 from agent.traces import CURRENT, TraceCallback, TraceLog, TurnInfo
@@ -139,8 +140,10 @@ class Harness:
             return spec.guard(turn, name, args) if spec.guard else None
 
         def refused(name: str, args: dict, reason: str) -> None:
+            # A refused call may carry what the guard keeps out (an SSN): never log it verbatim.
+            safe = {k: redact_chat(v)[0] if isinstance(v, str) else v for k, v in args.items()}
             turn.rt.store.append_event(
-                turn.case_id, "refused", {"tool": name, "args": args, "reason": reason}, actor=spec.name
+                turn.case_id, "refused", {"tool": name, "args": safe, "reason": reason}, actor=spec.name
             )
 
         return Registry([read, *spec.tools(turn)], guard=guard, on_refused=refused)

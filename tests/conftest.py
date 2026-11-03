@@ -60,8 +60,10 @@ def lm():
 
 @pytest.fixture
 def rt(tmp_path, lm):
-    """The runtime (orchestrator + sub-agent stubs) on a fresh store, driven by the scripted LM."""
+    """The runtime (orchestrator, intake, the claims-prep and support stubs) on a fresh store,
+    driven by the scripted LM. kb_search uses the offline FAQ: no test touches the network."""
+    from agent.qa import OfflineQA
     from agent.runtime import make_runtime
 
-    yield make_runtime(tmp_path, lm)
+    yield make_runtime(tmp_path, lm, kb=OfflineQA())
     assert lm.unused() == {}, f"scripted steps never used: {lm.unused()}"
