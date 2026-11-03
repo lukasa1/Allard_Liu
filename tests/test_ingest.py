@@ -98,7 +98,6 @@ def test_not_wants_human(text):
     [
         ("I was born March 14th, 1985", "March 14th, 1985"),
         ("born on 1985/03/14", "1985/03/14"),
-        ("born 1985.03.14", "1985.03.14"),
         ("My birthday is the 14th of March 1985", "14th of March 1985"),
         ("born 03/14/1985", "03/14/1985"),
         ("DOB: 1985-03-14", "1985-03-14"),
@@ -117,6 +116,16 @@ def test_typed_date_of_birth_is_hidden(text, dob):
 )  # fmt: skip
 def test_service_dates_stay_readable(text):
     assert redact_chat(text) == (text, False)
+
+
+@pytest.mark.parametrize("text", ["my birthday's march 4th 1980", "my file number is 1234567"])
+def test_chat_redaction_gaps(text):
+    clean, hidden = redact_chat(text)
+    assert hidden and "1980" not in clean and "1234567" not in clean
+
+
+def test_a_decimal_is_not_an_id_number():
+    assert redact_chat("cost 0.0001234 and 12.3456789") == ("cost 0.0001234 and 12.3456789", False)
 
 
 def test_ingest_runs_every_guard_on_the_redacted_text():

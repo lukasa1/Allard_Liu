@@ -1,3 +1,5 @@
+"""The POA skill service and tools (poa_skill): the encrypted vault, secure forms, signing, PII in tool results and redaction."""
+
 import io
 import json
 

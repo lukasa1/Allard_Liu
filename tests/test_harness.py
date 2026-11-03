@@ -1,19 +1,31 @@
 """The shared harness (L1, L4, L5) on dspy.ReAct, driven by the scripted fake LM."""
 
+import json
+import socket
 import time
 
+import pytest
 from pydantic import BaseModel
 
 from agent.casefile import CaseFile
 from agent.harness import CANNED_REPLY, AgentSpec, Turn, conversation
 from agent.scripted.lm import bad, call, final
 from agent.tools.registry import ToolSpec
+from agent.traces import scrub
 
 SSN = "123-45-6789"
 
 
 class EchoArgs(BaseModel):
     text: str
+
+
+class NestedArgs(BaseModel):
+    changes: dict[str, str]
+
+
+class NumArgs(BaseModel):
+    n: int
 
 
 def _spec(stop=None, **kw) -> AgentSpec:
@@ -82,6 +94,18 @@ def test_timeout_stops_the_turn_at_the_next_tool_call(rt, lm):
     assert "TurnTimeout" in never["error"] and never["result"] == ""
 
 
+def test_a_finished_turn_past_its_deadline_is_kept(rt, lm):
+    lm.turn("support", final(reply="Done."))
+    out = rt.harness.run(_spec(timeout_s=0, tools=lambda t: []), _turn(rt))
+    assert (out.status, out.reply) == ("ok", "Done.")
+
+
+def test_the_deadline_is_checked_before_argument_validation(rt, lm):
+    lm.turn("support", call("num", n="not a number"))
+    spec = _spec(timeout_s=0, tools=lambda t: [ToolSpec("num", "Num.", NumArgs, lambda a: "ok")])
+    assert rt.harness.run(spec, _turn(rt)).status == "limit"
+
+
 def test_malformed_output_is_parsed_by_the_json_fallback(rt, lm):
     lm.turn("support", bad(), call("echo", text="x"), final(reply="fine"))
     out = rt.harness.run(_spec(), _turn(rt))
@@ -144,6 +168,20 @@ def test_ssns_never_reach_the_trace(rt, lm):
     assert SSN not in text and "123456789" not in text
 
 
+def test_scrub_hides_an_ssn_given_as_a_number():
+    assert scrub({"ssn": 123456789, "n": 42, "ok": True}) == {"ssn": "[SSN removed]", "n": 42, "ok": True}
+    # other numbers stay numbers, however large
+    assert scrub([1_000_000, 1234567, 1234567890, 1234567.89, 0.5]) == [1_000_000, 1234567, 1234567890, 1234567.89, 0.5]
+
+
+def test_refused_nested_args_are_scrubbed(rt, lm):
+    spec = _spec(tools=lambda t: [ToolSpec("edit", "Edit.", NestedArgs, lambda a: "ok")], guard=lambda t, n, a: "no")
+    lm.turn("support", call("edit", changes={"ssn": SSN, "note": "born 04/09/1988"}), final())
+    rt.harness.run(spec, _turn(rt))
+    (event,) = rt.store.events("c1", types=("refused",))
+    assert SSN not in json.dumps(event.data) and "04/09/1988" not in json.dumps(event.data)
+
+
 def test_trace_metadata_is_not_scrubbed(rt, lm):
     rt.store.create_case(CaseFile(case_id="7b320679912e"))  # a digit run that looks like an ID
     lm.turn("support", final())
@@ -160,3 +198,9 @@ def test_history_is_the_agents_own_last_n_messages(rt):
     lines = conversation(turn, 3).splitlines()
     assert lines[0].startswith("<untrusted ") and lines[-1] == "</untrusted>"
     assert lines[1:-1] == ["intake: i3", "veteran: v4", "intake: i4"]
+
+
+def test_tests_cannot_reach_the_network():
+    """conftest blocks every non-local connect: a model or web call in a test fails loudly."""
+    with socket.socket() as s, pytest.raises(RuntimeError, match="network access in a test"):
+        s.connect(("93.184.216.34", 80))

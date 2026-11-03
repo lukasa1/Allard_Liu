@@ -1,17 +1,17 @@
 """The customer-support sub-agent (L29-L30) through the real runtime, harness, tools and guard,
 driven by the scripted fake LM: answers alongside claims prep, held and open flags, the code
-checks before any model (D2, D3), kb answers with their source, and zero case changes. Also the
+checks before any model (D2, D3: withdraw, a person), kb answers with their source, and zero case changes. Also the
 support eval (L32) on a handful of messages."""
 
 import threading
-import time
 from datetime import date
 
 import pytest
+from helpers import incoming, messages, until
 from prep_fixtures import case_at_stage_3
 
 from agent.claims_prep.prefill import QUESTIONS
-from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
+from agent.ingest import HANDOFF_MESSAGE, WITHDRAW_MESSAGE
 from agent.scripted.kb import FaqKB
 from agent.scripted.lm import call, final, pause
 from agent.scripted.prep import reads, truth_batch
@@ -25,21 +25,6 @@ ITF_QUESTION = "What is an intent to file?"
 @pytest.fixture(autouse=True)
 def as_of(monkeypatch):
     monkeypatch.setattr("agent.claims_prep.agent.today", lambda: date(2026, 11, 3))
-
-
-def _until(pred, timeout=5.0):
-    end = time.monotonic() + timeout
-    while not pred():
-        assert time.monotonic() < end, "timed out"
-        time.sleep(0.01)
-
-
-def _messages(rt, cid):
-    return [(o.agent, o.payload["text"]) for o in rt.updates(cid) if o.kind == "message"]
-
-
-def _incoming(prompt: str) -> str:
-    return prompt.split("[[ ## incoming ## ]]")[1]
 
 
 def _stage_5(rt, phase="attorney_review") -> str:
@@ -64,12 +49,12 @@ def test_support_answers_and_flags_while_claims_prep_runs(rt, lm):
             final(reply="Thanks for telling me. I've passed that to our team."))  # fmt: skip
     lm.turn("orchestrator", final())  # the escalation's wake: the held flag isn't decided in it
     rt.event(cid, "case_imported", {}, actor="staff")
-    _until(lambda: rt.store.get_case(cid).prep.facts and "claims_prep" in rt.running(cid))
+    until(lambda: rt.store.get_case(cid).prep.facts and "claims_prep" in rt.running(cid))
 
     rt.message(cid, "Where is my case at?")
     rt.message(cid, "I also want to claim my knees. Will I get 70%?")
-    _until(lambda: len([m for m in _messages(rt, cid) if m[0] == "support"]) == 2
-           and "escalated" in _incoming(lm.prompts("orchestrator")[-1]) and not rt.running(cid) - {"claims_prep"})
+    until(lambda: len([m for m in messages(rt, cid) if m[0] == "support"]) == 2
+           and "escalated" in incoming(lm.prompts("orchestrator")[-1]) and not rt.running(cid) - {"claims_prep"})
     case = rt.store.get_case(cid)
     assert case.owner == "claims_prep" and "claims_prep" in rt.running(cid)  # prep is still mid-turn
     assert len(case.prep.facts) == len(truth_batch("baseline_clean"))
@@ -78,7 +63,7 @@ def test_support_answers_and_flags_while_claims_prep_runs(rt, lm):
     assert '"working_on_it_now": "our team (claims prep) is reading the claims file"' in first
     assert "the claims file arrived; our team is reading it now" in first and "face_note" not in first
     assert "held until claims prep returns" in lm.prompts("support", "extract")[1]
-    assert not any("support_flag" in _incoming(p) for p in lm.prompts("orchestrator"))
+    assert not any("support_flag" in incoming(p) for p in lm.prompts("orchestrator"))
     assert "## Flags to decide this wake\nnone" in lm.prompts("orchestrator")[-1]
     assert "told the file is being read" in lm.prompts("support")[3]  # earlier Q&A, from the event log
 
@@ -87,10 +72,11 @@ def test_support_answers_and_flags_while_claims_prep_runs(rt, lm):
     gate.set()
     rt.wait_until_idle()
     wake = lm.prompts("orchestrator")[-1]
-    assert "subagent_result" in _incoming(wake) and '"text": "knees"' in wake
+    assert "subagent_result" in incoming(wake) and '"text": "knees"' in wake
     case = rt.store.get_case(cid)
     assert case.prep.done and len(case.prep.facts) == len(truth_batch("baseline_clean"))
     assert case.flags[0].status == "handled" and case.owner == "intake"
+    assert case.goal == "Pass 2; also ask about the knees."
 
 
 def test_a_complaint_is_flagged_and_wakes_the_orchestrator(rt, lm):
@@ -101,21 +87,10 @@ def test_a_complaint_is_flagged_and_wakes_the_orchestrator(rt, lm):
     lm.turn("orchestrator", call("staff_task", text="Call the veteran back about the complaint."), final())
     rt.message(cid, "This is ridiculous, nobody has called me in two weeks.")
     rt.wait_until_idle()
-    assert "support_flag" in _incoming(lm.prompts("orchestrator")[0])
+    assert "support_flag" in incoming(lm.prompts("orchestrator")[0])
     case = rt.store.get_case(cid)
     assert (case.flags[0].kind, case.flags[0].status, case.stage) == ("complaint", "handled", 5)
     assert case.tasks[-1].text == "Call the veteran back about the complaint."
-
-
-def test_crisis_language_never_reaches_the_model(rt, lm):
-    cid = _stage_5(rt)
-    lm.turn("orchestrator", final())
-    rt.message(cid, "Some days I think about killing myself.")
-    rt.wait_until_idle()
-    assert not lm.prompts("support")
-    assert _messages(rt, cid) == [("rule", CRISIS_MESSAGE)] and "988" in CRISIS_MESSAGE
-    case = rt.store.get_case(cid)
-    assert (case.side_state, case.tasks[0].kind) == ("needs_human", "urgent")
 
 
 def test_withdraw_and_a_person_go_to_a_person_by_rule_in_any_state(rt, lm):
@@ -123,14 +98,14 @@ def test_withdraw_and_a_person_go_to_a_person_by_rule_in_any_state(rt, lm):
     lm.turn("orchestrator", final())
     rt.message(cid, "Please cancel my case.")
     rt.wait_until_idle()
-    assert _messages(rt, cid) == [("rule", WITHDRAW_MESSAGE)]
+    assert messages(rt, cid) == [("rule", WITHDRAW_MESSAGE)]
     assert rt.store.get_case(cid).side_state == "needs_human"
 
     closed = rt.store.create_case(base_case("closed", "c2")).case_id
     lm.turn("orchestrator", final())
     rt.message(closed, "Can I speak with someone about my husband's claim?")
     rt.wait_until_idle()
-    assert _messages(rt, closed) == [("rule", HANDOFF_MESSAGE)]
+    assert messages(rt, closed) == [("rule", HANDOFF_MESSAGE)]
     assert rt.store.get_case(closed).side_state == "closed" and not lm.prompts("support")
 
 
@@ -148,7 +123,7 @@ def test_a_kb_answer_cites_its_source_and_changes_nothing(rt, lm):
     rt.wait_until_idle()
     observations = lm.prompts("support", "extract")[0]
     assert source in observations and '"stage": "5: gaps closed (ready for attorney review)"' in observations
-    assert f"Source: {source}" in _messages(rt, cid)[0][1]
+    assert f"Source: {source}" in messages(rt, cid)[0][1]
     assert f"kb_search: {ITF_QUESTION!r} answered=True" in lm.prompts("support")[-1]
     assert rt.store.get_case(cid).model_dump() == before  # support is read-only
     assert [e.type for e in rt.store.events(cid, exclude=("message",))] == ["kb_search", "support_log"]

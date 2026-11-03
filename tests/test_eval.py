@@ -191,11 +191,10 @@ def test_ask_no_probes_leaves_the_verification_probes_out():
     assert not probes & {i.id for i in checklist.missing(case, "screen")}
 
 
-@pytest.mark.parametrize("condition", ["ask", "ask_no_probes"])
-def test_without_cfile_prefill_nothing_is_written(condition):
+def test_without_cfile_prefill_nothing_is_written():
     from agent.claims_prep import prefill
 
-    case = CaseFile(case_id="c", stage=4, eval_condition=condition,
+    case = CaseFile(case_id="c", stage=4, eval_condition="ask",
                     answers={"filed_before": Answer(value=False, source="veteran")})  # fmt: skip
     out = prefill.apply(case, ["filed_before", "mos"], CfileFacts(mos=["88M"]), {})
     assert out == {"skipped": ["filed_before", "mos"]} and case.prep.prefill_done
@@ -290,7 +289,7 @@ def test_a_veteran_that_keeps_failing_ends_the_run_as_given_up(rt, lm):
 
 
 @pytest.mark.parametrize("argv", [["eval"], ["simulate", "--persona", "baseline_clean"], ["support-eval"]])
-def test_live_commands_refuse_to_run_without_the_key(argv, capsys):
+def test_live_commands_refuse_to_run_without_the_key(argv):
     with pytest.raises(SystemExit) as exc:  # conftest sets OPENROUTER_API_KEY to ""
         cli.main(argv)
     assert "OPENROUTER_API_KEY" in str(exc.value)

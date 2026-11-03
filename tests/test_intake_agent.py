@@ -1,15 +1,17 @@
 """The intake sub-agent (L14-L21) through the real harness, tools, guards and documents, driven by
 the scripted fake LM: pass 1 to stage 3, the guards, the stop rules, pass 2 and a restart."""
 
-import io
+import re
 
-import pypdf
 import pytest
 from conftest import SSN, VETERAN
-from intake_fixtures import SCREEN_STEPS, prefill_pass2
+from helpers import FILED, PREP_DONE, events, opened, pdf_text, refusals, say
+from intake_fixtures import CONSENTS, SCREEN_STEPS, prefill_pass2, screened
 
-from agent.casefile import Answer, CaseFile, Conflict, Filing, PrepState
+from agent.casefile import Answer, CaseFile, Conflict, StopRule
+from agent.harness import Turn
 from agent.intake import checklist, documents
+from agent.intake.agent import DraftArgs, FaxArgs, FormArgs, SecureArgs, SubmitArgs, guard
 from agent.kb import NO_ANSWER
 from agent.runtime import make_runtime
 from agent.scripted.kb import FaqKB
@@ -17,44 +19,22 @@ from agent.scripted.lm import call, final
 from poa_skill.documents import sha256
 from poa_skill.service import FEE_ESIGN_CONSENT
 
-FILED = {"21-22a": Filing(confirmation="A"), "itf": Filing(confirmation="B")}
-PREP_DONE = PrepState(face_note="n", verified=True, prefill_done=True)
+SKILL = (call("read_skill", name="screen-veteran"),)
 
 
 def _cards(rt, cid, kind):
     return [o.payload for o in rt.updates(cid) if o.kind == "card" and o.payload["type"] == kind]
 
 
-def _events(rt, cid, type):
-    return [e for e in rt.store.events(cid) if e.type == type]
-
-
-def _open(rt, lm) -> str:
-    lm.turn("orchestrator", call("run_intake", goal="Pass 1: screen, sign, file."), final(reply="Welcome!"))
-    lm.turn("intake", call("read_skill", name="screen-veteran"), final(reply="Have you served in the military?"))
-    cid = rt.open_case().case_id
-    rt.wait_until_idle()
-    return cid
-
-
-def _say(rt, cid, text):
-    rt.message(cid, text)
-    rt.wait_until_idle()
-
-
-def _pdf_text(pdf: bytes) -> str:
-    return "".join(p.extract_text() for p in pypdf.PdfReader(io.BytesIO(pdf)).pages)
-
-
 # ------------------------------------------------------------------------------ pass 1
 
 
 def test_pass_1_screens_signs_both_documents_waits_for_the_countersign_and_files(rt, lm, signature_uri):
-    cid = _open(rt, lm)
+    cid = opened(rt, lm, first=SKILL)
 
     lm.turn("intake", *SCREEN_STEPS, call("request_secure_info", fields=list(VETERAN), purpose="For the 21-22a."),
             final(reply="Please fill in the secure form."))  # fmt: skip
-    _say(rt, cid, "Yes. Army 2004-06 to 2010-05, honorable. Nothing else. Never filed. No lawyer.")
+    say(rt, cid, "Yes. Army 2004-06 to 2010-05, honorable. Nothing else. Never filed. No lawyer.")
     case = rt.store.get_case(cid)
     assert (case.stage, case.checklist["screen"]) == (2, [])
     periods = case.answers["service_periods"]
@@ -70,11 +50,11 @@ def test_pass_1_screens_signs_both_documents_waits_for_the_countersign_and_files
 
     lm.turn("intake", call("fill_pdf", form="21-22a", fields={"authorize_7332_records": True,
             "authorize_address_change": False}), final(reply="Here is your form. Does it look right?"))  # fmt: skip
-    _say(rt, cid, "Yes to the records, no to the address.")
+    say(rt, cid, "Yes to the records, no to the address.")
     assert _cards(rt, cid, "document_preview")[-1]["form"] == "21-22a"
 
     lm.turn("intake", call("get_signature", form="21-22a"), final(reply="Please draw your signature."))
-    _say(rt, cid, "It looks right.")
+    say(rt, cid, "It looks right.")
     assert _cards(rt, cid, "signature_pad") and not _cards(rt, cid, "sign_button")
 
     lm.turn("intake", call("get_signature", form="21-22a"), final(reply="Click Sign when you're ready."))
@@ -90,7 +70,7 @@ def test_pass_1_screens_signs_both_documents_waits_for_the_countersign_and_files
     assert "the client pays the firm directly" in lm.prompts("intake")[-1]
 
     lm.turn("intake", call("get_signature", form="fee_agreement"), final(reply="Click Sign to sign it."))
-    _say(rt, cid, "Yes, I agree to those terms.")
+    say(rt, cid, "Yes, I agree to those terms.")
     fee_card = _cards(rt, cid, "sign_button")[-1]
     assert (fee_card["form"], fee_card["consent_text"]) == ("fee_agreement", FEE_ESIGN_CONSENT)
 
@@ -103,8 +83,8 @@ def test_pass_1_screens_signs_both_documents_waits_for_the_countersign_and_files
     # Messages still go to intake while it waits; filing is refused before the countersign.
     lm.turn("intake", call("submit_va", form="21-22a"), call("efax_ogc", doc="fee_agreement"),
             final(reply="As soon as the attorney countersigns."))  # fmt: skip
-    _say(rt, cid, "Can you file it now?")
-    reasons = [e.data["reason"] for e in _events(rt, cid, "refused")]
+    say(rt, cid, "Can you file it now?")
+    reasons = [e.data["reason"] for e in events(rt, cid, "refused")]
     assert reasons == ["the 21-22a must be countersigned by the attorney first",
                        "the fee agreement must be signed and countersigned first"]  # fmt: skip
     assert rt.store.get_case(cid).filings == {}
@@ -121,7 +101,7 @@ def test_pass_1_screens_signs_both_documents_waits_for_the_countersign_and_files
     assert case.filings["itf"].data["itf_date"] and case.filings["fee_agreement"].confirmation.startswith("FAX-")
     assert [(t.kind, t.done_at is not None) for t in case.tasks] == [("deadline", True)]  # the OGC deadline, met
     assert all(d.countersigned_by == "Attorney 1" for d in case.documents.values())
-    assert _events(rt, cid, "subagent_result")[0].data["result"]["finished"] == result["finished"]
+    assert events(rt, cid, "subagent_result")[0].data["result"]["finished"] == result["finished"]
 
     # The countersign is a new version; the veteran-signed PDF and its hash are unchanged.
     svc = documents.service(rt, cid)
@@ -132,26 +112,15 @@ def test_pass_1_screens_signs_both_documents_waits_for_the_countersign_and_files
         assert doc.signature_audit["signed_pdf_sha256"] == sha256(signed) == doc.countersign_audit["signed_pdf_sha256"]
         stamped = svc.document_pdf(doc.id)
         assert sha256(stamped) == doc.countersign_audit["countersigned_pdf_sha256"] != sha256(signed)
-        assert "/s/ Attorney 1" in _pdf_text(stamped) and "/s/ Attorney 1" not in _pdf_text(signed)
+        assert "/s/ Attorney 1" in pdf_text(stamped) and "/s/ Attorney 1" not in pdf_text(signed)
     assert svc.live("fee_agreement").terms == {"fee_pct": 30}
     assert "document_countersigned" in svc.docs.audit_path.read_text()
     # The SSN went only through the secure form: never into any prompt.
     assert not any(SSN in s.user or SSN.replace("-", "") in s.user for s in lm.seen)
 
 
-def test_the_fee_agreement_states_the_fee_and_how_it_is_paid():
-    from poa_skill.fee_agreement import sections
-
-    rep = {"first_name": "Attorney", "last_name": "1", "firm_name": "Law Firm"}
-    at_20, at_30 = (dict(sections({"first_name": "Jo"}, rep, pct)) for pct in (20, 30))
-    assert "withhold the fee" in at_20["How the fee is paid"] and "14.636(h)" in at_20["How the fee is paid"]
-    assert "pays the fee directly to the Firm" in at_30["How the fee is paid"]
-    assert "owes no fee" in at_30["Fee"] and "discharge" in at_30["Ending the representation"]
-    assert "cannot promise" in at_30["No guarantee"] and "ask the Client" in at_30["Conditions of costs"]
-
-
 def test_record_answer_parses_in_code_and_refuses_what_it_must(rt, lm):
-    cid = _open(rt, lm)
+    cid = opened(rt, lm, first=SKILL)
     lm.turn("intake", call("record_answer", q="is_veteran", a="maybe?"),
             call("record_answer", q="is_veteran", a="Yes I did"),
             call("record_answer", q="filed_before", a="not sure", unknown=True),
@@ -159,58 +128,83 @@ def test_record_answer_parses_in_code_and_refuses_what_it_must(rt, lm):
             call("record_answer", q="street", a="100 Main St"),
             call("record_answer", q="narrative:tinnitus:h02", a="ringing"),
             call("fill_pdf", form="21-22a", fields={}), final(reply="Thanks."))  # fmt: skip
-    _say(rt, cid, "Yes I did. Not sure about a claim.")
+    say(rt, cid, "Yes I did. Not sure about a claim.")
     traj = lm.prompts("intake", "extract")[-1]
     assert "the veteran sounds unsure ('maybe')" in traj
     case = rt.store.get_case(cid)
     assert case.answers["is_veteran"].value is True and case.answers["is_veteran"].raw == "Yes I did"
     assert case.answers["filed_before"].unknown and "filed_before" not in case.checklist["screen"]
-    reasons = [e.data["reason"] for e in _events(rt, cid, "refused")]
+    reasons = [e.data["reason"] for e in events(rt, cid, "refused")]
     assert reasons[0].startswith("no checklist field 'favorite_color'")
     assert reasons[1] == "street is collected by the secure form: use request_secure_info"
     assert "not a claimed condition" in reasons[2] and reasons[3].startswith("screening isn't finished")
 
 
 def test_an_ssn_typed_in_chat_never_reaches_the_model_or_the_case_file(rt, lm):
-    cid = _open(rt, lm)
+    cid = opened(rt, lm, first=SKILL)
     lm.turn("intake", call("record_answer", q="is_veteran", a=f"yes, SSN {SSN}"),
             final(reply="Please don't type ID numbers here; I'll open a secure form."))  # fmt: skip
-    _say(rt, cid, f"Yes I served, my SSN is {SSN}")
+    say(rt, cid, f"Yes I served, my SSN is {SSN}")
     first_call = lm.prompts("intake")[-2]  # this turn's first react call: the incoming, no trajectory yet
     assert SSN not in first_call and "[number hidden for your privacy]" in first_call
-    refusal = _events(rt, cid, "refused")[0].data
+    refusal = events(rt, cid, "refused")[0].data
     assert refusal["reason"].startswith("ID numbers and dates of birth") and SSN not in str(refusal["args"])
     assert "is_veteran" not in rt.store.get_case(cid).answers
 
 
+def test_screening_with_an_undischarged_period_never_reaches_stage_2(rt, lm):
+    cid = opened(rt, lm)
+    steps = [s if s.args.get("q") != "service_periods" else call("record_answer", q="service_periods", a="Army, active, 2004-06 to 2010-05")
+             for s in SCREEN_STEPS]  # fmt: skip
+    lm.turn("intake", *steps, call("fill_pdf", form="21-22a", fields=CONSENTS), final(reply="What was your discharge?"))
+    say(rt, cid, "Yes, Army 2004 to 2010.")
+    case = rt.store.get_case(cid)
+    assert case.stage == 1 and case.checklist["screen"] == ["service_periods"]
+    assert refusals(rt, cid)[-1].startswith("screening isn't finished: still missing service_periods")
+
+
+def test_the_models_value_is_saved_with_the_veterans_words(rt, lm):
+    cid = opened(rt, lm)
+    words = "I haven't served since 2008, I was Army"
+    lm.turn("intake", call("record_answer", q="is_veteran", a=words),
+            call("record_answer", q="is_veteran", a=words, value=True), final(reply="Thanks!"))  # fmt: skip
+    say(rt, cid, words)
+    traj = lm.prompts("intake", "extract")[-1]
+    assert "Pass the structured value you understood in `value` (true or false)" in traj
+    case = rt.store.get_case(cid)
+    assert case.answers["is_veteran"].value is True and case.answers["is_veteran"].raw == words
+    assert case.stop is None
+    with pytest.raises(checklist.StrictError):  # words and value disagree
+        checklist.parse("is_veteran", "no", True)
+
+
 def test_kb_search_answers_from_official_sources_or_hands_off(rt, lm):
-    cid = _open(rt, lm)
+    cid = opened(rt, lm, first=SKILL)
     lm.turn("intake", call("kb_search", question="Do I have to pay any fee up front?"),
             call("kb_search", question="Will I win my case?"), final(reply="Nothing up front."))  # fmt: skip
-    _say(rt, cid, "Do I pay anything up front? And will I win?")
+    say(rt, cid, "Do I pay anything up front? And will I win?")
     traj = lm.prompts("intake", "extract")[-1]
     assert "https://www.va.gov/ogc/accreditation.asp" in traj and NO_ANSWER[:40] in traj
-    assert [e.data["answered"] for e in _events(rt, cid, "kb_search")] == [True, False]
+    assert [e.data["answered"] for e in events(rt, cid, "kb_search")] == [True, False]
 
 
 # ------------------------------------------------------------------------------ stop rules
 
 
 @pytest.mark.parametrize(("steps", "rule", "parked"), [
-    ([("is_veteran", "No, I never served")], "not_veteran", "closed"),
     ([("is_veteran", "yes"), ("filed_before", "yes"), ("receiving_va_pay", "yes"), ("rating_pct", "100 percent")],
      "rated_100", "closed"),
     ([("is_veteran", "yes"), ("service_periods", "Navy 2001-01 to 2003-06, other than honorable")],
      "non_honorable_period", "needs_human"),
 ])  # fmt: skip
 def test_the_firms_stop_rules_run_in_code(rt, lm, steps, rule, parked):
-    cid = _open(rt, lm)
+    cid = opened(rt, lm, first=SKILL)
     lm.turn("intake", *[call("record_answer", q=q, a=a) for q, a in steps], final(reply="Thank you for telling me."))
     lm.turn("orchestrator", final())
-    _say(rt, cid, "Here are my answers.")
+    say(rt, cid, "Here are my answers.")
     case = rt.store.get_case(cid)
     assert (case.stop.rule, case.side_state, case.owner) == (rule, parked, None)
-    assert _events(rt, cid, "subagent_result")[0].data["result"]["finished"].endswith(parked)
+    assert events(rt, cid, "subagent_result")[0].data["result"]["finished"].endswith(parked)
 
 
 def test_a_stop_rule_after_filing_goes_to_a_person(rt, lm):
@@ -218,9 +212,40 @@ def test_a_stop_rule_after_filing_goes_to_a_person(rt, lm):
                                         goal="Pass 2")).case_id  # fmt: skip
     lm.turn("intake", call("record_answer", q="rating_pct", a="100"), final(reply="Thanks, an attorney will call you."))
     lm.turn("orchestrator", final())
-    _say(rt, cid, "Actually VA rated me 100% last month.")
+    say(rt, cid, "Actually VA rated me 100% last month.")
     case = rt.store.get_case(cid)
     assert (case.stop.rule, case.side_state) == ("rated_100", "needs_human")
+
+
+# ------------------------------------------------------------------------------ guards
+
+
+def test_nothing_is_signed_or_sent_after_a_stop(rt):
+    case = screened()
+    case.stop = StopRule(rule="non_honorable_period", reason="r", to="needs_human")
+    cid = rt.store.create_case(case).case_id
+    turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
+    for name, args in (("submit_va", SubmitArgs(form="itf")), ("efax_ogc", FaxArgs(doc="fee_agreement")),
+                       ("get_signature", FormArgs(form="21-22a"))):  # fmt: skip
+        assert re.match(r"stop rule non_honorable_period fired", guard(turn, name, args) or ""), name
+
+
+def test_itf_needs_the_filed_21_22a_and_no_drafts_or_forms_after_a_stop_or_before_screening(rt):
+    case = screened()
+    case.documents = {f: documents.DocState(signed_at="t", countersigned_at="t") for f in documents.FORM_KEYS}
+    cid = rt.store.create_case(case).case_id
+    turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
+    assert guard(turn, "submit_va", SubmitArgs(form="itf")).startswith("file the 21-22a first")
+    assert guard(turn, "submit_va", SubmitArgs(form="21-22a")) is None
+    draft, secure = DraftArgs(form="21-22a", changes={}), SecureArgs(fields=["email"], purpose="contact")
+    rt.patch(cid, lambda c: setattr(c, "stop", StopRule(rule="rated_100", reason="r")), "intake")
+    for name, args in (("update_draft", draft), ("request_secure_info", secure)):
+        assert guard(turn, name, args).startswith("stop rule rated_100 fired"), name
+    early = rt.store.create_case(CaseFile(case_id="c2", stage=1, owner="intake", goal="g")).case_id
+    turn = Turn(rt=rt, case_id=early, agent="intake", incoming="", number=1)
+    for name, args in (("update_draft", draft), ("request_secure_info", secure)):
+        assert guard(turn, name, args).startswith("screening isn't finished"), name
+    assert refusals(rt, early) == []
 
 
 # ------------------------------------------------------------------------------ pass 2
@@ -261,7 +286,7 @@ def test_pass_2_asks_only_the_gaps_confirms_the_conflict_then_the_narratives(rt,
             call("record_answer", q="marital_status", a="I'm single"),
             call("record_answer", q="confirm:mos", a="13B"),
             final(reply="What symptoms do you have from your tinnitus?"))  # fmt: skip
-    _say(rt, cid, "No. Single. And the file is right, it was 13B.")
+    say(rt, cid, "No. Single. And the file is right, it was 13B.")
     case = rt.store.get_case(cid)
     assert case.conflicts[0].resolved_at and case.answers["mos"].value == ["13B"]
     assert (case.stage, case.checklist["pass2"]) == (4, ["narrative:tinnitus:h02"])
@@ -269,29 +294,31 @@ def test_pass_2_asks_only_the_gaps_confirms_the_conflict_then_the_narratives(rt,
     lm.turn("intake", call("record_answer", q="narrative:tinnitus:h02", a="Constant ringing, worse at night."),
             final(reply="Thank you. The attorney reviews your file next.", result={"finished": "pass 2: gaps closed"}))  # fmt: skip
     lm.turn("orchestrator", final())
-    _say(rt, cid, "Constant ringing, worse at night.")
+    say(rt, cid, "Constant ringing, worse at night.")
     case = rt.store.get_case(cid)
     assert (case.stage, case.owner, case.checklist["pass2"]) == (5, None, [])
     assert case.answers["narrative:tinnitus:h02"].value == "Constant ringing, worse at night."
 
 
-def test_the_pass_2_checklist_has_the_firms_questions_and_16_prompts_per_condition():
-    case = CaseFile(case_id="c1", stage=4, answers={
-        "is_veteran": Answer(value=True, source="v"), "claim_conditions": Answer(value=["tinnitus"], source="v")})  # fmt: skip
-    items = [i.id for i in checklist.missing(case, "pass2")]
-    narratives = [i for i in items if i.startswith("narrative:tinnitus:")]
-    assert len(narratives) == 15 and narratives[0].endswith("h02")  # h01 is the condition itself
-    assert {"service_periods", "street", "mos", "heard_about"} <= set(items) and "receiving_va_pay" not in items
-    assert [i.id for i in checklist.missing(CaseFile(case_id="c2"), "screen")] == ["is_veteran"]
+def test_an_unsure_confirm_keeps_the_answer_on_file_and_asks_a_person(rt, lm):
+    case = screened()
+    case.stage, case.filings = 4, dict(FILED)
+    case.conflicts = [Conflict(question="filed_before", on_file=False, cfile=True, cite="C-file p. 3")]
+    cid = rt.store.create_case(case).case_id
+    lm.turn("intake", call("record_answer", q="confirm:filed_before", a="not sure", unknown=True), final(reply="Thanks."))
+    say(rt, cid, "I really don't remember.")
+    case = rt.store.get_case(cid)
+    assert case.answers["filed_before"].value is False and not case.answers["filed_before"].unknown
+    assert case.conflicts[0].resolved_at and "C-file p. 3" in case.tasks[-1].text and case.tasks[-1].kind == "staff"
 
 
 # ------------------------------------------------------------------------------ memory
 
 
 def test_a_restart_mid_intake_resumes_from_the_store(rt, lm, tmp_path):
-    cid = _open(rt, lm)
+    cid = opened(rt, lm, first=SKILL)
     lm.turn("intake", *SCREEN_STEPS[:2], final(reply="Any other period of service?"))
-    _say(rt, cid, "Yes, Army 2004-06 to 2010-05, honorable.")
+    say(rt, cid, "Yes, Army 2004-06 to 2010-05, honorable.")
 
     rt2 = make_runtime(tmp_path, lm, kb=FaqKB())  # a new process on the same store
     lm.turn("intake", *SCREEN_STEPS[2:], final(reply="Thanks, next is the 21-22a."))

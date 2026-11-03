@@ -1,10 +1,9 @@
 """The claims-prep sub-agent (L22-L28) through the real harness, tools, guard, prefill and verify,
 driven by the scripted fake LM on the personas' synthetic C-files. The full flow (pass 1 -> claims
-prep -> pass 2 -> stage 5) is test_orchestrator's demo-flow test."""
+prep -> pass 2 -> stage 5) is test_app's demo-flow test; support answering while prep runs is
+test_support_agent's."""
 
 import dataclasses
-import threading
-import time
 from datetime import date
 
 import pytest
@@ -16,7 +15,7 @@ from agent.claims_prep.facts import FACT
 from agent.claims_prep.prefill import QUESTIONS
 from agent.claims_prep.verify import date_forms, discharges, missing
 from agent.personas import get_persona
-from agent.scripted.lm import call, final, pause
+from agent.scripted.lm import call, final
 from agent.scripted.prep import prep_steps, reads, the_cfile, truth_batch
 
 VETERAN = "veteran, chat 10:00 UTC"
@@ -40,13 +39,6 @@ def _batch(persona, changes):
     for i, fields in changes.items():
         batch[i] = {**batch[i], **fields}
     return batch
-
-
-def _until(pred, timeout=5.0):
-    end = time.monotonic() + timeout
-    while not pred():
-        assert time.monotonic() < end, "timed out"
-        time.sleep(0.01)
 
 
 def test_prep_reads_records_prefills_renders_verifies_and_hands_back_for_pass_2(rt, lm):
@@ -165,32 +157,6 @@ def test_a_turn_that_stops_early_continues_from_the_recorded_facts(rt, lm):
     assert "F1 dob" in third and "face note: rendered" in third
     assert '<untrusted source="fact table (C-file values)"' in third  # C2-M3: C-file values are data
     assert "ended before your stop rule held" in fourth
-
-
-def test_support_answers_while_prep_runs_in_the_background_without_losing_prep_facts(rt, lm):
-    cid = case_at_stage_3(rt, "baseline_clean")
-    gate = threading.Event()
-    _start(rt, lm, cid)
-    lm.turn("claims_prep", call("pull_cfile"), *reads("baseline_clean"),
-            call("record_facts", facts=truth_batch("baseline_clean")), pause(gate),
-            call("render"), call("verify"), call("prefill", questions=list(QUESTIONS)), final(result=DONE))  # fmt: skip
-    lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"),
-            final(reply="Noted. Your file is being reviewed."))  # fmt: skip
-    _until(lambda: rt.store.get_case(cid).prep.facts and "claims_prep" in rt.running(cid))
-
-    rt.message(cid, "I want to add my knees. Where's my case at?")
-    _until(lambda: any(o.agent == "support" for o in rt.updates(cid)))
-    case = rt.store.get_case(cid)
-    assert case.owner == "claims_prep" and "claims_prep" in rt.running(cid)  # prep still mid-turn
-    assert case.flags[0].status == "held" and len(case.prep.facts) == len(truth_batch("baseline_clean"))
-
-    lm.turn("orchestrator", call("run_intake", goal="Pass 2; also ask about the knees."), final())
-    lm.turn("intake", final(reply="Tell me about your knees."))
-    gate.set()
-    rt.wait_until_idle()
-    case = rt.store.get_case(cid)
-    assert case.prep.done and len(case.prep.facts) == len(truth_batch("baseline_clean"))
-    assert case.flags[0].status == "handled" and case.owner == "intake"
 
 
 def test_a_case_without_a_c_file_goes_to_a_person(rt, lm):

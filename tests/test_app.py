@@ -3,12 +3,12 @@ the whole demo flow as a presenter clicks it, the outbox polling, and the no-key
 
 import io
 import threading
-import time
 
 import pypdf
 import pytest
 from conftest import VETERAN
 from fastapi.testclient import TestClient
+from helpers import events, until
 from intake_fixtures import SCREEN_STEPS, prefill_pass2
 
 from agent.intake import checklist
@@ -53,13 +53,6 @@ class Demo:
 
     def panel(self):
         return self.c.get(f"/api/cases/{self.id}").json()
-
-
-def _until(pred, timeout=5.0):
-    end = time.monotonic() + timeout
-    while not pred():
-        assert time.monotonic() < end, "timed out"
-        time.sleep(0.01)
 
 
 def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
@@ -117,7 +110,7 @@ def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
     lm.turn("orchestrator", call("run_intake", goal="Pass 2: ask only the gaps."), final())
     lm.turn("intake", final(reply="Any other conditions besides tinnitus?"))
     client.post(f"/api/cases/{cid}/countersign").raise_for_status()
-    _until(lambda: any(s.agent == "claims_prep" for s in lm.seen))
+    until(lambda: any(s.agent == "claims_prep" for s in lm.seen))
     assert d.panel()["documents"]["21-22a"]["status"] == "countersigned"
     stamped = pypdf.PdfReader(io.BytesIO(d.c.get(f"/api/cases/{cid}/documents/fee_agreement.pdf").content))
     assert f"/s/ {cfg['attorney']}" in "".join(pg.extract_text() for pg in stamped.pages)
@@ -129,7 +122,7 @@ def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
     lm.turn("support", call("log_event", kind="status", text="Asked for status; told the file is being read."),
             final(reply="Our team is reading your VA file now."))  # fmt: skip
     client.post(f"/api/cases/{cid}/messages", json={"text": "What's happening with my case?"}).raise_for_status()
-    _until(lambda: any(o["payload"].get("text") == "Our team is reading your VA file now." for o in d.poll()))
+    until(lambda: any(o["payload"].get("text") == "Our team is reading your VA file now." for o in d.poll()))
     gate.set()
     rt.wait_until_idle()
     p = d.panel()
@@ -151,6 +144,12 @@ def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
 
     # The case panel: decisions, the event log with support's events, filings, tasks and cost.
     assert [e["data"]["to"] for e in p["decisions"] if e["type"] == "handoff"] == ["intake", "claims_prep", "intake"]
+    assert [e.data["to"] for e in events(rt, cid, "stage_changed")] == [2, 3, 4, 5]
+    results = [e.data["result"] for e in events(rt, cid, "subagent_result")]
+    assert [(r["agent"], r["finished"]) for r in results] == [
+        ("intake", pass1["finished"]), ("claims_prep", "face note verified"), ("intake", "pass 2: gaps closed")]  # fmt: skip
+    # The orchestrator's memory block never holds a transcript.
+    assert not any("it's right" in m or "No others" in m for m in lm.prompts("orchestrator"))
     types = {e["type"] for e in p["events"]}
     assert {"countersigned", "cfile_pulled", "support_log", "subagent_result"} <= types and "message" not in types
     assert set(p["filings"]) == {"21-22a", "itf", "fee_agreement"}

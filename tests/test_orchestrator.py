@@ -1,172 +1,18 @@
-"""The orchestrator and the runtime protocol end to end (plan §2-§3, L10-L13), with the real
-intake, claims prep and support, and the scripted fake LM."""
+"""The orchestrator (plan §2-§3, L10-L13) with the real sub-agents and the scripted fake LM: its
+refused moves, stop rules, claims prep's continuations and hand back, flags, reopening intake
+after stage 5, and staff tasks."""
 
 import dataclasses
-import threading
-import time
 
-from intake_fixtures import SCREEN_STEPS, countersign_both, prefill_pass2, sign_both
-from prep_fixtures import case_at_stage_3, fee_agreement
+from helpers import FILED, PREP_DONE, events, incoming, messages, opened
+from intake_fixtures import answered
 
-from agent import stages
-from agent.casefile import CaseFile, Filing, PrepState
-from agent.harness import CANNED_REPLY
-from agent.ingest import CRISIS_MESSAGE, HANDOFF_MESSAGE, WITHDRAW_MESSAGE
+from agent.casefile import Answer, CaseFile, Flag, PrepState
 from agent.intake import checklist
-from agent.runtime import route
-from agent.scripted.lm import bad, call, final, pause
-from agent.scripted.prep import prep_steps
+from agent.runtime import Job
+from agent.scripted.lm import bad, call, final
 
-FILED = {"21-22a": Filing(confirmation="A"), "itf": Filing(confirmation="B")}
-
-
-def _until(pred, timeout=5.0):
-    end = time.monotonic() + timeout
-    while not pred():
-        assert time.monotonic() < end, "timed out"
-        time.sleep(0.01)
-
-
-def _types(rt, cid, *types):
-    return [e for e in rt.store.events(cid) if e.type in types]
-
-
-def _messages(rt, cid):
-    return [(o.agent, o.payload["text"]) for o in rt.updates(cid) if o.kind == "message"]
-
-
-def _case_at(rt, **fields) -> str:
-    return rt.store.create_case(CaseFile(case_id="c1", **fields)).case_id
-
-
-def _opened_with_intake(rt, lm, persona: str | None = None) -> str:
-    lm.turn("orchestrator", call("run_intake", goal="Pass 1: screen, sign, file."), final(reply="Welcome!"))
-    lm.turn("intake", final(reply="Did you serve in the military?"))
-    cid = rt.open_case(persona).case_id
-    rt.wait_until_idle()
-    return cid
-
-
-def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
-    """Pass 1 -> claims prep (the real agent, on baseline_clean's synthetic C-file) -> pass 2 -> stage 5."""
-    cid = _opened_with_intake(rt, lm, "baseline_clean")
-    fee_agreement(rt, cid)  # the signing itself is test_intake_agent's; here only its terms matter
-    assert rt.store.get_case(cid).side_state == "waiting_on_veteran"
-
-    lm.turn("intake", *SCREEN_STEPS, final(reply="Please sign both documents."))
-    rt.message(cid, "Yes, Army 2004-06 to 2010-05, honorable. Never filed, never had a lawyer.")
-    rt.wait_until_idle()
-    assert rt.store.get_case(cid).stage == 2
-
-    lm.turn("intake", final(reply="Thanks! Our attorney is reviewing both documents."))
-    rt.event(cid, "signed", {"forms": ["21-22a", "fee_agreement"]}, actor="veteran", apply=sign_both)
-    rt.wait_until_idle()
-    assert rt.store.get_case(cid).side_state == "waiting_on_attorney"
-
-    lm.turn("intake", final(reply="Usually within a day."))  # D1: still intake's while it waits
-    rt.message(cid, "How long does the review take?")
-    rt.wait_until_idle()
-
-    pass1 = {"finished": "pass 1: 21-22a and ITF filed, fee agreement faxed", "wrote": ["filings"], "needs": [], "flags": []}
-    gate = threading.Event()
-    lm.turn("intake", call("submit_va", form="21-22a"), call("submit_va", form="itf"),
-            call("efax_ogc", doc="fee_agreement"), final(reply="Filed with VA!", result=pass1))  # fmt: skip
-    lm.turn("orchestrator", call("run_prep", goal="Pull and read the C-file, prefill, face note."),
-            final(reply="We've asked VA for your file."))  # fmt: skip
-    lm.turn("claims_prep", pause(gate), *prep_steps("baseline_clean"), final(result={"finished": "face note verified"}))
-    lm.turn("orchestrator", call("run_intake", goal="Pass 2: ask only the gaps."), final())
-    lm.turn("intake", final(reply="Any other conditions besides tinnitus?"))
-    rt.event(cid, "countersigned", {"by": "Attorney 1"}, actor="staff", apply=countersign_both)
-    _until(lambda: any(s.agent == "claims_prep" for s in lm.seen))
-    lm.turn("support", final(reply="Our team is reading your VA file now."))  # D1: support while prep runs
-    rt.message(cid, "What's happening with my case?")
-    _until(lambda: ("support", "Our team is reading your VA file now.") in _messages(rt, cid))
-    gate.set()
-    rt.wait_until_idle()
-    case = rt.store.get_case(cid)
-    assert (case.stage, case.owner, case.prep.done, case.prep.verified) == (4, "intake", True, True)
-    assert case.answers["mos"].source == "C-file p. 1" and case.prep.face_note.startswith("FA 30%; No prior rep")
-    # The many pass-2 answers (test_intake_agent drives those), all but one:
-    def answered(c):
-        prefill_pass2(c, leave=("other_conditions",))
-        checklist.refresh(c)
-
-    rt.patch(cid, answered, actor="intake")
-    assert rt.store.get_case(cid).checklist["pass2"] == ["other_conditions"]
-
-    lm.turn("intake", call("record_answer", q="other_conditions", a="None"),
-            final(reply="Thank you, that's everything.", result={"finished": "pass 2: gaps closed"}))  # fmt: skip
-    lm.turn("orchestrator", final())
-    rt.message(cid, "No others.")
-    rt.wait_until_idle()
-
-    case = rt.store.get_case(cid)
-    assert (case.stage, case.owner, case.side_state) == (5, None, None)
-    results = [e.data["result"] for e in _types(rt, cid, "subagent_result")]
-    assert [(r["agent"], r["finished"]) for r in results] == [
-        ("intake", pass1["finished"]), ("claims_prep", "face note verified"), ("intake", "pass 2: gaps closed")]  # fmt: skip
-    assert [e.data["to"] for e in _types(rt, cid, "handoff")] == ["intake", "claims_prep", "intake"]
-    stages = [e.data["to"] for e in _types(rt, cid, "stage_changed")]
-    assert stages == [2, 3, 4, 5]
-    assert _messages(rt, cid)[0] == ("orchestrator", "Welcome!")
-    assert set(rt.harness.traces.cost_by_agent(cid)) == {"orchestrator", "intake", "claims_prep", "support"}
-    # The orchestrator's memory block never holds a transcript.
-    assert not any("How long" in p or "No others" in p for p in lm.prompts("orchestrator"))
-
-
-def test_a_handoff_runs_the_sub_agents_first_turn_after_the_wake(rt, lm):
-    _opened_with_intake(rt, lm)
-    agents = [s.agent for s in lm.seen]
-    first_intake = agents.index("intake")
-    assert set(agents[:first_intake]) == {"orchestrator"} and "orchestrator" not in agents[first_intake:]
-
-
-def test_messages_route_to_the_owner_or_support():
-    assert route(CaseFile(case_id="c", owner="intake", side_state="waiting_on_attorney")) == "intake"
-    assert route(CaseFile(case_id="c", owner="claims_prep")) == "support"
-    assert route(CaseFile(case_id="c")) == "support"
-    parked = CaseFile(case_id="c", owner="intake")
-    stages.move(parked, "needs_human", "rule", "crisis")  # parking clears the owner
-    assert route(parked) == "support"
-
-
-def test_a_flag_during_claims_prep_is_held_and_decided_with_its_result(rt, lm):
-    cid = case_at_stage_3(rt, "baseline_clean")
-    gate = threading.Event()
-    lm.turn("orchestrator", call("run_prep", goal="Read the C-file."), final())
-    lm.turn("claims_prep", pause(gate), *prep_steps("baseline_clean"), final())
-    lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Noted."))
-    rt.event(cid, "case_imported", {}, actor="staff")  # nobody owns the case: wakes the orchestrator
-    _until(lambda: any(s.agent == "claims_prep" for s in lm.seen))
-
-    rt.message(cid, "I also want to claim my knees too.")  # support answers while prep runs
-    _until(lambda: ("support", "Noted.") in _messages(rt, cid))
-    case = rt.store.get_case(cid)
-    assert case.owner == "claims_prep" and case.flags[0].status == "held"
-    assert len([s for s in lm.seen if s.agent == "orchestrator"]) == 3  # no wake for the held flag
-
-    lm.turn("orchestrator", call("run_intake", goal="Pass 2; also ask about the knees."), final())
-    lm.turn("intake", final(reply="Tell me about your knees."))
-    gate.set()
-    rt.wait_until_idle()
-    wake = lm.prompts("orchestrator")[-1]
-    assert "subagent_result" in wake.split("[[ ## incoming ## ]]")[1] and '"text": "knees"' in wake
-    case = rt.store.get_case(cid)
-    assert case.flags[0].status == "handled" and case.goal == "Pass 2; also ask about the knees."
-
-
-def test_a_flag_outside_stage_4_wakes_the_orchestrator_which_reopens_intake(rt, lm):
-    cid = _case_at(rt, stage=5, prep=PrepState(face_note="n", verified=True, prefill_done=True),
-                   checklist={"screen": [], "pass2": []}, filings=FILED)  # fmt: skip
-    lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Noted."))
-    lm.turn("orchestrator", call("read_skill", name="flags"), call("move_stage", to="4", reason="new condition: knees"),
-            call("run_intake", goal="Ask about the knees and their narrative prompts."), final())  # fmt: skip
-    lm.turn("intake", final(reply="Tell me about your knees."))
-    rt.message(cid, "I also want to claim my knees too.")
-    rt.wait_until_idle()
-    case = rt.store.get_case(cid)
-    assert (case.stage, case.owner, case.flags[0].status) == (4, "intake", "handled")
-    assert case.checklist["pass2"]  # the move back reset it; intake's turn rebuilt it
+# ------------------------------------------------------------------------------ moves and stop rules
 
 
 def test_refused_moves_are_returned_logged_and_end_nothing(rt, lm):
@@ -176,7 +22,7 @@ def test_refused_moves_are_returned_logged_and_end_nothing(rt, lm):
     lm.turn("intake", final(reply="Did you serve?"))
     cid = rt.open_case().case_id
     rt.wait_until_idle()
-    refused = _types(rt, cid, "refused")
+    refused = events(rt, cid, "refused")
     assert [e.data["tool"] for e in refused] == ["run_prep", "move_stage", "run_prep"]
     assert all(e.actor == "orchestrator" for e in refused)
     traj = lm.prompts("orchestrator", "extract")[0]
@@ -188,72 +34,35 @@ def test_refused_moves_are_returned_logged_and_end_nothing(rt, lm):
 
 
 def test_closed_is_refused_after_filing(rt, lm):
-    cid = _case_at(rt, stage=3, filings=FILED)
+    cid = rt.store.create_case(CaseFile(case_id="c1", stage=3, filings=FILED)).case_id
     lm.turn("orchestrator", call("move_stage", to="closed", reason="veteran asked"), final())
     rt.event(cid, "staff_note", {}, actor="staff")
     rt.wait_until_idle()
-    assert "filed with VA" in _types(rt, cid, "refused")[0].data["reason"]
+    assert "filed with VA" in events(rt, cid, "refused")[0].data["reason"]
     assert rt.store.get_case(cid).side_state != "closed"
 
 
-def test_crisis_language_is_handled_in_code_before_any_model(rt, lm):
-    cid = _opened_with_intake(rt, lm)
-    intake_calls = len(lm.prompts("intake"))
-    lm.turn("orchestrator", final())
-    rt.message(cid, "Honestly I just want to kill myself.")
-    rt.wait_until_idle()
-    assert len(lm.prompts("intake")) == intake_calls
-    assert _messages(rt, cid)[-1] == ("rule", CRISIS_MESSAGE)
-    case = rt.store.get_case(cid)
-    assert (case.side_state, case.owner, case.tasks[0].kind) == ("needs_human", None, "urgent")
-    assert "escalated" in lm.prompts("orchestrator")[-1].split("[[ ## incoming ## ]]")[1]
-
-
-def test_a_request_for_a_person_or_to_withdraw_goes_to_a_person_by_rule(rt, lm):
-    cid = _opened_with_intake(rt, lm)
-    lm.turn("orchestrator", final())
-    rt.message(cid, "Can I talk to a real person?")
-    rt.wait_until_idle()
-    assert _messages(rt, cid)[-1] == ("rule", HANDOFF_MESSAGE)
-    assert rt.store.get_case(cid).side_state == "needs_human"
-    lm.turn("orchestrator", final())
-    rt.message(cid, "I want to cancel my representation.")  # parked: still a person, by rule
-    rt.wait_until_idle()
-    assert _messages(rt, cid)[-1] == ("rule", WITHDRAW_MESSAGE)
-    assert len(rt.store.get_case(cid).tasks) == 2 and not lm.prompts("support")
-
-    rt2_cid = _case_at(rt, owner="intake")
-    lm.turn("orchestrator", final())
-    rt.message(rt2_cid, "I want to cancel my representation.")
-    rt.wait_until_idle()
-    assert _messages(rt, rt2_cid)[-1] == ("rule", WITHDRAW_MESSAGE)
-
-
 def test_a_stop_rule_closes_the_case_and_returns_the_pass(rt, lm):
-    cid = _opened_with_intake(rt, lm)
+    cid = opened(rt, lm)
     lm.turn("intake", call("record_answer", q="is_veteran", a="No, I never served"),
             call("record_answer", q="filed_before", a="no"), final(reply="We can't take this case."))  # fmt: skip
     lm.turn("orchestrator", final())
     rt.message(cid, "I never served, I'm asking for my dad.")
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
-    assert (case.side_state, case.owner) == ("closed", None)
+    assert (case.stop.rule, case.side_state, case.owner) == ("not_veteran", "closed", None)
     assert "refused: you no longer own the case" in lm.prompts("intake", "extract")[-1]
-    assert _types(rt, cid, "subagent_result")[0].data["result"]["finished"].endswith("closed")
+    assert events(rt, cid, "subagent_result")[0].data["result"]["finished"].endswith("closed")
+    # The owner's reply goes out: a stop rule isn't a person taking over.
+    assert messages(rt, cid)[-1] == ("intake", "We can't take this case.") and not events(rt, cid, "reply_held")
 
 
-def test_filing_is_refused_before_the_countersign(rt, lm):
-    cid = _opened_with_intake(rt, lm)
-    lm.turn("intake", call("submit_va", form="21-22a"), final(reply="We need the attorney first."))
-    rt.message(cid, "Please file it now.")
-    rt.wait_until_idle()
-    assert "countersigned" in _types(rt, cid, "refused")[0].data["reason"]
-    assert rt.store.get_case(cid).filings == {}
+# ------------------------------------------------------------------------------ claims prep
 
 
 def test_claims_prep_continues_after_max_iters_then_needs_a_person(rt, lm):
     rt.agents["claims_prep"] = dataclasses.replace(rt.agents["claims_prep"], max_iters=1)
-    cid = _case_at(rt, stage=3, filings=FILED)
+    cid = rt.store.create_case(CaseFile(case_id="c1", stage=3, filings=FILED)).case_id
     lm.turn("orchestrator", call("run_prep", goal="Read the C-file."), final())
     for _ in range(4):
         lm.turn("claims_prep", call("read_skill", name="face-note-format"), final())
@@ -261,20 +70,113 @@ def test_claims_prep_continues_after_max_iters_then_needs_a_person(rt, lm):
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
     assert (case.prep.continuations, case.side_state) == (3, "needs_human")
-    assert lm.prompts("claims_prep")[1].split("[[ ## incoming ## ]]")[1].strip().startswith("[continue]")
+    assert incoming(lm.prompts("claims_prep")[1]).strip().startswith("[continue]")
 
 
-def test_a_failed_orchestrator_wake_puts_the_case_with_a_person(rt, lm):
-    lm.turn("orchestrator", bad(), bad(), bad(), bad())
-    cid = rt.open_case().case_id
+def test_prep_hand_back_lets_the_result_wake_hand_off_to_intake(rt, lm):
+    cid = answered(rt, 4, leave=("narrative:tinnitus:h02",), owner="claims_prep")
+    lm.turn("claims_prep", final())  # the stop rule holds: hand back
+    lm.turn("orchestrator", call("run_intake", goal="Pass 2."), final())
+    lm.turn("intake", final(reply="A few questions."))
+    rt._enqueue(cid, Job("claims_prep", "[continue]", "continue"))
+    rt.wait_until_idle()
+    assert rt.store.get_case(cid).owner == "intake" and not events(rt, cid, "refused")
+    assert "<untrusted" in incoming(lm.prompts("orchestrator")[0])  # the result is model text: data
+
+
+def test_prep_out_of_continuations_leaves_a_staff_task_with_the_held_flags(rt, lm):
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=4, owner="claims_prep", filings=FILED,
+                                        prep=PrepState(continuations=3),
+                                        flags=[Flag(kind="new_condition", text="knees", status="held")])).case_id  # fmt: skip
+    lm.turn("claims_prep", final())
+    rt._enqueue(cid, Job("claims_prep", "[continue]", "continue"))
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
-    assert case.side_state == "needs_human" and "failed" in case.side_reason
+    assert case.side_state == "needs_human"
+    assert any("new_condition: knees" in t.text for t in case.tasks)
 
 
-def test_a_failed_intake_turn_sends_the_canned_reply(rt, lm):
-    cid = _opened_with_intake(rt, lm)
-    lm.turn("intake", bad(), bad(), bad(), bad())
-    rt.message(cid, "Army.")
+# ------------------------------------------------------------------------------ flags and reopening intake
+
+
+def test_reopening_a_fully_answered_case_waits_for_the_new_condition(rt, lm):
+    cid = answered(rt, 5, case_id="c5")
+    assert rt.store.get_case(cid).checklist["pass2"] == []
+    lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Noted."))
+    lm.turn("orchestrator", call("move_stage", to="4", reason="new condition: knees"),
+            call("run_intake", goal="Ask about the knees and their narrative prompts."), final())  # fmt: skip
+    lm.turn("intake", final(reply="Tell me about your knees."))
+    rt.message(cid, "I also want to claim my knees.")
     rt.wait_until_idle()
-    assert _messages(rt, cid)[-1] == ("intake", CANNED_REPLY)
+    case = rt.store.get_case(cid)
+    assert (case.stage, case.owner, case.checklist["pass2"]) == (4, "intake", ["claim_conditions"])
+    assert case.flags[0].status == "handled"
+    (item,) = checklist.missing(case, "pass2")
+    assert "new condition: knees" in item.ask
+
+    lm.turn("intake", call("record_answer", q="claim_conditions", a='["tinnitus", "knees"]'), final(reply="Thanks."))
+    rt.message(cid, "Yes, tinnitus and my knees.")
+    rt.wait_until_idle()
+    case = rt.store.get_case(cid)
+    assert case.stage == 4 and case.owner == "intake"  # the veteran's answer went to intake, not support
+    assert case.checklist["pass2"] and all(k.startswith("narrative:") for k in case.checklist["pass2"])
+
+    def narratives(c):
+        for key in c.checklist["pass2"]:
+            c.answers[key] = Answer(value="it hurts", source="veteran, chat")
+        checklist.refresh(c)
+
+    rt.patch(cid, narratives, actor="intake")
+    assert rt.store.get_case(cid).stage == 5
+
+
+def test_run_intake_at_stage_4_after_a_new_condition_flag_reopens_claim_conditions(rt, lm):
+    cid = answered(rt, 4, flags=[Flag(kind="new_condition", text="knees")])
+    lm.turn("orchestrator", call("run_intake", goal="Pass 2; also ask about the knees."), final())
+    lm.turn("intake", final(reply="Tell me about your knees."))
+    rt.event(cid, "prep_returned", {}, actor="staff")
+    rt.wait_until_idle()
+    case = rt.store.get_case(cid)
+    assert (case.stage, case.owner, case.checklist["pass2"]) == (4, "intake", ["claim_conditions"])
+
+
+def test_flags_stay_open_when_the_wake_did_nothing(rt, lm):
+    case = CaseFile(case_id="c5", stage=5, prep=PREP_DONE, filings=FILED, flags=[Flag(kind="new_condition", text="knees")])
+    cid = rt.store.create_case(case).case_id
+    lm.turn("orchestrator", call("run_intake", goal="Ask about the knees."), final())  # refused at stage 5
+    rt.event(cid, "staff_note", {}, actor="staff")
+    rt.wait_until_idle()
+    assert rt.store.get_case(cid).flags[0].status == "open"
+
+
+def test_two_flags_in_one_support_turn_wake_the_orchestrator_once(rt, lm):
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED)).case_id
+    lm.turn("support", call("flag_orchestrator", kind="contact_change", text="new phone"),
+            call("flag_orchestrator", kind="complaint", text="slow"), final(reply="Passed on."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, "My phone changed and you're slow")
+    rt.wait_until_idle()
+    assert len(lm.prompts("orchestrator")) == 1 and not lm.unused()
+    assert [f.kind for f in rt.store.get_case(cid).flags] == ["contact_change", "complaint"]
+
+
+def test_a_retried_support_attempt_does_not_duplicate_its_flag(rt, lm):
+    cid = rt.store.create_case(CaseFile(case_id="c", stage=3, filings=FILED)).case_id
+    lm.turn("support", call("flag_orchestrator", kind="complaint", text="slow"), bad(),
+            call("flag_orchestrator", kind="complaint", text="slow"), final(reply="Passed on."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, "You're slow")
+    rt.wait_until_idle()
+    assert [f.kind for f in rt.store.get_case(cid).flags] == ["complaint"]
+    assert len(events(rt, cid, "support_flag")) == 1
+
+
+def test_staff_tasks_are_deduped_and_allowed_after_a_handoff(rt, lm):
+    lm.turn("orchestrator", call("run_intake", goal="Pass 1."), call("staff_task", text="Call the veteran."),
+            call("staff_task", text="Call the veteran."), final())  # fmt: skip
+    lm.turn("intake", final(reply="Did you serve?"))
+    cid = rt.open_case().case_id
+    rt.wait_until_idle()
+    assert [t.text for t in rt.store.get_case(cid).tasks] == ["Call the veteran."]
+    traj = lm.prompts("orchestrator", "extract")[0]
+    assert "staff task created" in traj and "already open" in traj
