@@ -37,7 +37,7 @@ WITHDRAW_MESSAGE = (
     "I've passed your request to our team. A person will contact you to confirm before anything "
     "about your representation changes."
 )
-MAX_CONTINUATIONS = 3  # claims prep turns that hit max_iters pick up where they stopped
+MAX_CONTINUATIONS = 3  # claims prep turns that end before the stop rule (max_iters, early) are continued
 CHAT_EVENT_TYPES = ("message",)  # never in the orchestrator's memory block (no transcripts)
 
 
@@ -277,27 +277,33 @@ class Runtime:
             return
         if outcome.result is not None:
             self.store.append_event(case_id, "result_ignored", {"reason": "stop rule not met"}, actor=spec.name)
-        if outcome.status != "ok" and spec.on_limit == "continue":
-            if outcome.status == "limit" and case.prep.continuations < MAX_CONTINUATIONS:
+        if spec.on_limit == "continue":
+            # Claims prep has nobody to wait for: a turn that ends before its stop rule holds (at the
+            # step limit, or early) is continued, and the new turn picks up from the case file.
+            if outcome.status != "failed" and case.prep.continuations < MAX_CONTINUATIONS:
                 self.patch(case_id, lambda c: setattr(c.prep, "continuations", c.prep.continuations + 1), spec.name)
-                note = f"[continue] Your last turn hit its step limit; pick up where it stopped. Goal: {case.goal}"
+                why = "hit its step limit" if outcome.status == "limit" else "ended before your stop rule held"
+                note = f"[continue] Your last turn {why}; pick up where it stopped. Goal: {case.goal}"
                 turn.deferred.append(Job(spec.name, note, "continue"))
             else:
-                self.move(case_id, "needs_human", "harness", f"{spec.name} turn {outcome.status}: {outcome.detail}")
+                detail = outcome.detail or f"stop rule not met after {MAX_CONTINUATIONS} continuations"
+                self.move(case_id, "needs_human", "harness", f"{spec.name} turn {outcome.status}: {detail}")
             return
         if outcome.reply:
             self.patch(case_id, lambda c: setattr(c, "awaiting_veteran", True), actor=spec.name)
 
 
 def make_runtime(data_dir: Path, lm, kb: QATool | None = None) -> Runtime:
-    """The runtime with the orchestrator, intake and (until steps 4-5 replace them) the claims-prep
-    and support stubs. `kb`: the kb_search engine; by default the web-search QA (agent/qa.py)."""
+    """The runtime with the orchestrator, intake, claims prep and (until step 5 replaces it) the
+    support stub. `kb`: the kb_search engine; by default the web-search QA (agent/qa.py)."""
     from agent import orchestrator, stubs
+    from agent.claims_prep import agent as claims_prep
     from agent.intake import agent as intake
     from agent.qa import make_qa
 
     harness = Harness(lm, TraceLog(Path(data_dir) / "traces.jsonl"))
-    agents = {"orchestrator": orchestrator.spec(), "intake": intake.spec(), **stubs.specs()}
+    agents = {"orchestrator": orchestrator.spec(), "intake": intake.spec(), "claims_prep": claims_prep.spec(),
+              "support": stubs.support_spec()}  # fmt: skip
     return Runtime(Store(Path(data_dir) / "cases.sqlite"), harness, agents, kb=kb or make_qa("openrouter"))
 
 

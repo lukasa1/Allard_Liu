@@ -57,7 +57,10 @@ def _handoff(turn: Turn, agent: str, goal: str) -> str:
         if reason := stages.check_handoff(case, agent, rt.running(turn.case_id) - {"orchestrator"}):
             refusal.append(reason)
             return [{"type": "refused", "data": {"tool": f"run_{_short(agent)}", "reason": reason}}]
-        events = [stages.move(case, 4, "handoff", goal)] if agent == "claims_prep" else []
+        events = []
+        if agent == "claims_prep":
+            events.append(stages.move(case, 4, "handoff", goal))
+            case.prep.continuations = 0
         case.owner, case.goal, case.awaiting_veteran = agent, goal, False
         return events + [{"type": "handoff", "data": {"to": agent, "goal": goal}}]
 

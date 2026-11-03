@@ -261,16 +261,20 @@ def test_deadline_today_is_current_across_a_leap_year():
     assert not later.deadlines and "OLD CLAIMS" in later.text
 
 
-def test_prior_rep_is_the_newest_signed():
+def test_prior_rep_is_the_newest_form_without_revocation_details():
     from agent.cfile.facts import CfileFacts, PriorRep
 
     facts = CfileFacts(prior_reps=[
         PriorRep(name="Newer Firm", kind="attorney", signed="2024-05-01"),
         PriorRep(name="Older Firm", kind="attorney", signed="2019-01-01"),
-        PriorRep(name="A VSO", kind="vso", signed="2025-01-01"),
+        PriorRep(name="A VSO", kind="vso", signed="2025-01-01", revoked="2025-06-01"),
     ])  # fmt: skip
     note = render(facts, fee_pct=20, itf_date=None, intake_dob=None)
-    assert note.text.startswith("FA 20%; Prior rep Newer Firm")
+    assert note.lines[0].text == "FA 20%; Prior rep Newer Firm"
+    assert note.lines[0].sources == ("case:fee_agreement", "prior_reps.0")
+    revoked = CfileFacts(prior_reps=[facts.prior_reps[2]])
+    head = render(revoked, fee_pct=30, itf_date=None, intake_dob=None).lines[0]
+    assert (head.text, head.sources) == ("FA 30%; No prior rep", ("case:fee_agreement", "prior_reps.0", "none:poa_form:prior_representative"))
 
 
 def test_documents_stub_regenerates_when_the_persona_changes(tmp_path):

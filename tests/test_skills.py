@@ -51,3 +51,18 @@ def test_the_intake_skills_name_its_tools():
     assert set(load_skills("intake")) == {"screen-veteran", "poa-and-fees", "intent-to-file", "close-gaps"}
     assert all(n in text for n in names), names - {n for n in names if n in text}
     assert "waiting_on_attorney" in text and "stop rule" in text.lower() and "confirm" in text
+
+
+def test_the_claims_prep_skills_name_its_tools_and_what_prefill_settles():
+    from agent.claims_prep import agent as prep
+    from agent.claims_prep.facts import FACT
+    from agent.claims_prep.prefill import QUESTIONS
+    from agent.harness import Turn
+
+    text = "\n".join(s.body for s in load_skills("claims_prep").values())
+    assert set(load_skills("claims_prep")) == {"face-note-format", "cite-check"}
+    names = {t.name for t in prep.tools(Turn(None, "c", "claims_prep", "", 1))} - {"pull_cfile", "list_docs"}
+    assert all(n in text for n in names), names - {n for n in names if n in text}
+    kinds = set(FACT.json_schema()["discriminator"]["mapping"])
+    assert all(f"`{k}`" in text for k in kinds), kinds - {k for k in kinds if f"`{k}`" in text}
+    assert all(q in text for q in QUESTIONS) and "revocation" in text and "uncertain" in text

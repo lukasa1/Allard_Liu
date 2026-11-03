@@ -215,6 +215,8 @@ def build_documents(p: Persona, facts: CfileFacts | None = None) -> list[tuple[s
             f"TYPE OF REPRESENTATIVE: {kind}",
             f"DATE SIGNED: {_us(rep.signed)}",
         ]
+        if rep.revoked:
+            lines.append(f"REVOCATION: the claimant revoked this appointment on {_us(rep.revoked)}")
         docs.append(("poa_form", f"VA {form_id} {rep.name}", _pdf(f"VA Form {form_id}", lines)))
 
     docs.append((

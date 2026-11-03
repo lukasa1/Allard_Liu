@@ -36,6 +36,7 @@ class PriorRep(BaseModel):
     name: str
     kind: Literal["attorney", "agent", "vso"]
     signed: str | None = None
+    revoked: str | None = None  # the form's revocation date: the appointment has ended
 
 
 class PendingFiling(BaseModel):

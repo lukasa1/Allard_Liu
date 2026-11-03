@@ -1,5 +1,5 @@
 """The orchestrator and the runtime protocol end to end (plan §2-§3, L10-L13), with the real
-intake, the claims-prep and support stubs, and the scripted fake LM."""
+intake and claims prep, the support stub, and the scripted fake LM."""
 
 import dataclasses
 import threading
@@ -7,9 +7,11 @@ import time
 
 from fake_lm import bad, call, final, pause
 from intake_fixtures import SCREEN_STEPS, countersign_both, prefill_pass2, sign_both
+from prep_fixtures import case_at_stage_3, fee_agreement, prep_steps
 
 from agent.casefile import CaseFile, Filing, PrepState
 from agent.harness import CANNED_REPLY
+from agent.intake import checklist
 from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE
 from agent.runtime import WITHDRAW_MESSAGE, route
 
@@ -35,16 +37,18 @@ def _case_at(rt, **fields) -> str:
     return rt.store.create_case(CaseFile(case_id="c1", **fields)).case_id
 
 
-def _opened_with_intake(rt, lm) -> str:
+def _opened_with_intake(rt, lm, persona: str | None = None) -> str:
     lm.turn("orchestrator", call("run_intake", goal="Pass 1: screen, sign, file."), final(reply="Welcome!"))
     lm.turn("intake", final(reply="Did you serve in the military?"))
-    cid = rt.open_case().case_id
+    cid = rt.open_case(persona).case_id
     rt.wait_until_idle()
     return cid
 
 
 def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
-    cid = _opened_with_intake(rt, lm)
+    """Pass 1 -> claims prep (the real agent, on baseline_clean's synthetic C-file) -> pass 2 -> stage 5."""
+    cid = _opened_with_intake(rt, lm, "baseline_clean")
+    fee_agreement(rt, cid)  # the signing itself is test_intake_agent's; here only its terms matter
     assert rt.store.get_case(cid).side_state == "waiting_on_veteran"
 
     lm.turn("intake", *SCREEN_STEPS, final(reply="Please sign both documents."))
@@ -67,16 +71,26 @@ def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
             call("efax_ogc", doc="fee_agreement"), final(reply="Filed with VA!", result=pass1))  # fmt: skip
     lm.turn("orchestrator", call("run_prep", goal="Pull and read the C-file, prefill, face note."),
             final(reply="We've asked VA for your file."))  # fmt: skip
-    lm.turn("claims_prep", pause(gate), call("finish_prep"), final(result={"finished": "face note verified"}))
+    lm.turn("claims_prep", pause(gate), *prep_steps("baseline_clean"), final(result={"finished": "face note verified"}))
     lm.turn("orchestrator", call("run_intake", goal="Pass 2: ask only the gaps."), final())
     lm.turn("intake", final(reply="Any other conditions besides tinnitus?"))
     rt.event(cid, "countersigned", {"by": "Attorney 1"}, actor="staff", apply=countersign_both)
     _until(lambda: any(s.agent == "claims_prep" for s in lm.seen))
-    rt.patch(cid, lambda c: prefill_pass2(c, leave=("other_conditions",)), actor="claims_prep")  # step 4's prefill
+    lm.turn("support", final(reply="Our team is reading your VA file now."))  # D1: support while prep runs
+    rt.message(cid, "What's happening with my case?")
+    _until(lambda: ("support", "Our team is reading your VA file now.") in _messages(rt, cid))
     gate.set()
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
-    assert (case.stage, case.owner, case.prep.done, case.checklist["pass2"]) == (4, "intake", True, ["other_conditions"])
+    assert (case.stage, case.owner, case.prep.done, case.prep.verified) == (4, "intake", True, True)
+    assert case.answers["mos"].source == "C-file p. 1" and case.prep.face_note.startswith("FA 30%; No prior rep")
+    # The many pass-2 answers (test_intake_agent drives those), all but one:
+    def answered(c):
+        prefill_pass2(c, leave=("other_conditions",))
+        checklist.refresh(c)
+
+    rt.patch(cid, answered, actor="intake")
+    assert rt.store.get_case(cid).checklist["pass2"] == ["other_conditions"]
 
     lm.turn("intake", call("record_answer", q="other_conditions", a="None"),
             final(reply="Thank you, that's everything.", result={"finished": "pass 2: gaps closed"}))  # fmt: skip
@@ -93,7 +107,7 @@ def test_the_demo_flow_reaches_ready_for_attorney_review(rt, lm):
     stages = [e.data["to"] for e in _types(rt, cid, "stage_changed")]
     assert stages == [2, 3, 4, 5]
     assert _messages(rt, cid)[0] == ("orchestrator", "Welcome!")
-    assert set(rt.harness.traces.cost_by_agent(cid)) == {"orchestrator", "intake", "claims_prep"}
+    assert set(rt.harness.traces.cost_by_agent(cid)) == {"orchestrator", "intake", "claims_prep", "support"}
     # The orchestrator's memory block never holds a transcript.
     assert not any("How long" in p or "No others" in p for p in lm.prompts("orchestrator"))
 
@@ -113,10 +127,10 @@ def test_messages_route_to_the_owner_or_support():
 
 
 def test_a_flag_during_claims_prep_is_held_and_decided_with_its_result(rt, lm):
-    cid = _case_at(rt, stage=3, filings=FILED)
+    cid = case_at_stage_3(rt, "baseline_clean")
     gate = threading.Event()
     lm.turn("orchestrator", call("run_prep", goal="Read the C-file."), final())
-    lm.turn("claims_prep", pause(gate), call("finish_prep"), final())
+    lm.turn("claims_prep", pause(gate), *prep_steps("baseline_clean"), final())
     lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Noted."))
     rt.event(cid, "case_imported", {}, actor="staff")  # nobody owns the case: wakes the orchestrator
     _until(lambda: any(s.agent == "claims_prep" for s in lm.seen))

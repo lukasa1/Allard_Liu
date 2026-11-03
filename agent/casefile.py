@@ -66,9 +66,14 @@ class Filing(BaseModel):
 
 
 class PrepState(BaseModel):
-    """Claims prep's output. It is done when the face note is rendered, `verify` passed or the
-    lines it couldn't cite were escalated, and prefill ran (§2, stage 4)."""
+    """Claims prep's working memory and output (agent/claims_prep). It is done when the face note
+    is rendered, `verify` passed or the lines it couldn't cite were escalated, and prefill ran
+    (§2, stage 4). Recording a fact clears the face note, the verdict and prefill: both are built
+    from the current fact table."""
 
+    pulled: bool = False  # pull_cfile ran
+    pages_read: list[int] = Field(default_factory=list)  # C-file pages read so far (citable)
+    facts: list[dict[str, Any]] = Field(default_factory=list)  # the fact table, each fact with its cite
     face_note: str | None = None
     verified: bool = False
     uncertain: list[str] = Field(default_factory=list)
@@ -153,7 +158,9 @@ class CaseFile(BaseModel):
         """The case-file part of a memory block (L10): what the case is, not how agents talk."""
         data = self.model_dump(mode="json", exclude={"created_at", "persona_id"})
         data["stage_name"] = STAGE_NAMES[self.stage]
-        data["prep"]["done"] = self.prep.done
+        # Claims prep's working memory stays out: what it produced, not how it read.
+        data["prep"] = {"done": self.prep.done, "facts": len(self.prep.facts),
+                        **self.prep.model_dump(include={"face_note", "verified", "uncertain", "prefill_done"})}  # fmt: skip
         data["open_tasks"] = [t.text for t in self.tasks if t.done_at is None]
         del data["tasks"]
         return data

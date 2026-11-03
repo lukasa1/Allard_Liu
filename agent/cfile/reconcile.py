@@ -42,12 +42,16 @@ def newest_private_rep(facts: CfileFacts):
     return max(reversed(private), key=lambda r: r.signed or "") if private else None
 
 
+def is_firm(name: str, rep: dict[str, Any]) -> bool:
+    """Whether a representative's name in the C-file is the firm itself (or its attorney)."""
+    ours = {n.lower() for n in (rep.get("firm_name"), f"{rep.get('first_name', '')} {rep.get('last_name', '')}".strip()) if n}
+    return any(o in name.lower() for o in ours)
+
+
 def without_firm(facts: CfileFacts, rep: dict[str, Any]) -> CfileFacts:
     """The C-file is pulled after the firm's own 21-22a is filed, so it may list the firm itself:
     that is not a *prior* representative (it would lower the fee and the face note's header)."""
-    ours = {n.lower() for n in (rep.get("firm_name"), f"{rep.get('first_name', '')} {rep.get('last_name', '')}".strip()) if n}
-    keep = [r for r in facts.prior_reps if not any(o and o in r.name.lower() for o in ours)]
-    return facts.model_copy(update={"prior_reps": keep})
+    return facts.model_copy(update={"prior_reps": [r for r in facts.prior_reps if not is_firm(r.name, rep)]})
 
 
 def _year(ym: str | None) -> int | None:
@@ -68,7 +72,7 @@ def cfile_intake_values(facts: CfileFacts) -> dict[str, Any]:
     return values
 
 
-def _same_period(a: ServicePeriod, b: ServicePeriod) -> bool:
+def same_period(a: ServicePeriod, b: ServicePeriod) -> bool:
     """The same enlistment if the branch matches and it starts within a year (people round)."""
     if (a.branch or "").lower() != (b.branch or "").lower():
         return False
@@ -81,7 +85,7 @@ def _same_period(a: ServicePeriod, b: ServicePeriod) -> bool:
 def reconcile(record: IntakeRecord, facts: CfileFacts) -> list[Discrepancy]:
     out: list[Discrepancy] = []
     for p in facts.service_periods:
-        match = next((q for q in record.service_periods if _same_period(p, q)), None)
+        match = next((q for q in record.service_periods if same_period(p, q)), None)
         if match is None:
             out.append(Discrepancy("service_period", f"service not on your list ({describe_period(p)})", True))
         elif p.discharge and match.discharge and p.discharge != match.discharge:
@@ -117,13 +121,13 @@ def apply(record: IntakeRecord, facts: CfileFacts, found: list[Discrepancy]) -> 
     kinds = {d.kind for d in found if d.applies}
     if "service_period" in kinds:
         for p in facts.service_periods:
-            if not any(_same_period(p, q) for q in record.service_periods):
+            if not any(same_period(p, q) for q in record.service_periods):
                 record.service_periods.append(p.model_copy())
         record.provenance["service_periods"] = "cfile+" + record.provenance.get("service_periods", "chat")
         changed.append("service_periods")
     if "discharge" in kinds:
         for p in facts.service_periods:
-            match = next((q for q in record.service_periods if _same_period(p, q)), None)
+            match = next((q for q in record.service_periods if same_period(p, q)), None)
             if match is not None and p.discharge and match.discharge != p.discharge:
                 match.discharge = p.discharge
         record.provenance["service_periods"] = "cfile+" + record.provenance.get("service_periods", "chat")

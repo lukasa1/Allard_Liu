@@ -1,7 +1,7 @@
 """Render the firm's face-note template from CfileFacts (deterministic: no LLM).
 
 Template and rules follow the firm's face-note format, simplified:
-  - header: fee % and prior private rep, DOB, service era, branch/dates/discharge per period,
+  - header: fee % and prior rep (none if the form has revocation details), DOB, service era, branch/dates/discharge per period,
     MOS, combined rating at signing, the SC list (highest first), the firm's intent-to-file date
   - numbered lines: decisions whose notification letter is under a year old, newest first, with
     the filing form, the decision date (dated by the notification letter, since deadlines run
@@ -10,6 +10,9 @@ Template and rules follow the firm's face-note format, simplified:
   - OLD CLAIMS: conditions whose latest decision is more than a year old, one per line
 Not covered yet: following conditions back through older decisions on the same line, Board
 appeals, deferrals and proposed reductions on their own lines.
+
+Every line carries the fact paths it came from (`Line.sources`), so claims prep's `verify` can
+check each line against the C-file pages its facts cite.
 
 Flags for staff (not part of the firm's template, listed under the note):
   - DOB on the intake / 21-22a differs from the DD-214 (the "swapped day and month" case)
@@ -87,11 +90,31 @@ def service_era(start: str | None) -> str:
     return "Pre-Vietnam"
 
 
+@dataclass(frozen=True)
+class Line:
+    """One face-note line and the fact paths it came from (L24). `sources` is None for a pure
+    separator. A path names a CfileFacts field ("dob", "decisions.0", "decisions.0.notified"); a
+    derived line (service era, an appeal deadline) lists the facts it was derived from. Two other
+    kinds of source: "case:<field>" (the firm's own records: the fee agreement, the ITF) and
+    "none:<doc type>:<fact kind>" (a line that states something is absent, e.g. no code sheet)."""
+
+    text: str
+    sources: tuple[str, ...] | None = ()
+
+
 @dataclass
 class FaceNote:
-    text: str
+    lines: list[Line]
     flags: list[str] = field(default_factory=list)
     deadlines: list[dict] = field(default_factory=list)  # {deadline, decision_date, conditions}
+
+    @property
+    def text(self) -> str:
+        return "\n".join(line.text for line in self.lines)
+
+
+def _sep(text: str) -> Line:
+    return Line(text, None)
 
 
 def render(
@@ -107,89 +130,101 @@ def render(
     today = as_of.isoformat()
     flags: list[str] = []
 
+    def dated(d: Decision) -> str:
+        return d.notified or d.decision_date
+
     def is_current(d: Decision) -> bool:
         # Calendar year, the same rule as the deadline itself: 365 days loses a day across Feb 29
         # and sends a decision whose deadline is today to OLD CLAIMS with no deadline task.
         return _plus_year(dated(d)) >= today
 
-    private = [r for r in facts.prior_reps if r.kind in ("attorney", "agent")]
-    # Newest by signed date; on a tie (or no dates) the last in document order, as before.
-    newest = max(reversed(private), key=lambda r: r.signed or "") if private else None
-    prior = f"Prior rep {newest.name}" if newest else "No prior rep"
-    lines = [f"FA {fee_pct if fee_pct is not None else '?'}%; {prior}", "*" * 44]
+    def decision_src(i: int) -> tuple[str, ...]:
+        """A decision dated by its notification letter cites both."""
+        return (f"decisions.{i}",) + ((f"decisions.{i}.notified",) if facts.decisions[i].notified else ())
 
-    lines.append(f"DOB: {_short(facts.dob)}")
+    # The firm's SOP: an appointment form (21-22 or 21-22a) with revocation details is not a prior
+    # rep. Newest by signed date; on a tie (or no dates) the last in document order.
+    active = [(i, r) for i, r in enumerate(facts.prior_reps) if not r.revoked]
+    if active:
+        i, newest = max(reversed(active), key=lambda ir: ir[1].signed or "")
+        prior, prior_src = f"Prior rep {newest.name}", (f"prior_reps.{i}",)
+    else:
+        prior = "No prior rep"
+        prior_src = (*(f"prior_reps.{i}" for i in range(len(facts.prior_reps))), "none:poa_form:prior_representative")
+    lines = [
+        Line(f"FA {fee_pct if fee_pct is not None else '?'}%; {prior}", ("case:fee_agreement", *prior_src)),
+        _sep("*" * 44),
+    ]
+
+    lines.append(Line(f"DOB: {_short(facts.dob)}", ("dob",) if facts.dob else ("none:dd214:dob",)))
     if intake_dob and facts.dob and intake_dob != facts.dob:
         # No dates in the flag: flags reach staff tasks, the case file and the orchestrator's prompt.
         swapped = intake_dob[:4] == facts.dob[:4] and intake_dob[5:7] == facts.dob[8:10] and intake_dob[8:10] == facts.dob[5:7]
         how = " (the day and month look swapped)" if swapped else ""
         flags.append(f"DOB mismatch: the intake / 21-22a date of birth differs from the DD-214{how}. File a corrected 21-22a.")
-    first = facts.service_periods[0].start if facts.service_periods else None
-    lines.append(f"Service Era: {service_era(first)}")
-    for sp in facts.service_periods:
+    periods = facts.service_periods
+    first = periods[0].start if periods else None
+    lines.append(Line(f"Service Era: {service_era(first)}", ("service_periods.0",) if periods else ("none:dd214:service_period",)))
+    for i, sp in enumerate(periods):
         discharge = DISCHARGE_LABEL.get(sp.discharge or "", "Discharge unknown")
         comp = "" if sp.component in (None, "active") else f" {sp.component.title()}"
-        line = f"{(sp.branch or '?').title()}{comp} {_ym(sp.start)} - {_ym(sp.end)}, {discharge}"
+        text = f"{(sp.branch or '?').title()}{comp} {_ym(sp.start)} - {_ym(sp.end)}, {discharge}"
         if sp.discharge in NON_HONORABLE:
-            line += "  ** FLAG: non-qualifying discharge for this period **"
+            text += "  ** FLAG: non-qualifying discharge for this period **"
             flags.append(f"Non-honorable discharge for the {sp.start} to {sp.end} period.")
-        lines.append(line)
-    lines.append(f"MOS: {'; '.join(facts.mos) if facts.mos else '(not found)'}")
+        src = (f"service_periods.{i}",) + ((f"service_periods.{i}.discharge",) if sp.discharge else ())
+        lines.append(Line(text, src))
+    mos_src = tuple(f"mos.{i}" for i in range(len(facts.mos))) or ("none:dd214:mos",)
+    lines.append(Line(f"MOS: {'; '.join(facts.mos) if facts.mos else '(not found)'}", mos_src))
     combined = facts.combined_rating if facts.combined_rating is not None else 0
-    lines.append(f"SC at time of signing {firm} - {combined}%")
-    lines.append(THICK)
-    sc = sorted(facts.sc_conditions, key=lambda c: -(c.rating_pct or 0))
-    lines.append(
-        f"SC ({combined}%)|"
-        + "".join(f" {cond_name(c.name)} {c.rating_pct}% |" for c in sc).rstrip("|").rstrip()
-    )
-    lines.append(THICK)
-    lines.append(
-        f"{firm} Filed 0966 Intent on {_short(itf_date) if itf_date else '(not filed yet)'}"
-    )
-    lines.append(THIN)
+    rating_src = ("combined_rating",) if facts.combined_rating is not None else ("none:rating_decision:combined_rating",)
+    lines.append(Line(f"SC at time of signing {firm} - {combined}%", rating_src))
+    lines.append(_sep(THICK))
+    sc = sorted(enumerate(facts.sc_conditions), key=lambda ic: -(ic[1].rating_pct or 0))
+    lines.append(Line(
+        f"SC ({combined}%)|" + "".join(f" {cond_name(c.name)} {c.rating_pct}% |" for _, c in sc).rstrip("|").rstrip(),
+        rating_src + tuple(f"sc_conditions.{i}" for i, _ in sc),
+    ))  # fmt: skip
+    lines.append(_sep(THICK))
+    itf = _short(itf_date) if itf_date else "(not filed yet)"
+    lines.append(Line(f"{firm} Filed 0966 Intent on {itf}", ("case:itf",)))
+    lines.append(_sep(THIN))
 
-    def dated(d: Decision) -> str:
-        return d.notified or d.decision_date
-
-    current = sorted((d for d in facts.decisions if is_current(d)), key=dated, reverse=True)
+    current = sorted((i for i, d in enumerate(facts.decisions) if is_current(d)),
+                     key=lambda i: dated(facts.decisions[i]), reverse=True)  # fmt: skip
     deadlines = []
     n = 0
-    for d in current:
+    for i in current:
+        d, src = facts.decisions[i], decision_src(i)
         n += 1
-        conds = "; ".join(cond_name(i.condition) for i in d.issues)
+        conds = "; ".join(cond_name(issue.condition) for issue in d.issues)
         deadline = _plus_year(dated(d))
-        block = [f"{n}. {cond_name(conds)}"]
+        lines.append(Line(f"{n}. {cond_name(conds)}", (f"decisions.{i}",)))
         if d.form:
-            block.append(f"   {d.form} filed {_short(d.filed)}")
-        block += [
-            f"   R.D. {_short(dated(d))}",
-            f"   DEADLINE TO FILE AMA APPEAL {_short(deadline)}",
-        ]
-        lines += block + [THIN]
-        deadlines.append(
-            {
-                "deadline": deadline,
-                "decision_date": dated(d),
-                "conditions": [i.condition for i in d.issues],
-            }
-        )
-    for pf in facts.pending_filings:
-        n += 1
+            lines.append(Line(f"   {d.form} filed {_short(d.filed)}", (f"decisions.{i}",)))
         lines += [
-            f"{n}. {'; '.join(cond_name(c) for c in pf.conditions)}: pending",
-            f"   {pf.form} filed {_short(pf.filed)}",
-            THIN,
+            Line(f"   R.D. {_short(dated(d))}", src),
+            Line(f"   DEADLINE TO FILE AMA APPEAL {_short(deadline)}", src),
+            _sep(THIN),
+        ]
+        deadlines.append({"deadline": deadline, "decision_date": dated(d), "conditions": [x.condition for x in d.issues]})
+    for i, pf in enumerate(facts.pending_filings):
+        n += 1
+        src = (f"pending_filings.{i}",)
+        lines += [
+            Line(f"{n}. {'; '.join(cond_name(c) for c in pf.conditions)}: pending", src),
+            Line(f"   {pf.form} filed {_short(pf.filed)}", src),
+            _sep(THIN),
         ]
 
-    latest: dict[str, Decision] = {}
-    for d in sorted(facts.decisions, key=dated):
-        for issue in d.issues:
-            latest[issue.condition] = d
-    old = [(c, d) for c, d in latest.items() if not is_current(d)]
+    latest: dict[str, int] = {}
+    for i in sorted(range(len(facts.decisions)), key=lambda i: dated(facts.decisions[i])):
+        for issue in facts.decisions[i].issues:
+            latest[issue.condition] = i
+    old = [(c, i) for c, i in latest.items() if not is_current(facts.decisions[i])]
     if old:
-        lines += [WAVE, "OLD CLAIMS", WAVE]
-        for i, (cond, d) in enumerate(sorted(old, key=lambda cd: dated(cd[1]), reverse=True), 1):
-            lines += [f"{i}. {cond_name(cond)} R.D. {_short(dated(d))}", WAVE]
+        lines += [_sep(WAVE), _sep("OLD CLAIMS"), _sep(WAVE)]
+        for k, (cond, i) in enumerate(sorted(old, key=lambda ci: dated(facts.decisions[ci[1]]), reverse=True), 1):
+            lines += [Line(f"{k}. {cond_name(cond)} R.D. {_short(dated(facts.decisions[i]))}", decision_src(i)), _sep(WAVE)]
     flags += facts.problems
-    return FaceNote(text="\n".join(lines), flags=flags, deadlines=deadlines)
+    return FaceNote(lines=lines, flags=flags, deadlines=deadlines)

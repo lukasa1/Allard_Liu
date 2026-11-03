@@ -9,7 +9,7 @@ model, and tests keep the two in sync.
 
   orchestrator/  stage-playbook, routing, flags
   intake/        screen-veteran, poa-and-fees, intent-to-file, close-gaps
-  claims_prep/   face-note-format, cfile-vs-intake
+  claims_prep/   face-note-format, cite-check
   support/       case-status, answer-questions, hand-to-a-person
 """
 
