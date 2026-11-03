@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pypdf
 
-from poa_agent import form_21_22a as form
-from poa_agent.pdf.fill import UnknownFormField, fill_acroform
-from poa_agent.service import load_representative
+from poa_skill import form_21_22a as form
+from poa_skill.pdf.fill import UnknownFormField, fill_acroform
+from poa_skill.service import load_representative
 
 REP = load_representative()
 VET = {

@@ -13,8 +13,8 @@ clicks Sign in the host UI (PoaService.sign).
 
 from dataclasses import dataclass, field
 
-from poa_agent.service import EDITABLE, ESIGN_CONSENT, PoaService, WorkflowError
-from poa_agent.vault import FIELDS
+from poa_skill.service import EDITABLE, ESIGN_CONSENT, PoaService, WorkflowError
+from poa_skill.vault import FIELDS
 
 _EDITABLE_DOC = ", ".join(sorted(EDITABLE))
 
@@ -207,3 +207,18 @@ def run_tool(svc: PoaService, name: str, args: dict) -> ToolOutcome:
         return ToolOutcome({"error": f"unknown tool {name}"}, is_error=True)
     except (WorkflowError, KeyError, TypeError) as e:
         return ToolOutcome({"error": str(e)}, is_error=True)
+
+
+def openai_tools(tools: list[dict] = TOOLS) -> list[dict]:
+    """The same tools in OpenAI function-calling format (OpenRouter, OpenAI, vLLM, etc.)."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["input_schema"],
+            },
+        }
+        for t in tools
+    ]

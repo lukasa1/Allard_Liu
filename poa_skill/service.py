@@ -13,9 +13,9 @@ from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
-from poa_agent import form_21_22a as form
-from poa_agent.documents import Document, DocumentStore, now_iso, sha256
-from poa_agent.vault import DEFAULT_DATA_DIR, FIELDS, Vault
+from poa_skill import form_21_22a as form
+from poa_skill.documents import Document, DocumentStore, now_iso, sha256
+from poa_skill.vault import DEFAULT_DATA_DIR, FIELDS, Vault
 
 REP_CONFIG = Path(__file__).resolve().parent.parent / "config" / "representative.json"
 

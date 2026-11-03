@@ -19,8 +19,8 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-from poa_agent.form_21_22a import BRANCHES
-from poa_agent.pdf.transforms import us_state_code
+from poa_skill.form_21_22a import BRANCHES
+from poa_skill.pdf.transforms import us_state_code
 
 DEFAULT_DATA_DIR = Path(os.environ.get("POA_DATA_DIR", ".data"))
 

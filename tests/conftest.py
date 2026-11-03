@@ -3,10 +3,10 @@ import os
 import tempfile
 from io import BytesIO
 
-# Isolate every test run: its own data dir and vault key, set before poa_agent is imported.
+# Isolate every test run: its own data dir and vault key, set before poa_skill is imported.
 os.environ["POA_DATA_DIR"] = tempfile.mkdtemp(prefix="poa-test-")
 os.environ.pop("POA_VAULT_KEY", None)
-os.environ.pop("ANTHROPIC_API_KEY", None)
+os.environ.pop("OPENROUTER_API_KEY", None)
 
 import pytest
 from PIL import Image, ImageDraw
@@ -41,6 +41,6 @@ def signature_uri() -> str:
 
 @pytest.fixture
 def svc(tmp_path):
-    from poa_agent.service import PoaService
+    from poa_skill.service import PoaService
 
     return PoaService("test_session_" + tmp_path.name[-8:].replace(".", "_"), data_dir=tmp_path)

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-from poa_agent.vault import DEFAULT_DATA_DIR, load_key
+from poa_skill.vault import DEFAULT_DATA_DIR, load_key
 
 
 def now_iso() -> str:

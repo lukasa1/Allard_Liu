@@ -1,7 +1,8 @@
 """Demo host app: chat + secure form + signature pad + PDF preview + Sign button.
 
 Run:  uv run uvicorn demo.server:app --port 8000   then open http://localhost:8000
-With ANTHROPIC_API_KEY set, Claude drives the conversation. Without it, the page offers a
+With OPENROUTER_API_KEY set, an example host agent (demo/host_agent.py) that mounts the skill
+drives the conversation. Without it, the page offers a
 "drive the tools yourself" panel that calls the same tools the agent would.
 
 This is the trusted side. It is the only code that touches raw PII (secure form -> vault) and the
@@ -16,14 +17,12 @@ from fastapi import Cookie, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from poa_agent.service import PoaService, WorkflowError
-from poa_agent.tools import run_tool
+from poa_skill.service import PoaService, WorkflowError
+from poa_skill.tools import run_tool
 
 app = FastAPI(title="21-22a intake demo")
 STATIC = Path(__file__).parent / "static"
-AGENT_ENABLED = bool(os.environ.get("ANTHROPIC_API_KEY")) or (
-    os.environ.get("POA_LLM_BACKEND") == "bedrock"
-)
+AGENT_ENABLED = bool(os.environ.get("OPENROUTER_API_KEY"))
 _agents: dict = {}
 
 
@@ -40,9 +39,9 @@ def _agent(sid: str):
     if not AGENT_ENABLED:
         return None
     if sid not in _agents:
-        from poa_agent.agent import IntakeAgent
+        from demo.host_agent import HostAgent
 
-        _agents[sid] = IntakeAgent(_svc(sid))
+        _agents[sid] = HostAgent(_svc(sid))
     return _agents[sid]
 
 
@@ -77,7 +76,7 @@ class Chat(BaseModel):
 def chat(body: Chat, poa_session: str | None = Cookie(None)):
     agent = _agent(poa_session or "")
     if agent is None:
-        raise HTTPException(503, "agent offline: set ANTHROPIC_API_KEY")
+        raise HTTPException(503, "agent offline: set OPENROUTER_API_KEY")
     return agent.send(body.text)
 
 

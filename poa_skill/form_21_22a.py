@@ -15,9 +15,9 @@ Section II (claimant other than the veteran) is out of scope: the veteran is the
 from dataclasses import dataclass
 from pathlib import Path
 
-from poa_agent.pdf import transforms as t
-from poa_agent.pdf.fill import fill_acroform
-from poa_agent.pdf.sign import stamp_signature, stamp_text
+from poa_skill.pdf import transforms as t
+from poa_skill.pdf.fill import fill_acroform
+from poa_skill.pdf.sign import stamp_signature, stamp_text
 
 BLANK_PDF = Path(__file__).parent / "forms" / "VBA-21-22A-ARE.pdf"
 FORM_ID = "va-21-22a"

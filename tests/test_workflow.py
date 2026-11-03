@@ -5,8 +5,8 @@ import pypdf
 import pytest
 from conftest import SSN, VETERAN
 
-from poa_agent.service import ESIGN_CONSENT, WorkflowError
-from poa_agent.tools import TOOLS, run_tool
+from poa_skill.service import ESIGN_CONSENT, WorkflowError
+from poa_skill.tools import TOOLS, run_tool
 
 SSN_DIGITS = SSN.replace("-", "")
 
