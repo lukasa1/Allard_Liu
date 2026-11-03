@@ -8,6 +8,7 @@ The checklist is rebuilt from the case file's answers on every turn and after ev
           that became relevant included, secure-form ones too), one `confirm:<question>` per open
           C-file conflict, then the narrative prompts for each claimed condition
 
+In the eval condition `ask_no_probes` the verification probes are left out (casefile.EvalCondition).
 A field is settled when it has an answer or is marked unknown. Answers are keyed by question id;
 narratives by `narrative:<condition>:<prompt id>`. The firm's stop rules run on the same record.
 """
@@ -66,6 +67,8 @@ def _questions(case: CaseFile, part: str) -> list[ChecklistItem]:
     rec, items = record(case), []
     for q in BANK.structured:
         if q.id in SKIP or q.id in case.answers or q.stage == "reopen" or not is_visible(q, rec):
+            continue
+        if q.probe and case.eval_condition == "ask_no_probes":
             continue
         if part == "screen" and (q.stage != "screen" or q.source == "secure_form"):
             continue

@@ -79,7 +79,7 @@
   <section>
     <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran; the staff panel on the right plays the attorney.</div></div>
     <div id="status"></div>
-    <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button></form>
+    <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button><button type="button" class="ghost" id="suggest" disabled title="The simulated veteran writes the next reply">Autoplay</button></form>
   </section>
   <section>
     <div class="tabs">
@@ -146,7 +146,7 @@ $("#start").onclick = async () => {
   say(`New case. You are playing ${p.textContent}: ${p.title}`, "sys");
   try {
     caseId = (await api("/api/cases", {persona_id: p.value})).case_id;
-    $("#text").disabled = false; $("#send").disabled = false;
+    $("#text").disabled = false; $("#send").disabled = false; $("#suggest").disabled = false;
     timer = setInterval(poll, 1500); poll();
   } catch (e) { say(e.message, "sys"); }
 };
@@ -174,6 +174,10 @@ $("#chat").addEventListener("submit", async (e) => {
   $("#text").value = "";
   try { say((await api(casePath("/messages"), {text: t})).text, "user"); poll(); } catch (err) { say(err.message, "sys"); }
 });
+
+$("#suggest").onclick = async () => {  // autoplay: the eval's simulated veteran types the reply
+  try { $("#text").value = (await api(casePath("/suggest"), {})).text; $("#text").focus(); } catch (err) { say(err.message, "sys"); }
+};
 
 // ── cards (from the outbox) ─────────────────────────────────────────────────────────────────
 function renderCard(c) {

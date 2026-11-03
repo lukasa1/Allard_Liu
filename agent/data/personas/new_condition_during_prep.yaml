@@ -1,0 +1,31 @@
+id: new_condition_during_prep
+summary: A clean one-condition case, until the veteran tells support about a new diagnosis while claims prep reads the C-file. The orchestrator should reopen intake for it, so pass 2 asks about it (L12).
+behaviors: [new_condition_during_prep]
+truth:
+  first_name: Luis
+  last_name: Ortega
+  claim_conditions: [tinnitus, sleep apnea]
+stories:
+  sleep apnea:
+    h02: I stop breathing at night and wake up gasping. My doctor confirmed it with a sleep study.
+    h03: I'm exhausted every day and nod off in the afternoon.
+    h04: My wife noticed it a few years after I got out, but I snored badly in the barracks too.
+    h05: Every night.
+    h06: It has gotten worse.
+    h07: Camp Victory, Iraq.
+    h08: On base, in the barracks.
+    h09: Generators running all night, shift work, sandstorms.
+    h10: Years of broken sleep on deployment.
+    h11: No, I never saw medical for it in service.
+    h12: I'm tired at work and can't focus.
+    h13: My boss moved me off the early shift.
+    h14: I can't drive long distances anymore.
+    h15: I used to wake up rested.
+    h16: No.
+during_prep:
+  message: "Quick update: my doctor diagnosed me with sleep apnea last week. Can we add that to my claim?"
+  condition: sleep apnea
+expected:
+  decision: eligible
+  fee_pct: 30
+  flag_decision: reopen_intake

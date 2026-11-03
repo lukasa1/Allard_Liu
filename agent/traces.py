@@ -1,8 +1,9 @@
 """Trace log (L5): one JSON line per model call and per tool call, written by DSPy callbacks.
 
 Each line carries the case, agent and turn (from a context variable the harness sets around a
-turn), the token counts and cost (from config.PRICES), and for tools the arguments, the guard's
-decision and the result. Lines pass through SSN redaction before they are written.
+turn), the latency, the token counts and cost (from config.PRICES), and for tools the arguments,
+the guard's decision and the result. kb_search's own model call is an `lm` line of the agent
+that searched (agent/kb.py). Lines pass through SSN redaction before they are written.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import contextvars
 import json
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -95,14 +97,14 @@ class TraceCallback(BaseCallback):
 
     def __init__(self, log: TraceLog) -> None:
         self.log = log
-        self._lms: dict[str, Any] = {}
-        self._tools: dict[str, tuple[str, dict]] = {}
+        self._lms: dict[str, tuple[Any, float]] = {}
+        self._tools: dict[str, tuple[str, dict, float]] = {}
 
     def on_lm_start(self, call_id, instance, inputs):
-        self._lms[call_id] = instance
+        self._lms[call_id] = (instance, time.monotonic())
 
     def on_lm_end(self, call_id, outputs, exception):
-        lm = self._lms.pop(call_id, None)
+        lm, started = self._lms.pop(call_id, (None, time.monotonic()))
         # Each turn runs on its own copy of the LM, so the last history entry is this call.
         entry = lm.history[-1] if lm is not None and lm.history else {}
         usage = entry.get("usage") or {}
@@ -110,19 +112,19 @@ class TraceCallback(BaseCallback):
         model = getattr(lm, "model", "")
         self.log.write(
             "lm", model=model, context_tokens=tokens_in, output_tokens=tokens_out,
-            cost=cost(model, tokens_in, tokens_out), output=outputs,
+            cost=cost(model, tokens_in, tokens_out), latency_s=round(time.monotonic() - started, 3), output=outputs,
             error=repr(exception) if exception else None,
         )  # fmt: skip
 
     def on_tool_start(self, call_id, instance, inputs):
-        self._tools[call_id] = (instance.name, inputs.get("kwargs", {}))
+        self._tools[call_id] = (instance.name, inputs.get("kwargs", {}), time.monotonic())
 
     def on_tool_end(self, call_id, outputs, exception):
-        name, args = self._tools.pop(call_id, ("?", {}))
+        name, args, started = self._tools.pop(call_id, ("?", {}, time.monotonic()))
         if name == "finish":
             return
         result = "" if outputs is None else str(outputs)
         self.log.write(
             "tool", tool=name, args=args, guard=guard_decision(result), result=result,
-            error=repr(exception) if exception else None,
+            latency_s=round(time.monotonic() - started, 3), error=repr(exception) if exception else None,
         )  # fmt: skip

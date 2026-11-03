@@ -29,7 +29,7 @@ C-files). Add an OpenRouter key to switch the agents to an LLM (DSPy). **Synthet
 | ✅ | **Customer support** (`agent/support/`): read-only agent loop; status, kb_search, flags to the orchestrator |
 | ✅ | **Memory**: the case and every subagent's working memory saved each turn; `CaseSession.resume` continues after a restart |
 | ✅ prototype | **C-file → face note** (`agent/cfile/`): Benefits Documents stub, extraction, the firm's template |
-| ✅ | **Evaluation** (`intake_eval/`): simulated veterans with hidden ground truth, 4 conditions, pass^k |
+| ✅ | **Evaluation** (`intake_eval/`): simulated veterans through whole cases on the runtime, 3 conditions, scored per agent |
 | ⏳ | Live sandbox credentials, real sample C-files, OAuth login flow, live-model eval runs |
 | ⏳ later | Claims investigation (526EZ / 0995 / 0996 / 4142, attorney-approved filing), fee agreement + eFax to VA's OGC |
 
@@ -38,17 +38,16 @@ C-files). Add an OpenRouter key to switch the agents to an LLM (DSPy). **Synthet
 ```bash
 uv sync
 uv run intake serve              # web demo: http://localhost:8000 (needs OPENROUTER_API_KEY)
-uv run pytest                    # ~290 tests, all offline (about 3 minutes)
-uv run intake eval --name offline  # the evaluation; report in results/offline/report.md
+uv run pytest                    # all offline, with a scripted fake model
+uv run intake eval --name smoke --personas baseline_clean --conditions cfile  # needs the key; see Evaluation
 ```
 
 With an LLM: `cp .env.example .env`, set `OPENROUTER_API_KEY`, and run the same commands. The
 agents switch to DSPy on `openrouter/openai/gpt-6-luna` (change it with `DSPY_MODEL`). Every
 setting is documented in `.env.example`. **With a key, everything runs live and costs money**
 (gpt-6-luna is $0.10 / $0.50 per million tokens; QA web search about $0.007 per question). Start
-small: `uv run intake simulate --persona baseline_clean`, then
-`uv run intake eval --personas baseline_clean,two_service_periods --conditions fetch_confirm`
-before the full 14 x 4 run. Set `INTAKE_PROVIDER=offline` to force offline mode with a key.
+small: `uv run intake simulate --persona baseline_clean --max-cost 1` before a full eval run
+(see Evaluation).
 
 ## Try the demo
 
@@ -153,60 +152,60 @@ stub returns it at once, and the memory below is what lets a real case wait that
   the case file (state, event log, decisions, staff tasks) is saved with each subagent's working
   memory (the pending question, answers and transcript; the POA step's position). After a
   restart, `CaseSession.resume(case_id)` continues mid-conversation, and the web demo resumes the
-  case for the same browser. The eval checks this by restarting before every step
-  (`run_case(..., restart_every_turn=True)`): every case ends the same.
+  case for the same browser.
 - **PII:** the model never sees an SSN or DOB from the secure form (POA skill design), SSNs
   typed in chat are redacted, and SSNs are stripped from C-file text before extraction. The
   case file never holds an SSN; the DOB appears only inside the face note (the firm's template).
 
 ## Evaluation
 
-Each persona is a synthetic veteran with a hidden true record, scripted behaviours (omits a
-second service period, forgets an old claim, uses everyday words for conditions, discloses a
-crisis) and a synthetic VA record and C-file. A simulated veteran (offline: rule-based; with a
-key: an LLM via DSPy) goes through the **whole case** in the same `CaseSession` the demo uses,
-including the cards. Scored: decision and end state, fee, field accuracy, face-note facts,
-critical errors (anything that changes what the firm does next), questions asked, pass^k.
+The eval (`intake_eval/`) runs synthetic veterans through **whole cases on the runtime** the demo
+uses (`agent/runtime.py`), scores every agent (plan L32) and writes `results/<name>/report.md`
+plus `summary.json`, one transcript per case and each case's traces. It needs
+`OPENROUTER_API_KEY` (D7): the agents and the simulated veteran run on Claude Haiku 5.5. The
+tests drive the same runner with the scripted fake model (`tests/test_eval.py`).
 
-**Headline metric: questions asked in chat** (fewer is better), and it only counts together with
-**zero critical errors** and field accuracy held; the report shows the three side by side, with
-how many answers came from VA's records.
+How a case runs (`intake_eval/runner.py`): an LLM plays the persona from its hidden record,
+behaviours and style (`intake_eval/simulator.py`) and answers the agents' chat messages; the
+runner uses the cards for it through the host actions (secure form, signature, Sign), a
+simulated attorney countersigns both documents, and the runner waits for the runtime to go idle
+(claims prep's background turn included) before each step. The orchestrator scenario
+(`new_condition_during_prep`) messages support while claims prep runs.
 
-Conditions (how intake uses records): `ask_no_probes` (no records, no verification questions),
-`ask` (no records), **`cfile`** (no VA sign-in; the C-file pre-fills pass 2 and pass 2 confirms
-what it contradicts: **the default flow**), and, only if VA sign-in were approved, `fetch` (VA
-records in pass 1 + C-file, trusted) and `fetch_confirm` (both, confirmed). Offline, 16 personas
-(`uv run intake eval --name offline`):
+Conditions (`--conditions`; `CaseFile.eval_condition`, read by intake's checklist and claims
+prep's prefill): `ask_no_probes` (no verification probes for a second service period or an old
+claim, no C-file prefill), `ask` (probes, no prefill), **`cfile`** (probes, prefill from the
+C-file and a confirmation of each conflict: the default and the demo's flow).
 
-| Condition | Structured questions (mean) | Runs w/ critical errors | Field acc. |
-|---|---|---|---|
-| ask_no_probes | 15.9 | 3 of 16 | 99% |
-| ask | 17.8 | 0 of 16 | 100% |
-| **cfile (default)** | **16.8** | 0 of 16 | 100% |
-| fetch (VA sign-in, off by default) | 11.6 | 0 of 16 | 100% |
-| fetch_confirm (VA sign-in, off by default) | 13.2 | 0 of 16 | 100% |
+Scored per agent (`intake_eval/scoring.py`):
+- **Intake:** fields against the persona's answer key; **structured questions settled in chat
+  (the headline**, read only with zero critical errors and field accuracy held); clarifications;
+  the share prefilled from the C-file; turns to a signed 21-22a; kb_search calls and sourced
+  answers (intake's KB questions are unlabelled: support-eval scores answer accuracy).
+- **Orchestrator:** scenario pass rate (the case ended where the persona's decision says),
+  flag decisions against the scenario's label, refused moves and tool calls per agent.
+- **Claims prep:** face-note accuracy line by line against the note rendered from the ground
+  truth, fact-group checks, `verify` passed, citation precision (each fact's cited page shows it).
+- **Cost and latency per agent** from the traces (prices in `agent/config.py`), plus the
+  simulated veteran; pass^k with `--trials`.
+- **Critical errors:** a wrong end state or stop decision, a missed service period, a missed
+  prior claim, a wrong fee, a missed crisis escalation, a missed DOB mismatch, claims prep not
+  finishing, wrong decision lines on the face note, a new condition never sent back to intake, or
+  a run that crashed, stalled, gave up or hit the step limit.
 
-The C-file saves about one question on its own (rated conditions, MOS, an earlier
-representative); its main value is catching what the veteran forgot or VA's records got wrong (a
-second service period, an old claim, a wrong discharge), which ask_no_probes misses. VA sign-in in
-pass 1 would save the most, but it collects VA records before representation, so it is **off by
-default** (`INTAKE_VA_SIGN_IN=1` turns it on in the demo) until the firm decides. **Offline numbers
-show the mechanics, not quality**: the rule-based simulator answers plainly and the synthetic
-C-file is built from the truth. The persona set is a development set. The real comparison is
-`uv run intake eval --provider dspy` (LLM agent and simulator; `DSPY_CACHE=0`, `--trials 3`),
-not yet run.
+```bash
+uv run intake simulate --persona baseline_clean --max-cost 1     # one case, printed
+uv run intake eval --personas baseline_clean --conditions cfile --name smoke --max-cost 1
+uv run intake eval --name full --max-cost 20                     # 17 personas x 3 conditions
+```
 
-**Orchestrator:** across the offline runs about 25% of decisions had nothing to decide (only
-wait) and about 73% exactly one real option; the model's real choices are ordering, whether a
-flag needs a person, and what a support flag means (reopen intake for a new condition, or pass
-it to staff). The report counts model choices, fallbacks and illegal choices for live runs.
+Both print an estimated number of model calls first; `--max-cost` (USD, from the traces) stops
+the run once it is passed. No live run has been made yet, so there are no numbers here.
 
-**Customer support** (`uv run intake support-eval`): 32 labeled messages sent to parked cases
-(status checks, general and case-specific questions, new conditions, withdrawals, contact
-changes, complaints, requests for a person, crisis). Scored: flag precision and recall, status
-answers, whether a person gets a task exactly when needed, every crisis handed off, and the case
-left unchanged. Offline: all 32 correct. This set was used while writing the rules, so it is a
-development set, not a held-out test.
+**Customer support** (`uv run intake support-eval [--luke]`): 81 labeled messages through the
+real runtime to cases nobody is working on (`intake_eval/support_eval.py`): flags, hand-offs to a
+person, status answers, no promised dates, cited KB answers, every crisis caught, the case left
+unchanged. It needs the key too.
 
 ## The POA skill
 
@@ -357,17 +356,16 @@ config/representative.json   the appointed attorney and firm (placeholders)
 demo/                 stand-in host for testing skills: host_agent.py, server.py, static/
 agent/
   orchestrator.py     the orchestrating agent: action gates, offline + DSPy policies, decision log
-  session.py          one case end to end (used by the web demo, the CLI and the eval)
-  case.py             persisted case state (JSON) and phases
+  runtime.py          the runtime: routing, queued turns, the outbox (the demo and the eval)
+  casefile.py, store.py, stages.py   the case file, the SQLite store, the stage table
   intake/             intake subagent: questions.yaml, controller, rules, brains (offline, DSPy)
-  poa.py              the intake subagent's POA step: mounts poa_skill (DSPy ReAct, or scripted)
   lighthouse/         VA Lighthouse tools: stub (VA response shapes), recorded, sandbox
   qa.py               veteran questions: web search on official sites, offline FAQ
-  support/            customer-support sub-agent (legacy_support.py: the old regex one)
+  support/            customer-support sub-agent
   cfile/              synthetic C-files + Benefits Documents stub, extraction, face-note template
   personas.py, data/personas/   the synthetic test veterans
   cli.py              `uv run intake ...`
-intake_eval/          simulator, case runner, scoring, report; support_eval.py + support_messages.yaml
+intake_eval/          simulator, case runner (on the runtime), scoring, report; support_eval.py + support_messages.yaml
 demo/app.py, demo/static/app.html   the web demo, on agent/runtime.py
 tests/                form mapping, security properties, host-agent loop, HTTP flow, intake,
                       Lighthouse, C-file, orchestrator, whole cases, LLM paths (scripted models)

@@ -12,6 +12,8 @@ Every persona is made up; none is based on a real client. A persona file
   va        how VA's records (the Lighthouse stub) differ from the truth, e.g. omit_periods: [1]
   cfile     the synthetic C-file: rating decisions, filings, prior 21-22a (see agent/cfile)
   poa       the veteran's answers to the 21-22a's Item 20 and Item 22
+  during_prep  the orchestrator scenario (eval): a message the veteran sends while claims prep
+            runs ({message, condition}); support should flag the new condition
 
 The same personas are the "test veterans" you can sign in as in the demo (stub Lighthouse).
 """
@@ -100,6 +102,7 @@ class Persona:
     va: dict[str, Any] = field(default_factory=dict)
     cfile: dict[str, Any] = field(default_factory=dict)
     poa: dict[str, bool] = field(default_factory=dict)
+    during_prep: dict[str, str] = field(default_factory=dict)  # message, condition
 
     @property
     def expected_decision(self) -> str:
@@ -152,6 +155,7 @@ def load_persona(path: Path) -> Persona:
             "authorize_address_change": True,
             **(data.get("poa") or {}),
         },
+        during_prep=dict(data.get("during_prep") or {}),
     )
 
 

@@ -7,7 +7,6 @@ import pytest
 
 from agent.ingest import HIDDEN, Ingested, detect_crisis, ingest, redact_chat, wants_human
 from agent.qa import OfflineQA, WebSearchQA
-from agent.legacy_support import FOR_A_PERSON, SupportAgent, status_text
 
 # ------------------------------------------------------------------------------ crisis
 
@@ -134,145 +133,6 @@ def test_ingest_runs_every_guard_on_the_redacted_text():
     assert ingest("Thanks!") == Ingested(clean="Thanks!", redacted=False, crisis=False, wants_human=False)
 
 
-# ------------------------------------------------------------------------------ support
-
-
-def snap(phase="attorney_review", **kw):
-    base = {
-        "phase": phase, "decision": "proceed", "first_name": "Sam", "poa_signed": True,
-        "poa_submitted": phase not in ("attorney_signoff",), "poa_status": None, "poa_countersigned": False,
-        "itf_date": None, "face_note_ready": False, "cfile_requested": False, "cfile_received": False,
-    }  # fmt: skip
-    base.update(kw)
-    return base
-
-
-SUPPORT = SupportAgent(OfflineQA())
-
-STATUS = [
-    "Any news on my file?",
-    "Where is my case at?",
-    "Has the attorney looked at my file yet?",
-    "Did you get my records?",
-    "Have you filed the power of attorney yet?",
-    "Did VA accept the 21-22a?",
-    "Did VA get my form?",
-    "When will I hear back?",
-    "Is my claim approved yet?",
-    "Can I get an update?",
-]
-NOT_STATUS = [
-    "Is my progress note from the VA hospital needed?",
-    "Where is the nearest VA hospital?",
-    "Do I need to send an update on my meds?",
-]
-
-
-@pytest.mark.parametrize("text", STATUS)
-def test_status_questions(text):
-    r = SUPPORT.handle(snap(), text)
-    assert r.answered == ["status"] and not r.for_a_person and not r.flags, (text, r)
-
-
-@pytest.mark.parametrize("text", NOT_STATUS)
-def test_not_status_questions_go_to_a_person(text):
-    r = SUPPORT.handle(snap(), text)
-    assert "status" not in r.answered and r.for_a_person and r.unanswered == [text], (text, r)
-
-
-@pytest.mark.parametrize(
-    "text, flags",
-    [
-        ("Can I add my wife as a dependent?", []),
-        ("Can I also file for my wife's benefits?", []),
-        ("Can you add my new email address to my file?", ["contact_change"]),
-        ("Cancel the C&P exam?", []),
-        ("I want to withdraw my old claim at VA for my back.", []),
-        ("I need to cancel my appointment", []),
-        ("I've moved on from that job.", []),
-        ("My doctor said it's a terrible injury.", []),
-        ("I'm upset about my divorce and it affects my sleep", []),
-        ("My wife is frustrated with how I sleep", []),
-        ("I have a new condition, diabetes", ["new_condition"]),
-        ("I was diagnosed with sleep apnea last month", ["new_condition"]),
-        ("My back has gotten worse since we talked", ["new_condition"]),
-        ("Can I speak to my attorney?", ["wants_human"]),
-        ("Call me", ["wants_human"]),
-        ("I also want to claim my knees.", ["new_condition"]),
-        ("I forgot to mention my tinnitus. Can we add that?", ["new_condition"]),
-        ("Please cancel my case.", ["withdraw"]),
-        ("I don't want you to represent me anymore.", ["withdraw"]),
-        ("I want to revoke the power of attorney.", ["withdraw"]),
-        ("I moved last week, my new address is 12 Oak St, Tulsa.", ["contact_change"]),
-        ("This is ridiculous, nobody has called me in two weeks.", ["complaint"]),
-        ("I'm frustrated, I haven't heard from anyone.", ["complaint"]),
-        ("I'm unhappy with how my case is being handled.", ["complaint"]),
-    ],
-)
-def test_support_flags(text, flags):
-    r = SUPPORT.handle(snap(), text)
-    assert sorted(r.flags) == sorted(flags), (text, r.flags)
-    # every message is either answered or read by a person (a flag makes a task too)
-    assert r.flags or r.answered or r.for_a_person
-
-
-def test_withdrawing_a_va_claim_goes_to_a_person_not_a_withdraw_flag():
-    r = SUPPORT.handle(snap(), "I want to withdraw my old claim at VA for my back.")
-    assert r.flags == [] and r.for_a_person and FOR_A_PERSON in r.text
-
-
-def test_a_flag_does_not_hide_the_other_question():
-    r = SUPPORT.handle(snap(), "I moved to Tulsa. Will I get 70%?")
-    assert r.flags == ["contact_change"]
-    assert r.unanswered == ["Will I get 70%?"] and r.for_a_person
-    assert "question" in r.text.lower() and "team" in r.text
-
-
-def test_answered_message_needs_no_person():
-    r = SUPPORT.handle(snap(), "Any news on my file? And do I owe you anything yet?")
-    assert r.answered == ["status", "qa"] and not r.for_a_person and r.unanswered == []
-    assert "nothing to pay up front" in r.text
-
-
-@pytest.mark.parametrize(
-    "text",
-    ["Can you explain my C-file?", "Is my power of attorney valid?", "What is my effective date?"],
-)
-def test_faq_never_answers_a_question_about_this_case(text):
-    r = SUPPORT.handle(snap(), text)
-    assert "qa" not in r.answered and r.for_a_person, (text, r)
-
-
-def test_general_faq_still_answered():
-    r = SUPPORT.handle(snap(), "What is a C-file?")
-    assert r.answered == ["qa"] and not r.for_a_person
-
-
-# ------------------------------------------------------------------------------ status text
-
-
-def test_status_text_attorney_signoff():
-    text = status_text(snap("attorney_signoff", poa_submitted=False))
-    assert "signed VA Form 21-22a" in text and "countersign" in text and "sent it to VA" not in text
-    assert "can't predict VA's timing" in text
-    text = status_text(snap("attorney_signoff", poa_submitted=False, poa_countersigned=True))
-    assert "countersigned" in text and "sent it to VA" not in text
-
-
-def test_status_text_case_prep():
-    asked = status_text(snap("case_prep", cfile_requested=True))
-    assert "asked VA for your claims file" in asked and "reading" not in asked
-    reading = status_text(snap("case_prep", cfile_requested=True, cfile_received=True))
-    assert "received your VA claims file" in reading
-    assert "can't predict VA's timing" in asked and "can't predict VA's timing" in reading
-
-
-def test_status_text_never_promises_dates():
-    for phase in ("attorney_signoff", "case_prep", "attorney_review", "human_handoff", "intake"):
-        text = status_text(snap(phase))
-        assert "will be done by" not in text and "within" not in text.lower()
-
-
 # ------------------------------------------------------------------------------ QA
 
 
@@ -316,10 +176,3 @@ def test_web_qa_records_usage():
     r = WebSearchQA(client=_Client(), model="m")("What is a supplemental claim?")
     assert r.usage == {"prompt_tokens": 120, "completion_tokens": 40, "cost": 0.0123}
     assert r.sources == ["https://www.va.gov/disability/"]
-
-
-def test_asking_how_revoking_works_is_not_a_withdrawal():
-    r = SUPPORT.handle(snap(), "Can I revoke the 21-22a later if I want?")
-    assert r.flags == [] and r.answered == ["qa"]
-    assert SUPPORT.handle(snap(), "Can I cancel my case?").flags == []
-    assert SUPPORT.handle(snap(), "Can I cancel my case?").for_a_person

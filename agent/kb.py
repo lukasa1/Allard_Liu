@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from agent.ingest import redact_chat, untrusted
 from agent.tools.registry import ToolSpec
+from agent.traces import cost
 
 if TYPE_CHECKING:
     from agent.harness import Turn
@@ -30,6 +31,13 @@ class KbArgs(BaseModel):
 def kb_search(turn: Turn, args: KbArgs) -> dict:
     question, _ = redact_chat(args.question)
     result = turn.rt.kb(question)
+    if result.usage:  # the web-search QA's own model call (L5): counted to the agent that searched
+        tokens_in, tokens_out = result.usage.get("prompt_tokens", 0), result.usage.get("completion_tokens", 0)
+        model = getattr(turn.rt.kb, "model", "")
+        turn.rt.harness.traces.write(
+            "lm", model=model, context_tokens=tokens_in, output_tokens=tokens_out, tool="kb_search",
+            cost=result.usage.get("cost", cost(model, tokens_in, tokens_out)),
+        )  # fmt: skip
     answered = bool(result.text) and not result.handoff
     turn.rt.store.append_event(turn.case_id, "kb_search", {"question": question, "answered": answered,
                                "sources": result.sources}, actor=turn.agent)  # fmt: skip

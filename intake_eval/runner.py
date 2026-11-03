@@ -1,43 +1,44 @@
-"""Run one synthetic veteran through a whole case (the same CaseSession the demo uses).
+"""Drive one synthetic veteran through a whole case on the runtime (agent/runtime.py).
 
-The simulated veteran answers chat messages and also "uses" the cards the way a person would:
-signs in with VA (or skips, in the ask-only condition), fills the secure form from the persona's
-synthetic identity, draws a signature, and clicks Sign. Card actions go straight to PoaService,
-exactly like the web host, so the eval exercises the real POA skill path.
+The simulated veteran answers the agents' chat messages; the runner uses the cards for it the way
+the demo's page does, through the host actions of agent.intake.documents: it fills the secure form
+from the persona's synthetic identity, draws a signature and clicks Sign. A simulated attorney
+countersigns both documents once the case waits on the attorney (D6). Before reading the outbox or
+the case, the runner waits until the runtime is idle (§3: no turn queued or running, claims prep's
+background turn included).
+
+The orchestrator scenario (a persona's `during_prep`): right after the countersign, once claims
+prep owns the case, the veteran sends that message, so support answers it and flags it.
+
+One run, one runtime: each case has its own store, traces and documents (`make_rt(data_dir)`).
 """
 
 from __future__ import annotations
 
 import base64
-import tempfile
+import time
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
 from io import BytesIO
-from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from PIL import Image, ImageDraw
 
-from agent.intake.controller import AgentConfig
-from agent.lighthouse import StubLighthouse
+from agent.casefile import CaseFile, EvalCondition
+from agent.harness import CANNED_REPLY
+from agent.intake import documents
 from agent.personas import Persona
-from agent.session import UNAVAILABLE, CaseSession, SessionTurn
+from agent.runtime import Runtime
+from agent.store import Event
 from poa_skill.service import WorkflowError
 
-MAX_STEPS = 400
-AS_OF = date(2026, 11, 3)  # fixed "today" so face-note deadlines are reproducible
-
-# How the case's records are used by intake: VA's records (veteran signs in with VA, pass 1) and
-# the C-file (claims prep, before pass 2). The C-file is always read for the face note.
-CONDITIONS: dict[str, AgentConfig] = {
-    "ask_no_probes": AgentConfig(records_mode="ask", verification_probes=False, cfile_mode="off"),
-    "ask": AgentConfig(records_mode="ask", cfile_mode="off"),  # every question in chat
-    "cfile": AgentConfig(records_mode="ask", cfile_mode="confirm"),  # no VA sign-in, C-file only
-    "fetch": AgentConfig(records_mode="fetch", cfile_mode="fetch"),  # trust both
-    "fetch_confirm": AgentConfig(records_mode="fetch_confirm", cfile_mode="confirm"),  # both, confirmed
-}
-
+CONDITIONS: tuple[EvalCondition, ...] = EvalCondition.__args__  # ask_no_probes, ask, cfile
+MAX_STEPS = 300  # veteran messages + card actions + countersign per case
+FAILURES_TO_GIVE_UP = 3  # consecutive canned replies or simulator errors
+IDLE_TIMEOUT_S = 900  # a live claims-prep turn reads the whole C-file
+ATTORNEY = "simulated attorney"
+ACTIONABLE = ("secure_form", "signature_pad", "sign_button")  # a newer card replaces an older one
 VAULT_BRANCH = {
     "army": "army", "navy": "navy", "air force": "air_force", "marine corps": "marine_corps",
     "coast guard": "coast_guard", "space force": "space_force",
@@ -46,9 +47,7 @@ VAULT_BRANCH = {
 
 def signature_png() -> str:
     img = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
-    ImageDraw.Draw(img).line(
-        [(40, 150), (200, 40), (360, 150), (560, 60)], fill=(19, 36, 70, 255), width=6
-    )
+    ImageDraw.Draw(img).line([(40, 150), (200, 40), (360, 150), (560, 60)], fill=(19, 36, 70, 255), width=6)
     buf = BytesIO()
     img.save(buf, "PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
@@ -58,217 +57,179 @@ def secure_form_values(p: Persona, fields: list[str]) -> dict[str, str]:
     t = p.truth
     first = t.service_periods[0].branch if t.service_periods else None
     values = {
-        "first_name": t.first_name or "",
-        "middle_initial": p.identity.get("middle_initial", ""),
-        "last_name": t.last_name or "",
-        "ssn": p.identity["ssn"],
+        "first_name": t.first_name or "", "middle_initial": p.identity.get("middle_initial", ""),
+        "last_name": t.last_name or "", "ssn": p.identity["ssn"],
         "date_of_birth": p.identity.get("dob_typed") or p.identity["dob"],
-        "branch": VAULT_BRANCH.get(first or "", ""),
-        "address.line1": t.street or "",
-        "address.city": t.city or "",
-        "address.state": t.state or "",
-        "address.zip": t.zip or "",
-        "phone": t.cell_phone or "",
-        "email": t.email or "",
-        "va_file_number": "",
-        "service_number": "",
-    }
+        "branch": VAULT_BRANCH.get(first or "", ""), "address.line1": t.street or "",
+        "address.city": t.city or "", "address.state": t.state or "", "address.zip": t.zip or "",
+        "phone": t.cell_phone or "", "email": t.email or "", "va_file_number": "", "service_number": "",
+    }  # fmt: skip
     return {f: values.get(f, "") for f in fields}
 
 
-ACTIONABLE_CARDS = ("va_sign_in", "secure_form", "signature_pad", "sign_button", "attorney_signoff")
-CARD_PHASE = {"va_sign_in": "va_sign_in", "attorney_signoff": "attorney_signoff"}  # default: poa
-# A newer card of one of these types replaces the older one (e.g. a Sign button for a superseded draft).
-SUPERSEDED_BY_NEWER = ("sign_button", "secure_form", "signature_pad", "document_preview")
+class Veteran(Protocol):
+    """What the runner needs from a simulated veteran (intake_eval.simulator.DSPySimulator)."""
 
+    calls: int
+    cost: float
 
-def queue_cards(queue: list[dict], new: list[dict]) -> list[dict]:
-    """Append `new` to `queue`, dropping older cards of a type a newer card replaces."""
-    replaced = {c.get("type") for c in new} & set(SUPERSEDED_BY_NEWER)
-    return [c for c in queue if c.get("type") not in replaced] + list(new)
-
-
-def act_on_card(
-    session: CaseSession, persona: Persona, card: dict, records_mode: str
-) -> tuple[SessionTurn | None, str]:
-    """Do what a veteran would do with one card. Returns (the session's response, a log line).
-
-    Card actions go straight to PoaService, like the web host: secure-form values and the
-    signature never pass through the session or a model.
-    """
-    kind = card.get("type")
-    phase = session.case.phase
-    needed = CARD_PHASE.get(kind, "poa")
-    if kind in ACTIONABLE_CARDS and phase != needed:  # e.g. a Sign card left open after a hand-off
-        return None, f"[{kind} card ignored: the case is now in {phase}]"
-    try:
-        return _act(session, persona, card, records_mode)
-    except WorkflowError as e:  # e.g. a Sign card for a draft that was superseded
-        return None, f"[{kind} card no longer valid: {e}]"
-
-
-def _act(
-    session: CaseSession, persona: Persona, card: dict, records_mode: str
-) -> tuple[SessionTurn | None, str]:
-    svc = session.svc
-    kind = card.get("type")
-    if kind == "va_sign_in":
-        if records_mode == "ask":
-            return session.ui_event("va_sign_in_declined"), "[veteran skips VA sign-in]"
-        return session.ui_event("va_sign_in", icn=persona.icn), "[veteran signs in with VA]"
-    if kind == "secure_form":
-        values = secure_form_values(persona, [f["name"] for f in card["fields"]])
-        errors = svc.complete_capture_request(card["request_id"], values)
-        note = f"[veteran fills the secure form: {', '.join(sorted(values))}; errors: {errors or 'none'}]"
-        return session.ui_event("secure_form_submitted"), note
-    if kind == "signature_pad":
-        svc.save_signature(signature_png())
-        return session.ui_event("signature_saved"), "[veteran draws and saves a signature]"
-    if kind == "attorney_signoff":  # staff, not the veteran: the simulated attorney approves
-        return session.ui_event("attorney_countersigned", by="simulated attorney"), "[attorney countersigns the 21-22a (simulated staff)]"
-    if kind == "sign_button":
-        svc.sign(
-            card["document_id"],
-            consent_text=card["consent_text"],
-            ip="127.0.0.1",
-            user_agent="simulator",
-        )
-        return session.ui_event("signed"), "[veteran clicks Sign]"
-    return None, ""  # document_preview: the veteran reviews it in chat
+    def respond(self, agent_text: str) -> str: ...
 
 
 @dataclass
 class CaseRun:
     persona_id: str
     condition: str
-    session: CaseSession
-    transcript: list[dict[str, str]] = field(default_factory=list)
-    agent_messages: int = 0
+    rt: Runtime
+    case_id: str
+    sim: Any = None
+    transcript: list[dict[str, str]] = field(default_factory=list)  # role: agent | veteran | app
+    veteran_actions: int = 0  # chat messages + card actions
+    turns_to_signed_poa: int | None = None  # veteran actions until the 21-22a was signed
     steps: int = 0
     hit_step_limit: bool = False
-    model_failures: int = 0  # agent "unavailable" replies + simulator errors
-    poa_chat_turns: int = 0  # veteran chat messages while the case was in the 21-22a step
-    turns_to_signed_poa: int | None = None  # veteran actions (messages + card uses) until signed
-    veteran_actions: int = 0
     gave_up: bool = False  # stopped after repeated model failures
+    stalled: str = ""  # nothing left to answer, but the case hadn't ended
+    stopped_at_cost: bool = False  # --max-cost reached
+    model_failures: int = 0  # canned "having trouble" replies + simulator errors
     error: str = ""  # traceback if the run crashed
 
     @property
-    def crashed(self) -> bool:
-        return bool(self.error)
+    def case(self) -> CaseFile:
+        return self.rt.store.get_case(self.case_id)
 
     @property
-    def case(self):
-        return self.session.case
+    def events(self) -> list[Event]:
+        return self.rt.store.events(self.case_id)
+
+    @property
+    def traces(self) -> list[dict]:
+        return self.rt.harness.traces.read(self.case_id)
+
+    def cost(self) -> float:
+        agents = sum(x.get("cost") or 0.0 for x in self.traces if x["kind"] == "lm")
+        return agents + (getattr(self.sim, "cost", 0.0) or 0.0)
+
+    @property
+    def completed(self) -> bool:
+        return not (self.error or self.hit_step_limit or self.gave_up or self.stalled or self.stopped_at_cost)
 
 
-def run_case(
-    persona: Persona,
-    condition: str = "fetch_confirm",
-    provider: str = "offline",
-    simulator: Any = None,
-    lm: Any = None,
-    data_dir: Path | None = None,
-    restart_every_turn: bool = False,
-) -> CaseRun:
-    """`restart_every_turn`: rebuild the session from disk (CaseSession.resume) after every step, as
-    if the server restarted each time. A memory test: the case must end exactly as without it."""
-    from intake_eval.simulator import OfflineSimulator
+def finished(case: CaseFile) -> bool:
+    """The case reached an end the eval scores: parked, or ready for attorney review."""
+    return case.parked or (case.stage >= 5 and case.owner is None)
 
-    session = CaseSession(
-        provider=provider,
-        persona=persona,
-        lighthouse=StubLighthouse(),
-        agent_config=CONDITIONS[condition],
-        data_dir=data_dir or Path(tempfile.mkdtemp(prefix="eval-")),
-        as_of=AS_OF,
-        lm=lm,
-    )
-    sim = simulator or OfflineSimulator(persona)
-    run = CaseRun(persona_id=persona.id, condition=condition, session=session)
 
-    def record(turn: SessionTurn) -> None:
-        for m in turn.messages:
-            run.transcript.append({"role": "agent", "text": m})
-            run.agent_messages += 1
-        if UNAVAILABLE in turn.messages:
-            run.model_failures += 1
-
-    def use_card(card: dict) -> SessionTurn | None:
-        turn, note = act_on_card(run.session, persona, card, CONDITIONS[condition].records_mode)
-        if note:
-            run.transcript.append({"role": "app", "text": note})
-        if turn is not None and card.get("type") != "attorney_signoff":
-            _count_action(run)
-        return turn
-
-    def restart() -> None:
-        if restart_every_turn:
-            s = run.session
-            run.session = CaseSession.resume(s.case.case_id, data_dir=s.data_dir, lighthouse=StubLighthouse(), lm=lm)
-
+def run_case(persona: Persona, condition: EvalCondition, make_rt: Callable[[], Runtime], sim: Veteran,
+             max_cost: float | None = None, spent: float = 0.0) -> CaseRun:  # fmt: skip
+    """`max_cost`: stop when `spent` (earlier runs) plus this run's trace cost passes it."""
+    rt = make_rt()
+    case = rt.open_case(persona.id, eval_condition=condition)
+    run = CaseRun(persona.id, condition, rt, case.case_id, sim=sim)
     try:
-        _drive(run, sim, record, use_card, restart)
-    except Exception as exc:  # keep the partial transcript; the score counts it as a crash
+        _drive(run, persona, sim, lambda: max_cost is not None and spent + run.cost() > max_cost)
+    except Exception as exc:  # noqa: BLE001 - keep the partial transcript; scored as a crash
         run.error = traceback.format_exc()
-        run.transcript.append(
-            {"role": "app", "text": f"[run crashed: {type(exc).__name__}: {exc}]"}
-        )
+        run.transcript.append({"role": "app", "text": f"[run crashed: {type(exc).__name__}: {exc}]"})
     return run
 
 
-def _count_action(run: CaseRun) -> None:
+def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[], bool]) -> None:
+    rt, cid = run.rt, run.case_id
+    seen, cards, unread, failures = 0, [], [], 0
+    while run.steps < MAX_STEPS:
+        run.steps += 1
+        rt.wait_until_idle(cid, timeout=IDLE_TIMEOUT_S)
+        for item in rt.updates(cid, seen):
+            seen = item.seq
+            if item.kind == "message":
+                text = item.payload["text"]
+                run.transcript.append({"role": "agent", "text": f"[{item.agent}] {text}"})
+                unread.append(text)
+                failures = failures + 1 if text == CANNED_REPLY else 0
+                run.model_failures += text == CANNED_REPLY
+            elif item.payload.get("type") in ACTIONABLE:
+                kind = item.payload["type"]
+                cards = [c for c in cards if c["type"] != kind] + [item.payload]
+        case = run.case
+        if over_budget():
+            run.stopped_at_cost = True
+            return
+        if failures >= FAILURES_TO_GIVE_UP:
+            run.gave_up = True
+            return
+        if finished(case):
+            return
+        if cards:
+            _use_card(run, persona, cards.pop(0))
+        elif case.side_state == "waiting_on_attorney":
+            documents.countersign(rt, cid, by=ATTORNEY)
+            run.transcript.append({"role": "app", "text": f"[{ATTORNEY} countersigns both documents]"})
+            if persona.during_prep:
+                _send_during_prep(run, persona)
+        elif not unread:
+            run.stalled = f"stage {case.stage} ({case.side_state or case.owner or 'no owner'}): nothing to answer"
+            return
+        else:
+            try:
+                reply = sim.respond("\n\n".join(unread))
+            except Exception as exc:  # noqa: BLE001 - a refusal, unparseable output, a 429 after retries
+                run.model_failures += 1
+                failures += 1
+                run.transcript.append({"role": "app", "text": f"[simulator failed: {type(exc).__name__}]"})
+                continue
+            unread = []
+            run.transcript.append({"role": "veteran", "text": reply})
+            rt.message(cid, reply)
+            _acted(run)
+    run.hit_step_limit = True
+
+
+def _acted(run: CaseRun) -> None:
     run.veteran_actions += 1
-    if run.turns_to_signed_poa is None and run.session.case.poa_signed:
+    doc = run.case.documents.get("21-22a")
+    if run.turns_to_signed_poa is None and doc and doc.signed_at:
         run.turns_to_signed_poa = run.veteran_actions
 
 
-def _drive(run: CaseRun, sim: Any, record, use_card, restart=lambda: None) -> None:
-    turn = run.session.start()
-    record(turn)
-    failures = 0  # consecutive model failures: give up rather than loop
-    pending_cards = list(turn.cards)
-    while run.steps < MAX_STEPS:
-        run.steps += 1
-        restart()
-        session = run.session
-        if pending_cards:
-            new = use_card(pending_cards.pop(0))
-            if new is not None:
-                record(new)
-                pending_cards = queue_cards(pending_cards, new.cards)
-            continue
-        if not session.waiting_for_chat:
-            break
-        since: list[str] = []  # every agent message since the veteran last spoke
-        for t in reversed(run.transcript):
-            if t["role"] == "veteran":
-                break
-            if t["role"] == "agent":
-                since.insert(0, t["text"])
-        last = "\n\n".join(since)
-        try:
-            reply = sim.respond(last, session.pending)
-        except Exception as exc:  # a refusal, unparseable output, a 429 after retries
-            run.model_failures += 1
-            failures += 1
-            run.transcript.append(
-                {"role": "app", "text": f"[simulator failed: {type(exc).__name__}]"}
-            )
-            if failures >= 3:
-                run.gave_up = True
-                break
-            continue
-        run.transcript.append({"role": "veteran", "text": reply})
-        if session.case.phase == "poa":
-            run.poa_chat_turns += 1
-        turn = session.message(reply)
-        _count_action(run)
-        record(turn)
-        pending_cards = queue_cards(pending_cards, turn.cards)
-        failures = failures + 1 if UNAVAILABLE in turn.messages else 0
-        if failures >= 3:
-            run.gave_up = True
-            break
-    else:
-        run.hit_step_limit = True
+def _use_card(run: CaseRun, persona: Persona, card: dict) -> None:
+    """Do what a veteran does with one card, through the host actions (like the demo's page)."""
+    rt, cid, kind = run.rt, run.case_id, card["type"]
+    if run.case.parked:
+        run.transcript.append({"role": "app", "text": f"[{kind} card ignored: the case is {run.case.side_state}]"})
+        return
+    try:
+        if kind == "secure_form":
+            values = secure_form_values(persona, [f["name"] for f in card["fields"]])
+            errors = documents.submit_secure_form(rt, cid, card["request_id"], values)
+            note = f"[veteran fills the secure form: {', '.join(sorted(values))}; errors: {errors or 'none'}]"
+        elif kind == "signature_pad":
+            documents.save_signature(rt, cid, signature_png())
+            note = "[veteran draws and saves a signature]"
+        else:
+            live = documents.service(rt, cid).live(card["form"])
+            if live is None or live.id != card["document_id"]:
+                run.transcript.append({"role": "app", "text": f"[Sign card for an old {card['form']} draft ignored]"})
+                return
+            documents.sign(rt, cid, card["form"], consent_text=card["consent_text"], ip="127.0.0.1",
+                           user_agent="eval simulator")  # fmt: skip
+            note = f"[veteran clicks Sign on the {card['form']}]"
+    except (ValueError, WorkflowError) as err:  # e.g. a secure form that was already submitted
+        run.transcript.append({"role": "app", "text": f"[{kind} card no longer valid: {err}]"})
+        return
+    run.transcript.append({"role": "app", "text": note})
+    _acted(run)
+
+
+def _send_during_prep(run: CaseRun, persona: Persona, timeout_s: float = 120.0) -> None:
+    """The orchestrator scenario: message the case while claims prep runs (support answers it)."""
+    end = time.monotonic() + timeout_s
+    while (case := run.case).owner != "claims_prep":
+        if case.prep.done or case.parked or time.monotonic() > end:
+            run.transcript.append({"role": "app", "text": "[claims prep never ran: scenario message not sent]"})
+            return
+        time.sleep(0.02)
+    text = persona.during_prep["message"]
+    run.transcript.append({"role": "veteran", "text": text})
+    run.rt.message(run.case_id, text)
+    _acted(run)

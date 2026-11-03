@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from agent import stages
-from agent.casefile import CaseFile, Flag, SubagentResult, Task
+from agent.casefile import CaseFile, EvalCondition, Flag, SubagentResult, Task
 from agent.harness import OWNING, AgentSpec, Harness, Turn, TurnOutcome
 from agent.ingest import ingest, wants_withdraw
 from agent.intake.controller import CRISIS_MESSAGE, HANDOFF_MESSAGE, QATool
@@ -64,8 +64,9 @@ class Runtime:
 
     # ---------------------------------------------------------------- ways in
 
-    def open_case(self, persona_id: str | None = None) -> CaseFile:
-        case = self.store.create_case(CaseFile(case_id=uuid.uuid4().hex[:12], persona_id=persona_id))
+    def open_case(self, persona_id: str | None = None, eval_condition: EvalCondition = "cfile") -> CaseFile:
+        case = self.store.create_case(CaseFile(case_id=uuid.uuid4().hex[:12], persona_id=persona_id,
+                                               eval_condition=eval_condition))  # fmt: skip
         self._wake(case.case_id, self.store.append_event(case.case_id, "case_opened", {}, actor="host"))
         return case
 

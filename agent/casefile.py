@@ -17,6 +17,12 @@ Agent = Literal["orchestrator", "intake", "claims_prep", "support"]
 Owner = Literal["intake", "claims_prep"]  # the case-owning sub-agents (A3: one at a time)
 SideState = Literal["waiting_on_veteran", "waiting_on_attorney", "waiting_on_va", "needs_human", "closed"]
 PARKED = ("needs_human", "closed")
+# The eval's conditions (L32). The demo always runs `cfile`.
+#   ask_no_probes  intake skips its verification probes (a second service period, an old claim),
+#                  and claims prep's prefill writes nothing (every question is asked in chat)
+#   ask            the probes are asked; prefill still writes nothing
+#   cfile          the probes, and prefill from the C-file with pass 2 confirming the conflicts
+EvalCondition = Literal["ask_no_probes", "ask", "cfile"]
 STAGE_NAMES = {
     1: "screening",
     2: "account opening",
@@ -124,6 +130,7 @@ class CaseFile(BaseModel):
     case_id: str
     created_at: str = Field(default_factory=now)
     persona_id: str | None = None  # demo/eval only: which synthetic veteran the simulators serve
+    eval_condition: EvalCondition = "cfile"  # eval only (L32); never shown to a model
 
     stage: int = 1
     owner: Owner | None = None
@@ -162,7 +169,7 @@ class CaseFile(BaseModel):
 
     def memory(self) -> dict[str, Any]:
         """The case-file part of a memory block (L10): what the case is, not how agents talk."""
-        data = self.model_dump(mode="json", exclude={"created_at", "persona_id"})
+        data = self.model_dump(mode="json", exclude={"created_at", "persona_id", "eval_condition"})
         data["stage_name"] = STAGE_NAMES[self.stage]
         # Claims prep's working memory stays out: what it produced, not how it read.
         data["prep"] = {"done": self.prep.done, "facts": len(self.prep.facts),

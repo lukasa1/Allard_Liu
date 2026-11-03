@@ -34,7 +34,7 @@ from agent import config
 from agent.casefile import STAGE_NAMES, CaseFile
 from agent.ingest import redact_chat
 from agent.intake import documents
-from agent.personas import load_personas
+from agent.personas import get_persona, load_personas
 from agent.runtime import Runtime, make_runtime
 from poa_skill.service import FORMS, WorkflowError
 
@@ -127,6 +127,23 @@ def chat(case_id: str, body: Chat, rt: Live):
         raise HTTPException(400, "empty message")
     rt.message(case_id, body.text)
     return {"text": redact_chat(body.text)[0]}
+
+
+@lru_cache(maxsize=1)
+def simulator_lm():
+    return config.make_lm(role="simulator")
+
+
+@app.post("/api/cases/{case_id}/suggest")
+def suggest(case_id: str, rt: Live):
+    """Autoplay: the eval's simulated veteran (the case's persona, intake_eval/simulator.py) writes
+    the next reply from the chat so far. The page puts it in the text box; Send sends it."""
+    from intake_eval.simulator import DSPySimulator, load_chat
+
+    case = _case(rt, case_id)
+    sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
+    unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
+    return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}
 
 
 @app.get("/api/cases/{case_id}/updates")

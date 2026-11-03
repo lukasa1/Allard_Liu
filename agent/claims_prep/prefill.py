@@ -9,7 +9,8 @@ facts' cites. Against an answer already on file:
     answer (with a staff task), so the firm's stop rules see it at once;
   - anything else: a Conflict. The veteran's answer stays until pass 2 asks them to confirm, and
     a staff task is created.
-The checklist is rebuilt (and the stop rules run) in the same patch.
+The checklist is rebuilt (and the stop rules run) in the same patch. In the eval conditions `ask`
+and `ask_no_probes` (casefile.EvalCondition) prefill writes nothing: pass 2 asks every question.
 """
 
 from __future__ import annotations
@@ -118,6 +119,10 @@ def _periods(case: CaseFile, cfile: list[dict], source: str) -> list[str]:
 
 def apply(case: CaseFile, questions: list[str], cf: CfileFacts, cites: dict[str, Fact]) -> dict[str, list[str]]:
     """Mutates `case`; returns what happened to each question."""
+    if case.eval_condition != "cfile":
+        case.prep.prefill_done = True
+        checklist.refresh(case)
+        return {"skipped": list(questions)}
     settled = values(cf, cites)
     out: dict[str, list[str]] = {"written": [], "kept": [], "conflicts": [], "discharge_from_dd214": [], "no_facts": []}
     for q in questions:

@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from agent.casefile import CaseFile, Task
 from agent.cfile import facenote, vbms
 from agent.cfile.extract import DocType
+from agent.cfile.facts import CfileFacts
 from agent.claims_prep import facts as factlib
 from agent.claims_prep import prefill as prefill_lib
 from agent.claims_prep.verify import check, missing
@@ -209,17 +210,25 @@ def prefill(turn: Turn, a: PrefillArgs) -> dict:
 # ------------------------------------------------------------------------------ the face note
 
 
+def render_note(rt, case: CaseFile, cf: CfileFacts) -> facenote.FaceNote:
+    """The face note for `cf`, with the case's own fee agreement, ITF date and intake DOB (the eval
+    renders the ground truth through this too)."""
+    svc = service(rt, case.case_id)
+    fee_doc = svc.live("fee_agreement")
+    fee = fee_doc.terms.get("fee_pct") if fee_doc else None
+    itf = case.filings["itf"].data.get("itf_date") if "itf" in case.filings else None
+    return facenote.render(cf, fee_pct=fee, itf_date=itf, intake_dob=svc.vault.veteran().get("date_of_birth"),
+                           firm=_firm()["firm_name"], as_of=today())  # fmt: skip
+
+
 def _note(turn: Turn, case: CaseFile):
     """Render the current fact table: (note, cite map, fact table, the case-file sources)."""
     table = factlib.load(case.prep.facts)
     cf, cites = factlib.build(table, _firm())
-    svc = service(turn.rt, turn.case_id)
-    fee_doc = svc.live("fee_agreement")
-    fee = fee_doc.terms.get("fee_pct") if fee_doc else None  # the case's own fee agreement
-    itf = case.filings["itf"].data.get("itf_date") if "itf" in case.filings else None
-    note = facenote.render(cf, fee_pct=fee, itf_date=itf, intake_dob=svc.vault.veteran().get("date_of_birth"),
-                           firm=_firm()["firm_name"], as_of=today())  # fmt: skip
-    return note, cites, table, {"fee_agreement": fee is not None, "itf": bool(itf)}
+    fee_doc = service(turn.rt, turn.case_id).live("fee_agreement")
+    own = {"fee_agreement": bool(fee_doc and fee_doc.terms.get("fee_pct") is not None),
+           "itf": bool("itf" in case.filings and case.filings["itf"].data.get("itf_date"))}  # fmt: skip
+    return render_note(turn.rt, case, cf), cites, table, own
 
 
 def _source(src: str, cites: dict[str, factlib.Fact]) -> str:

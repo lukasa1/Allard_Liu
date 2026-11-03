@@ -1,20 +1,16 @@
-"""The LLM code paths, with scripted models (no network): QA web search, the DSPy POA agent,
-the DSPy brain and the DSPy C-file extractor."""
+"""The LLM code paths, with scripted models (no network): QA web search, the DSPy brain and the
+DSPy C-file extractor."""
 
-import json
 from types import SimpleNamespace
 
 import dspy
 from dspy.utils.dummies import DummyLM
 
-from agent.case import CaseState
 from agent.cfile import build_documents, extract_cfile, make_dspy_extractor
 from agent.cfile.extract import DocumentFacts
 from agent.intake.dspy_brain import DSPyBrain, ExtractAnswers
 from agent.intake.questions import Ask, QuestionBank
-from agent.legacy_orchestrator import DSPyPolicy, allowed_actions
 from agent.personas import get_persona
-from agent.poa import make_dspy_poa_step
 from agent.qa import OfflineQA, WebSearchQA
 
 
@@ -52,31 +48,6 @@ def test_web_search_qa_restricts_domains_and_requires_official_sources():
 def test_offline_qa():
     assert OfflineQA()("How much do you charge?").sources
     assert OfflineQA()("Should I appeal?").handoff
-
-
-def test_dspy_poa_agent_mounts_the_skill_and_never_sees_raw_pii(svc):
-    lm = DummyLM([
-        {"next_thought": "open the form", "next_tool_name": "request_secure_info",
-         "next_tool_args": {"fields": ["ssn", "date_of_birth"], "purpose": "For the form."}},
-        {"next_thought": "wait", "next_tool_name": "finish", "next_tool_args": {}},
-        {"reasoning": "done", "reply": "I've opened a secure form."},
-    ])  # fmt: skip
-    step = make_dspy_poa_step(svc, lm)
-    turn = step.start()
-    assert turn.text == "I've opened a secure form."
-    assert [c["type"] for c in turn.cards] == ["secure_form"]
-    svc.complete_capture_request(
-        turn.cards[0]["request_id"], {"ssn": "123-45-6789", "date_of_birth": "1988-04-09"}
-    )
-    lm2 = DummyLM([
-        {"next_thought": "check", "next_tool_name": "get_intake_status", "next_tool_args": {}},
-        {"next_thought": "ok", "next_tool_name": "finish", "next_tool_args": {}},
-        {"reasoning": "r", "reply": "Thanks."},
-    ])  # fmt: skip
-    step2 = make_dspy_poa_step(svc, lm2)
-    step2.event("secure_form_submitted")
-    prompts = json.dumps([h["messages"] for h in lm2.history], default=str)
-    assert "***-**-6789" in prompts and "123-45-6789" not in prompts and "1988-04-09" not in prompts
 
 
 def test_dspy_brain_extracts_with_a_scripted_model():
@@ -140,27 +111,6 @@ def test_dspy_brain_still_decodes_json_strings_and_keeps_text():
     assert _extract(lm).values == {"is_veteran": False, "branch": "army, I think"}
 
 
-class _Pred:
-    def __init__(self, action):
-        self.action, self.reason = action, "r"
-
-
-def test_dspy_policy_matches_the_action_name_as_a_token():
-    policy = DSPyPolicy(lm=None)
-    c = CaseState(case_id="c7")
-    allowed = allowed_actions(c)  # ["request_va_sign_in"]
-    for raw in ("request_va_sign_in.", "`request_va_sign_in`", "Action: request_va_sign_in"):
-        policy.predict = lambda raw=raw, **kw: _Pred(raw)
-        assert policy.choose(c, "case_opened", allowed) == ("request_va_sign_in", "r")
-    policy.predict = lambda **kw: _Pred("request_va_sign_in_now")  # not a token match
-    action, reason = policy.choose(c, "case_opened", allowed)
-    assert action == "request_va_sign_in" and "fallback" in reason
-    c.phase, c.va_consent = "va_sign_in", "granted"
-    two = ["fetch_va_records", "wait"]
-    policy.predict = lambda **kw: _Pred("fetch_va_records, then wait")  # ambiguous
-    assert "fallback" in policy.choose(c, "e", two)[1]
-
-
 def test_dspy_extractor_feeds_the_same_merge():
     p = get_persona("baseline_clean")
     pdfs = [d[2] for d in build_documents(p)][:1]  # the DD-214
@@ -169,53 +119,3 @@ def test_dspy_extractor_feeds_the_same_merge():
     merged, per_doc, _ = extract_cfile(pdfs, make_dspy_extractor(lm))
     assert merged.dob == "1970-01-02" and merged.mos == ["88M"] and per_doc[0].doc_type == "dd214"
     assert isinstance(dspy.settings, object)
-
-
-class _TextAwareVeteran:
-    """Offline simulator, plus answers to the POA questions read from the agent's text (the DSPy
-    POA agent doesn't expose what it's waiting for, unlike the scripted one)."""
-
-    def __init__(self, persona):
-        from intake_eval.simulator import OfflineSimulator
-
-        self.inner = OfflineSimulator(persona)
-
-    def respond(self, text, pending):
-        low = text.lower()
-        if pending is None or isinstance(pending, str):
-            if "drug or alcohol" in low or "update your address" in low:
-                return "Yes."
-            if "look right" in low:
-                return "Looks good."
-        return self.inner.respond(text, pending)
-
-
-def test_dspy_provider_runs_a_whole_case(tmp_path):
-    """Every DSPy component (orchestrator policy, intake brain, POA ReAct agent mounting the skill,
-    C-file extractor) wired into one case, with a rule-driven fake model."""
-    from legacy_rule_lm import RuleLM
-
-    from intake_eval.runner import run_case
-
-    persona = get_persona("recent_decision")
-    lm = RuleLM()
-    run = run_case(
-        persona,
-        "fetch_confirm",
-        provider="dspy",
-        simulator=_TextAwareVeteran(persona),
-        lm=lm,
-        data_dir=tmp_path,
-    )
-    case = run.case
-    assert not run.hit_step_limit
-    assert case.phase == "attorney_review" and case.poa_signed and case.face_note
-    # every orchestrator step with a real choice came from the model (no fallbacks); steps with
-    # nothing to decide (only "wait") are labelled "rule" and skip the model
-    assert {d.policy for d in case.decisions} <= {"dspy", "rule"}
-    assert all(d.policy == "dspy" for d in case.decisions if d.allowed != ["wait"] and d.reason.startswith("[rule]") is False)
-    assert {"react", "react_extract", "extract", "phrase", "orchestrator", "orchestrator_react", "cfile"} <= set(
-        lm.signatures
-    )
-    prompts = json.dumps([h["messages"] for h in lm.history], default=str)
-    assert persona.identity["ssn"] not in prompts  # the model never sees the SSN

@@ -189,3 +189,22 @@ def test_with_no_key_the_page_loads_and_says_to_set_it():
     assert not cfg["ready"] and "OPENROUTER_API_KEY" in cfg["message"] and cfg["personas"]
     r = c.post("/api/cases", json={"persona_id": PERSONA})
     assert r.status_code == 503 and "OPENROUTER_API_KEY" in r.json()["detail"]
+    assert c.post("/api/cases/any/suggest").status_code == 503
+
+
+def test_autoplay_suggests_the_simulated_veterans_next_reply(client, rt, lm, monkeypatch):
+    from dspy.utils.dummies import DummyLM
+
+    import demo.app as demo_app
+
+    sim_lm = DummyLM([{"reply": "Yes, Army, 2004 to 2010."}])
+    sim_lm.copy = lambda **kw: sim_lm  # keep its history readable here
+    monkeypatch.setattr(demo_app, "simulator_lm", lambda: sim_lm)
+    lm.turn("orchestrator", call("run_intake", goal="Pass 1."), final(reply="Welcome!"))
+    lm.turn("intake", final(reply="Have you served in the military?"))
+    cid = client.post("/api/cases", json={"persona_id": PERSONA}).json()["case_id"]
+    rt.wait_until_idle()
+    assert client.post(f"/api/cases/{cid}/suggest").json() == {"text": "Yes, Army, 2004 to 2010."}
+    prompt = sim_lm.history[-1]["messages"][-1]["content"]
+    assert "Welcome!" in prompt and "Have you served in the military?" in prompt
+    assert rt.store.events(cid, types=("message",))[-1].data["from"] == "intake"  # nothing was sent
