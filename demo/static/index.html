@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>21-22a Intake Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<style>
+  :root { --ink:#132446; --muted:#5b6475; --line:#d9dde5; --bg:#f6f7f9; --card:#fff; --accent:#2f5d50; --warn:#9a3412; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; color:var(--ink); background:var(--bg); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); background:var(--card); display:flex; gap:12px; align-items:baseline; }
+  header h1 { font-size:17px; margin:0; } header span { color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns:minmax(320px, 1fr) minmax(360px, 1.1fr); gap:16px; padding:16px; height:calc(100vh - 52px); }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; height:auto; } }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:0; }
+  #log { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:85%; padding:8px 12px; border-radius:12px; white-space:pre-wrap; }
+  .user { align-self:flex-end; background:var(--ink); color:#fff; }
+  .bot { align-self:flex-start; background:#eef1f5; }
+  .sys { align-self:center; color:var(--muted); font-size:13px; }
+  form.chat { display:flex; gap:8px; padding:10px; border-top:1px solid var(--line); }
+  input, select, button { font:inherit; }
+  input[type=text], input[type=email], input[type=tel], input[type=date], input[type=password], select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; width:100%; }
+  button { padding:8px 14px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--ink); }
+  button:disabled { opacity:.5; cursor:default; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff; align-self:stretch; }
+  .card h3 { margin:0 0 6px; font-size:14px; }
+  .card .lock { color:var(--accent); font-size:12px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:8px 0; }
+  .grid label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  .err { color:var(--warn); font-size:12px; }
+  canvas.pad { width:100%; height:150px; border:1px dashed var(--muted); border-radius:8px; touch-action:none; }
+  #preview { flex:1; border:0; width:100%; border-radius:0 0 10px 10px; }
+  .pane-head { padding:10px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .pane-head small { color:var(--muted); }
+  #manual { padding:10px; border-top:1px solid var(--line); display:none; gap:6px; flex-wrap:wrap; align-items:center; }
+  #manual span { font-size:12px; color:var(--muted); width:100%; }
+  .consent { font-size:13px; color:var(--muted); margin:6px 0 10px; }
+</style>
+</head>
+<body>
+<header><h1>Intake assistant</h1><span>VA Form 21-22a skill demo. Synthetic data only.</span></header>
+<main>
+  <section>
+    <div id="log"></div>
+    <div id="manual">
+      <span>Agent offline (no ANTHROPIC_API_KEY). Drive the agent's tools yourself:</span>
+      <button class="ghost" data-tool="get_intake_status">Status</button>
+      <button class="ghost" id="m-request">Request missing info</button>
+      <button class="ghost" id="m-prepare">Prepare 21-22a</button>
+      <button class="ghost" data-tool="request_signature_capture">Signature pad</button>
+      <button class="ghost" id="m-present">Present for signature</button>
+    </div>
+    <form class="chat" id="chat"><input type="text" id="text" placeholder="Type a message" autocomplete="off"><button>Send</button></form>
+  </section>
+  <section>
+    <div class="pane-head"><strong>Document</strong><small id="docmeta">No draft yet</small></div>
+    <div id="editor"></div>
+    <iframe id="preview" title="21-22a preview"></iframe>
+  </section>
+</main>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const log = $("#log");
+let currentDoc = null;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+function say(text, who) {
+  if (!text) return;
+  const d = document.createElement("div");
+  d.className = "msg " + who; d.textContent = text; log.append(d); log.scrollTop = log.scrollHeight;
+}
+function handle(res) {
+  if (res.redacted_echo) say("Your message was sent with the ID number hidden. Use the secure form for those.", "sys");
+  say(res.reply, "bot");
+  (res.cards || []).forEach(renderCard);
+}
+
+$("#chat").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const t = $("#text").value.trim(); if (!t) return;
+  $("#text").value = ""; say(t, "user");
+  try { handle(await api("/api/chat", {text: t})); } catch (err) { say(err.message, "sys"); }
+});
+
+function renderCard(c) {
+  ({secure_form: secureForm, signature_pad: signaturePad, document_preview: preview, sign_button: signButton})[c.type]?.(c);
+}
+
+// ── Secure form: values go to the vault, never into the chat or the model ──────────────────
+function secureForm(c) {
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>Secure form</h3><div class="lock">🔒 Encrypted. The assistant only sees masked values.</div><p>${escapeHtml(c.purpose)}</p><div class="grid"></div><div class="err"></div><button>Submit securely</button>`;
+  const grid = $(".grid", card);
+  for (const f of c.fields) {
+    const l = document.createElement("label"); l.textContent = f.label;
+    let input;
+    if (f.input_type === "select") {
+      input = document.createElement("select");
+      input.innerHTML = `<option value="">Choose</option>` + f.options.map(o => `<option value="${o}">${o.replace(/_/g, " ")}</option>`).join("");
+    } else {
+      input = document.createElement("input");
+      input.type = {ssn: "password", date: "date", email: "email", tel: "tel"}[f.input_type] || "text";
+      input.autocomplete = "off";
+    }
+    input.name = f.name; l.append(input); grid.append(l);
+  }
+  $("button", card).onclick = async () => {
+    const values = {};
+    grid.querySelectorAll("[name]").forEach(i => values[i.name] = i.value);
+    try {
+      const res = await api(`/api/secure/${c.request_id}`, {values});
+      if (Object.keys(res.errors || {}).length) {
+        $(".err", card).textContent = Object.entries(res.errors).map(([k, v]) => `${k}: ${v}`).join(" · ");
+        return;
+      }
+      card.innerHTML = `<h3>Secure form</h3><div class="lock">🔒 Saved securely.</div>`;
+      handle(res);
+    } catch (err) { $(".err", card).textContent = err.message; }
+  };
+  log.append(card); log.scrollTop = log.scrollHeight;
+}
+
+// ── Signature pad (draw only; trimmed to ink before upload, ported from Shire) ─────────────
+function trimmedSignatureDataUrl(canvas) {
+  const ctx = canvas.getContext("2d"), {width: w, height: h} = canvas;
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3]) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  if (maxX < 0) return null;
+  const px = Math.max(2, Math.round((maxX - minX) * 0.04)), py = Math.max(2, Math.round((maxY - minY) * 0.04));
+  const l = Math.max(0, minX - px), t = Math.max(0, minY - py);
+  const ow = Math.min(w, maxX + px + 1) - l, oh = Math.min(h, maxY + py + 1) - t;
+  const out = document.createElement("canvas"); out.width = ow; out.height = oh;
+  out.getContext("2d").drawImage(canvas, l, t, ow, oh, 0, 0, ow, oh);
+  return out.toDataURL("image/png");
+}
+function signaturePad() {
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>Your signature</h3><p class="consent">Draw it once. It's saved and placed on forms only when you click Sign.</p><canvas class="pad"></canvas><div style="display:flex;gap:8px;margin-top:8px"><button class="ghost" data-clear>Clear</button><button data-save>Save signature</button></div><div class="err"></div>`;
+  log.append(card); log.scrollTop = log.scrollHeight;
+  const canvas = $("canvas", card), ratio = Math.max(window.devicePixelRatio || 1, 1);
+  canvas.width = canvas.offsetWidth * ratio; canvas.height = canvas.offsetHeight * ratio;
+  canvas.getContext("2d").scale(ratio, ratio);
+  const pad = new SignaturePad(canvas, {penColor: "#132446"});
+  $("[data-clear]", card).onclick = () => pad.clear();
+  $("[data-save]", card).onclick = async () => {
+    const uri = pad.isEmpty() ? null : trimmedSignatureDataUrl(canvas);
+    if (!uri) { $(".err", card).textContent = "Draw your signature first."; return; }
+    try {
+      const res = await api("/api/signature", {data_uri: uri});
+      card.innerHTML = `<h3>Your signature</h3><img alt="Saved signature" src="${uri}" style="max-height:60px"><div class="lock">Saved.</div>`;
+      handle(res);
+    } catch (err) { $(".err", card).textContent = err.message; }
+  };
+}
+
+// ── Preview + edit-before-sign ─────────────────────────────────────────────────────────────
+function preview(c) {
+  currentDoc = c.document_id;
+  $("#preview").src = `/api/documents/${c.document_id}/pdf?v=${c.version}`;
+  $("#docmeta").textContent = `Draft v${c.version}` + (c.missing.length ? ` · missing: ${c.missing.join(", ")}` : " · complete");
+  const ed = $("#editor");
+  const fields = Object.entries(c.editable).map(([k, label]) =>
+    `<label>${label}<input type="text" name="${k}" value="${escapeHtml(c.current[k] && !c.current[k].includes("*") ? c.current[k] : "")}" placeholder="${escapeHtml(c.current[k] || "")}"></label>`).join("");
+  ed.innerHTML = `<details style="padding:8px 14px;border-bottom:1px solid var(--line)"><summary>Edit before signing</summary>
+    <div class="grid">${fields}
+      <label><span><input type="checkbox" name="authorize_7332_records" ${c.consents.authorize_7332_records ? "checked" : ""}> Item 20: sensitive records access</span></label>
+      <label><span><input type="checkbox" name="authorize_address_change" ${c.consents.authorize_address_change ? "checked" : ""}> Item 22: address changes</span></label>
+    </div><div class="err"></div><button>Update draft</button></details>`;
+  $("button", ed).onclick = async () => {
+    const changes = {};
+    ed.querySelectorAll("input[type=text]").forEach(i => { if (i.value.trim() && i.value !== c.current[i.name]) changes[i.name] = i.value.trim(); });
+    ed.querySelectorAll("input[type=checkbox]").forEach(i => { if (i.checked !== Boolean(c.consents[i.name])) changes[i.name] = i.checked; });
+    if (!Object.keys(changes).length) return;
+    try {
+      const res = await api(`/api/documents/${c.document_id}/edit`, {changes});
+      const st = await api("/api/status");
+      preview({...c, version: res.document.version, missing: res.document.missing, consents: res.document.consents,
+               current: Object.fromEntries(Object.entries(st.captured).filter(([k]) => k in c.editable))});
+      handle(res);
+    } catch (err) { $(".err", ed).textContent = err.message; }
+  };
+}
+
+// ── Click to sign: the only path to signing ────────────────────────────────────────────────
+function signButton(c) {
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>Sign VA Form 21-22a</h3><p class="consent">${escapeHtml(c.consent_text)}</p><button>Sign</button><div class="err"></div>`;
+  $("button", card).onclick = async () => {
+    $("button", card).disabled = true;
+    try {
+      const res = await api(`/api/documents/${c.document_id}/sign`, {consent_text: c.consent_text});
+      card.innerHTML = `<h3>Signed ✓</h3><div class="lock">Signed ${res.document.signed_at}</div>`;
+      $("#preview").src = `/api/documents/${c.document_id}/pdf?signed=1`;
+      $("#docmeta").textContent = "Signed"; $("#editor").innerHTML = "";
+      handle(res);
+    } catch (err) { $(".err", card).textContent = err.message; $("button", card).disabled = false; }
+  };
+  log.append(card); log.scrollTop = log.scrollHeight;
+}
+
+function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
+
+// ── Manual mode (no API key): call the agent's tools directly ──────────────────────────────
+async function tool(name, args = {}) {
+  const res = await api("/api/tool", {name, args});
+  say(`${name} → ${JSON.stringify(res.result, null, 1)}`, "sys");
+  (res.cards || []).forEach(renderCard);
+  return res.result;
+}
+(async () => {
+  const cfg = await api("/api/config");
+  if (cfg.agent_enabled) { say("Hi! I can help you get set up with the firm. What brings you here today?", "bot"); return; }
+  $("#manual").style.display = "flex"; $("#chat").style.display = "none";
+  document.querySelectorAll("[data-tool]").forEach(b => b.onclick = () => tool(b.dataset.tool));
+  const FIELD_KEYS = {"first name":"first_name","last name":"last_name","Social Security number":"ssn","date of birth":"date_of_birth","branch of service":"branch","street address":"address.line1","city":"address.city","state":"address.state","ZIP code":"address.zip"};
+  $("#m-request").onclick = async () => {
+    const st = await tool("get_intake_status");
+    const fields = st.missing_for_21_22a.map(m => FIELD_KEYS[m]).filter(Boolean);
+    fields.push("middle_initial", "va_file_number", "phone", "email");
+    await tool("request_secure_info", {fields, purpose: "These go on the form that lets the firm's attorney represent you with VA."});
+  };
+  $("#m-prepare").onclick = () => tool("prepare_poa_21_22a", {
+    authorize_7332_records: confirm("Item 20: allow the attorney to see records about drug or alcohol treatment, HIV, or sickle cell anemia?"),
+    authorize_address_change: confirm("Item 22: allow the attorney to update your address with VA?")});
+  $("#m-present").onclick = () => currentDoc ? tool("present_for_signature", {document_id: currentDoc}) : say("Prepare the draft first.", "sys");
+})();
+</script>
+</body>
+</html>

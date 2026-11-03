@@ -1,0 +1,36 @@
+{
+  "_comment": "The appointed representative printed on every 21-22a (Section III and Item 19). Values match Tabak Law's standard 21-22a. Edit here, never in code.",
+  "first_name": "James",
+  "middle_initial": "M",
+  "last_name": "Brzezinski",
+  "type": "attorney",
+  "address": {
+    "line1": "PO BOX 427",
+    "line2": "",
+    "city": "Brookfield",
+    "state": "WI",
+    "zip": "53008",
+    "country": "US"
+  },
+  "phone": "414-351-4400",
+  "email": "",
+  "firm_name": "Tabak Law, LLC",
+  "affiliated_staff": [
+    "James M. Brzezinski",
+    "Monica Irelan Karas",
+    "Tyler Hines",
+    "Jacob Mailander",
+    "Kyle Hough",
+    "Jamal Anwar",
+    "Jenna D'Attilo",
+    "Brian Michel",
+    "Aldridge Maurer",
+    "Cory Strolla",
+    "Giancarlo Maro",
+    "Abby Fryman",
+    "Payton McCauley"
+  ],
+  "authorize_affiliated_it_access": true,
+  "authorize_affiliated_staff": true,
+  "representation_under_14_630": false
+}
