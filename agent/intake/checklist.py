@@ -251,7 +251,7 @@ def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
     if periods:
         text = _drop_date_hedges(text)
     if hedge := _answer_hedge(text):
-        about = ("Approximate dates (a year alone) are fine; only an unsure discharge, branch or period "
+        about = ("Approximate dates (a year alone) are fine; only an unsure discharge "
                  "is asked again" if periods else "Ask again to confirm")  # fmt: skip
         raise StrictError(f"the veteran sounds unsure ({hedge!r}), and {key} decides whether the "
                           f"firm can take the case. {about}. Mark it unknown only if they say "
@@ -302,19 +302,20 @@ _WHEN = re.compile(r"\b((19|20)\d{2}|months?|years?|dates?|when|summer|winter|sp
                    r"mar\w*|apr\w*|june?|july?|aug\w*|sept?\w*|oct\w*|nov\w*|dec\w*)\b", re.IGNORECASE)  # fmt: skip
 
 
+_KEEP = re.compile(r"\b(upgrad|downgrad|chang|kick|boot|court[- ]martial|discharg|separat)", re.IGNORECASE)
+
+
 def _drop_date_hedges(text: str) -> str:
-    """`text` without its hedges about dates: such a clause loses its hedge words (or, with no
-    year in it, the whole clause and a "but" after it). Everything else is checked as usual."""
-    out, after_dropped = [], False
+    """`text` with the hedge words removed from clauses that hedge only on when (a date or month,
+    nothing about the discharge or how service ended). Nothing else is removed."""
+    out, stripped = [], False
     for clause in _CLAUSE.findall(text):
-        if after_dropped:
+        if stripped:  # "not sure of the months, but Army ... OTH": the "but" only turned from the hedge
             clause = re.sub(r"^\s*but\b", "", clause, flags=re.IGNORECASE)
-        after_dropped = False
-        if HEDGE.search(clause) and _WHEN.search(clause) and not DISCHARGE_WORDS.search(clause.lower()):
-            if re.search(r"\d", clause):
-                clause = HEDGE.sub("", clause)
-            else:
-                clause, after_dropped = "", True
+        stripped = bool(HEDGE.search(clause) and _WHEN.search(clause)
+                        and not DISCHARGE_WORDS.search(clause.lower()) and not _KEEP.search(clause))  # fmt: skip
+        if stripped:
+            clause = HEDGE.sub("", clause)
         out.append(clause)
     return "".join(out)
 

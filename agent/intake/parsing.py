@@ -85,7 +85,7 @@ _QUALIFIER = re.compile(
 )
 DISCHARGE_WORDS = re.compile(
     r"\b(honou?r\w*|dishonou?r\w*|discharg\w*|conduct|misconduct|separat\w*|characteri[sz]\w*|"
-    r"chapter\w*|court martial\w*|oth|general|bcd|els)\b"
+    r"chapter\w*|court[- ]martial\w*|oth|general|bcd|els)\b"
 )
 
 

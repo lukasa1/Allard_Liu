@@ -93,3 +93,13 @@ def test_an_empty_other_period_list_is_refused_when_the_veteran_names_one(a):
     """A1 can't be skipped by value=[] when the veteran's words mention another period."""
     with pytest.raises(checklist.StrictError):
         checklist.parse("other_service_periods", a, [])
+
+
+@pytest.mark.parametrize("a", [
+    "honorable, but not sure when it got downgraded",
+    "not sure when but I got court-martialed",
+])  # fmt: skip
+def test_a_hedge_about_how_service_ended_is_still_asked_again(a):
+    """Only hedges about *when* are dropped; one about the discharge or its change is re-asked."""
+    with pytest.raises(checklist.StrictError, match="unsure"):
+        checklist.parse("service_periods", a, P)
