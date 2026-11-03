@@ -1,0 +1,38 @@
+id: forgot_prior_claim
+summary: Filed a VA claim years ago and is rated 30%, but first says they never filed. Only a direct question about VA letters brings it out.
+behaviors: [deny_prior_claim_first]
+truth:
+  first_name: Renee
+  last_name: Okafor
+  service_periods:
+    - {branch: navy, component: active, start: "1998-03", end: "2006-02", discharge: honorable}
+  filed_before: true
+  receiving_va_pay: true
+  rating_pct: 30
+  tdiu: false
+  sc_conditions:
+    - {name: lumbar strain, rating_pct: 20}
+    - {name: tinnitus, rating_pct: 10}
+  claim_conditions: [sleep apnea]
+  mos: [Aviation Machinist's Mate]
+stories:
+  sleep apnea:
+    h02: I snore loudly, stop breathing at night and wake up exhausted.
+    h03: Some mornings I fall asleep at my desk by ten.
+    h04: It started on the ship. My bunkmates complained about my snoring.
+    h05: Every night.
+    h06: It's gotten worse since I got out.
+    h07: USS Harry S. Truman.
+    h08: On a ship.
+    h09: Cramped berthing, constant noise, rotating shifts.
+    h10: Years of irregular sleep on deployments.
+    h11: No, I never went to medical for it.
+    h12: I'm tired all the time and make mistakes at work.
+    h13: I've been written up twice for dozing off.
+    h14: I can't drive long distances anymore.
+    h15: I used to sleep fine.
+    h16: No.
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: [prior_va_claim]

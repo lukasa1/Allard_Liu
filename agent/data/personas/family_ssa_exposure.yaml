@@ -1,0 +1,22 @@
+id: family_ssa_exposure
+summary: Married with kids, not working, interested in Social Security help, and exposed to burn pits. Exercises the family, referral and exposure branches.
+truth:
+  first_name: Angela
+  last_name: Brooks
+  service_periods:
+    - {branch: air force, component: active, start: "2005-09", end: "2013-08", discharge: honorable}
+  earning_over_1600: false
+  receives_ssa: false
+  ssa_interest: true
+  exposures: [burn pits]
+  litigation_contact: true
+  marital_status: married
+  spouse_name: Derek Brooks
+  children_under_18: true
+  heard_about: internet
+  internet_source: Google search
+  mos: [Security Forces]
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: [refer_social_security, refer_exposure_litigation, possible_tdiu]

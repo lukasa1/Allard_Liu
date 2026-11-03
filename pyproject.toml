@@ -1,7 +1,7 @@
 [project]
-name = "poa-agent"
+name = "veteran-intake-agent"
 version = "0.1.0"
-description = "Intake-agent skill: securely capture veteran data, fill VA Form 21-22a, and click-to-sign."
+description = "Veteran intake agent (CS329Z): orchestrator + intake subagent, POA 21-22a skill, VA Lighthouse tools, C-file to face note."
 requires-python = ">=3.12"
 dependencies = [
     "pypdf>=5.0",
@@ -11,7 +11,14 @@ dependencies = [
     "openai>=1.50",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "dspy>=3.4.1,<3.5",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "httpx>=0.27",
 ]
+
+[project.scripts]
+intake = "agent.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6"]
@@ -21,7 +28,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["poa_skill"]
+packages = ["poa_skill", "agent", "intake_eval"]
 
 [tool.ruff]
 line-length = 100

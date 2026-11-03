@@ -1,0 +1,11 @@
+id: rated_100
+summary: Already rated 100%. The firm signs veterans rated below 100%, so intake should stop.
+truth:
+  first_name: Gloria
+  last_name: Pham
+  filed_before: true
+  receiving_va_pay: true
+  rating_pct: 100
+  tdiu: false
+expected:
+  decision: rated_100

@@ -1,0 +1,9 @@
+id: va_record_wrong_discharge
+summary: One period of honorable Army service, never filed, one condition. VA's service-history data wrongly lists the discharge as general (synthetic assumption), so records can be wrong, not only incomplete. The DD-214 in the C-file shows honorable; claims prep corrects it before pass 2.
+truth: {}
+va:
+  wrong_discharge: {0: general}
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: []

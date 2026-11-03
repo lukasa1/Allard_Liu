@@ -1,0 +1,14 @@
+id: two_service_periods
+summary: Two periods of service (active Army, later Army Reserve), but mentions only the first unless asked. Intake misses like this leave a second DD-214 unfound.
+behaviors: [omit_second_period]
+truth:
+  first_name: Dale
+  last_name: Whitaker
+  service_periods:
+    - {branch: army, component: active, start: "1990-06", end: "1994-06", discharge: honorable}
+    - {branch: army, component: reserve, start: "2003-01", end: "2004-12", discharge: honorable}
+  mos: [88M Motor Transport Operator, 92Y Unit Supply Specialist]
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: [multiple_service_periods]

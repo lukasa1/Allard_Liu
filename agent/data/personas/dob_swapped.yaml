@@ -1,0 +1,22 @@
+id: dob_swapped
+summary: Types their date of birth into the secure form with the day and month swapped (07/04 instead of 04/07). The intake form and the 21-22a carry the wrong DOB; the face-note pipeline must flag the mismatch against the C-file's DD-214.
+truth:
+  first_name: Tanya
+  last_name: Brooks
+  service_periods:
+    - {branch: air force, component: active, start: "2007-01", end: "2015-01", discharge: honorable}
+  mos: [Aircraft Armament Systems]
+  claim_conditions: [bilateral hearing loss]
+stories:
+  bilateral hearing loss:
+    h02: I can't follow conversations in noisy rooms and I turn the TV way up.
+    h05: All the time.
+    h07: Bagram Airfield, Afghanistan.
+    h10: Loading munitions next to running jets for years.
+identity:
+  dob: "1985-04-07"
+  dob_typed: "1985-07-04"
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: []

@@ -1,0 +1,34 @@
+id: reserve_not_in_records
+summary: Active Navy service, then three years in the Navy Reserve that VA's service-history data does not list (synthetic assumption, a Reserve period with no activation). Mentions only the first period unless asked. Trusting the records alone misses the second DD-214; confirming the records with the veteran catches it.
+behaviors: [omit_second_period]
+truth:
+  first_name: Priya
+  last_name: Nair
+  service_periods:
+    - {branch: navy, component: active, start: "2008-07", end: "2012-07", discharge: honorable}
+    - {branch: navy, component: reserve, start: "2014-01", end: "2016-12", discharge: honorable}
+  mos: [Hospital Corpsman]
+  claim_conditions: [migraines]
+stories:
+  migraines:
+    h02: Throbbing headaches behind my right eye, with nausea and light sensitivity.
+    h03: The worst ones put me in a dark room for a whole day.
+    h04: They started during my first deployment, after a fall on the flight deck.
+    h05: Two or three times a week.
+    h06: They never stopped and they've gotten more frequent.
+    h07: Aboard the USS Bataan.
+    h08: On a ship.
+    h09: Constant noise, bright lights at night, long shifts.
+    h10: I hit my head when I fell on the flight deck in 2010.
+    h11: Yes, I was seen in sick bay.
+    h12: I lose about four workdays a month.
+    h13: Yes, I've had to leave shifts early.
+    h14: I cancel plans with my family a lot.
+    h15: I never had headaches before the Navy.
+    h16: No.
+va:
+  omit_periods: [1]
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: [multiple_service_periods]

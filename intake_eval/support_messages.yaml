@@ -1,0 +1,95 @@
+# Labeled messages for the customer-support subagent (agent/support.py), sent to a parked case.
+# Synthetic. Each entry:
+#   phase    attorney_review | closed | human_handoff   (which parked case receives it)
+#   text     what the veteran types
+#   flags    flags support must raise (new_condition, withdraw, contact_change, complaint, wants_human)
+#   status   true if the reply must give the case status
+#   person   true if a staff task must be created (a person reads it)
+#   crisis   true if it must get the crisis message and an immediate hand-off
+- {phase: attorney_review, text: "Any news on my file?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Any news on my file? And do I owe you anything yet?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "What happens next?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Where is my case at?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "How's my claim going?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "What is an intent to file?", flags: [], status: false, person: false}
+- {phase: attorney_review, text: "How long does a higher-level review take?", flags: [], status: false, person: false}
+- {phase: attorney_review, text: "What is a C-file?", flags: [], status: false, person: false}
+- {phase: attorney_review, text: "Can I revoke the 21-22a later if I want?", flags: [], status: false, person: false}
+- {phase: attorney_review, text: "Do you charge anything up front?", flags: [], status: false, person: false}
+- {phase: attorney_review, text: "What rating will I get for my back?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Should I go to my C&P exam?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I also want to claim my knees.", flags: [new_condition], status: false, person: true}
+- {phase: attorney_review, text: "I forgot to mention my tinnitus. Can we add that?", flags: [new_condition], status: false, person: true}
+- {phase: attorney_review, text: "Can I add another condition? My sleep apnea got worse.", flags: [new_condition], status: false, person: true}
+- {phase: attorney_review, text: "I moved last week, my new address is 12 Oak St, Tulsa.", flags: [contact_change], status: false, person: true}
+- {phase: attorney_review, text: "Please update my phone number, it's 918-555-0144 now.", flags: [contact_change], status: false, person: true}
+- {phase: attorney_review, text: "I don't want you to represent me anymore.", flags: [withdraw], status: false, person: true}
+- {phase: attorney_review, text: "Please cancel my case.", flags: [withdraw], status: false, person: true}
+- {phase: attorney_review, text: "This is ridiculous, nobody has called me in two weeks.", flags: [complaint], status: false, person: true}
+- {phase: attorney_review, text: "I'm frustrated, I haven't heard from anyone.", flags: [complaint], status: false, person: true}
+- {phase: attorney_review, text: "Can I talk to a real person?", flags: [wants_human], status: false, person: true}
+- {phase: attorney_review, text: "Have someone call me please.", flags: [wants_human], status: false, person: true}
+- {phase: attorney_review, text: "Thanks!", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "ok", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I don't want to be here anymore. I've been thinking about ending it.", flags: [], status: false, person: true, crisis: true}
+- {phase: attorney_review, text: "Some days I think about killing myself.", flags: [], status: false, person: true, crisis: true}
+- {phase: closed, text: "Why was my case closed?", flags: [], status: true, person: false}
+- {phase: closed, text: "Any update?", flags: [], status: true, person: false}
+- {phase: closed, text: "Can I speak with someone about my husband's claim?", flags: [wants_human], status: false, person: true}
+- {phase: human_handoff, text: "Any news?", flags: [], status: true, person: true}
+- {phase: human_handoff, text: "What is a supplemental claim?", flags: [], status: false, person: true}
+# --- hard negatives: status look-alikes that are not about the case (a person answers them)
+- {phase: attorney_review, text: "Is my progress note from the VA hospital needed?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Where is the nearest VA hospital?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Do I need to send an update on my meds?", flags: [], status: false, person: true}
+# --- status questions phrased as yes/no or "yet" questions
+- {phase: attorney_review, text: "Has the attorney looked at my file yet?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Did you get my records?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Have you filed the power of attorney yet?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Did VA accept the 21-22a?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Did VA get my form?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "When will I hear back?", flags: [], status: true, person: false}
+- {phase: attorney_review, text: "Is my claim approved yet?", flags: [], status: true, person: false}
+- {phase: closed, text: "Has anyone looked at my case yet?", flags: [], status: true, person: false}
+- {phase: human_handoff, text: "When will I hear back?", flags: [], status: true, person: true}
+# --- a general FAQ answer must not stand in for an answer about this case
+- {phase: attorney_review, text: "Is my power of attorney valid?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "What is my effective date?", flags: [], status: false, person: true}
+# --- flag hard negatives: the verb without its object
+- {phase: attorney_review, text: "Can I add my wife as a dependent?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Can I also file for my wife's benefits?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Can you add my new email address to my file?", flags: [contact_change], status: false, person: true}
+- {phase: attorney_review, text: "Cancel the C&P exam?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I want to withdraw my old claim at VA for my back.", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I need to cancel my appointment", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I've moved on from that job.", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "My doctor said it's a terrible injury.", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I'm upset about my divorce and it affects my sleep", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "My wife is frustrated with how I sleep", flags: [], status: false, person: true}
+- {phase: closed, text: "I've moved on from that job.", flags: [], status: false, person: true}
+# --- flag misses
+- {phase: attorney_review, text: "I have a new condition, diabetes", flags: [new_condition], status: false, person: true}
+- {phase: attorney_review, text: "I was diagnosed with sleep apnea last month", flags: [new_condition], status: false, person: true}
+- {phase: attorney_review, text: "My back has gotten worse since we talked", flags: [new_condition], status: false, person: true}
+- {phase: closed, text: "I was diagnosed with sleep apnea last month", flags: [new_condition], status: false, person: true}
+- {phase: attorney_review, text: "Can I speak to my attorney?", flags: [wants_human], status: false, person: true}
+- {phase: attorney_review, text: "Call me", flags: [wants_human], status: false, person: true}
+- {phase: attorney_review, text: "I want to talk to my lawyer", flags: [wants_human], status: false, person: true}
+- {phase: closed, text: "Please call me at 555-0100", flags: [wants_human], status: false, person: true}
+- {phase: human_handoff, text: "Can I speak to my attorney?", flags: [wants_human], status: false, person: true}
+- {phase: attorney_review, text: "I want to revoke the power of attorney.", flags: [withdraw], status: false, person: true}
+- {phase: human_handoff, text: "I'm unhappy with how my case is being handled.", flags: [complaint], status: false, person: true}
+# --- a flag must not hide another question
+- {phase: attorney_review, text: "I moved to Tulsa. Will I get 70%?", flags: [contact_change], status: false, person: true}
+- {phase: attorney_review, text: "I also want to claim my knees. Any news on my file?", flags: [new_condition], status: true, person: true}
+# --- money owed to VA is not the firm's fee
+- {phase: attorney_review, text: "How much do I owe VA?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Do I owe VA money for an overpayment?", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "Do I owe you anything?", flags: [], status: false, person: false}
+# --- crisis vs ordinary injury and PTSD narratives
+- {phase: attorney_review, text: "I hurt myself lifting a crate in Iraq", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "The suicide of my friend triggered my PTSD", flags: [], status: false, person: true}
+- {phase: attorney_review, text: "I was on suicide watch duty", flags: [], status: false, person: true}
+- {phase: closed, text: "I'm suicidal", flags: [], status: false, person: true, crisis: true}
+- {phase: closed, text: "everyone would be better off without me", flags: [], status: false, person: true, crisis: true}
+- {phase: human_handoff, text: "I keep thinking about ending things", flags: [], status: false, person: true, crisis: true}

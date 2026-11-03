@@ -1,0 +1,413 @@
+# Intake question bank.
+#
+# Structured questions follow the firm's 36-question intake form; `form_q`
+# gives the original question number(s) for traceability. Narrative prompts come from the firm's 16
+# questions, asked once per claimed condition.
+#
+# The deterministic controller (agent/intake/controller.py) decides WHICH question is next: the first
+# question of the active stage, in file order, whose `show_if` holds and that has no answer yet.
+# The LLM only phrases questions and extracts answers.
+#
+#   stage   screen    pass 1: asked before the veteran signs the 21-22a. Only what eligibility,
+#                     the stop rules and the fee need, since the C-file isn't available yet.
+#           reopen    only when the orchestrator reopens intake after it ended (the veteran
+#                     wants to add a condition): that condition, then its narrative prompts
+#           post_poa  pass 2: after claims prep has read the C-file; asks only what the C-file
+#                     (and VA's records) didn't settle, then the narrative prompts. Pass 2 also
+#                     asks any pass-1 question that became relevant later (e.g. the C-file shows
+#                     an earlier claim, so the rating questions now apply).
+#   source  chat         only the veteran can answer it
+#           va_records   VA's records (Lighthouse VSHE + Benefits Claims) can answer it; when the
+#                        records are fetched the question is skipped
+#           secure_form  the POA skill's secure form collects it; never asked in chat
+#   cfile   true: claims prep can settle it from the C-file before pass 2 (cfile_mode fetch/confirm)
+#   probe   a verification question that is not on the firm's form. It targets known intake misses
+#           (a second service period, a claim filed years ago). `confirms` names the field it
+#           double-checks; `ask_with_records` is its wording when VA's records were fetched
+#           (records_mode fetch_confirm).
+#
+# Field types: bool | int | str | enum | list_str | conditions | service_periods
+#   | service_periods_append | conditions_rated | narrative
+# show_if: clauses joined by " and ".  Each clause is "<field> <op> <value>" with op in
+#   == | != | contains,  or "<field> truthy" / "<field> falsy".
+
+structured:
+- id: is_veteran
+  field: is_veteran
+  type: bool
+  section: screening
+  stage: screen
+  source: va_records
+  ask: To start, have you served in the U.S. military, whether on active duty, in the Reserves, or in the National Guard?
+- id: first_name
+  form_q: 1
+  field: first_name
+  type: str
+  section: identity
+  stage: screen
+  source: secure_form
+  show_if: is_veteran == true
+  ask: What's your first name?
+- id: last_name
+  form_q: 2
+  field: last_name
+  type: str
+  section: identity
+  stage: screen
+  source: secure_form
+  show_if: is_veteran == true
+  ask: And your last name?
+- id: service_periods
+  form_q:
+  - 3
+  - 4
+  - 15
+  - 21
+  - 22
+  - 23
+  field: service_periods
+  type: service_periods
+  section: service
+  stage: screen
+  source: va_records
+  show_if: is_veteran == true
+  ask: 'Tell me about your service: for each period, the branch, whether it was active duty, Reserve or Guard, the start and end month and year, and the type of discharge you received.'
+- id: other_service_periods
+  field: service_periods
+  type: service_periods_append
+  section: service
+  stage: screen
+  source: chat
+  probe: true
+  confirms: service_periods
+  show_if: is_veteran == true
+  ask: Did you have any other period of service, such as a second enlistment, or time in the Reserves or National Guard?
+  ask_with_records: 'VA''s records list this service: {va_service}. Did you have any other period of service that isn''t on that list, such as a second enlistment, or time in the Reserves or National Guard?'
+- id: filed_before
+  form_q: 11
+  field: filed_before
+  type: bool
+  section: history
+  stage: screen
+  source: va_records
+  show_if: is_veteran == true
+  ask: Have you ever filed a claim with the VA for disability benefits before?
+- id: prior_claim_probe
+  field: filed_before
+  type: bool
+  section: history
+  stage: screen
+  source: chat
+  probe: true
+  confirms: filed_before
+  show_if: is_veteran == true and filed_before == false
+  ask: 'Just to double-check: have you ever gotten a letter from the VA about a claim, a decision or a rating, even many years ago?'
+  ask_with_records: 'VA''s records don''t show an earlier claim. Just to double-check: have you ever gotten a letter from the VA about a claim, a decision or a rating, even many years ago?'
+- id: receiving_va_pay
+  form_q: 12
+  field: receiving_va_pay
+  type: bool
+  section: history
+  stage: screen
+  source: va_records
+  show_if: filed_before == true
+  ask: Are you receiving disability payments from the VA right now?
+- id: rating_pct
+  form_q: 13
+  field: rating_pct
+  type: int
+  section: history
+  stage: screen
+  source: va_records
+  show_if: receiving_va_pay == true
+  ask: What is your combined VA disability rating, as a percentage?
+- id: tdiu
+  form_q: 14
+  field: tdiu
+  type: bool
+  section: history
+  stage: post_poa
+  source: va_records
+  show_if: receiving_va_pay == true
+  ask: Are you receiving TDIU, also called Individual Unemployability?
+- id: sc_conditions
+  form_q: 28
+  field: sc_conditions
+  type: conditions_rated
+  section: history
+  stage: post_poa
+  source: va_records
+  cfile: true
+  show_if: receiving_va_pay == true
+  ask: Which conditions are already service-connected, and at what percentage each?
+- id: street
+  form_q: 5
+  field: street
+  type: str
+  section: contact
+  stage: post_poa
+  source: secure_form
+  show_if: is_veteran == true
+  ask: What's your street address?
+- id: city
+  form_q: 7
+  field: city
+  type: str
+  section: contact
+  stage: post_poa
+  source: secure_form
+  show_if: is_veteran == true
+  ask: What city is that in?
+- id: state
+  form_q: 8
+  field: state
+  type: str
+  section: contact
+  stage: post_poa
+  source: secure_form
+  show_if: is_veteran == true
+  ask: Which state?
+- id: zip
+  form_q: 6
+  field: zip
+  type: str
+  section: contact
+  stage: post_poa
+  source: secure_form
+  show_if: is_veteran == true
+  ask: And the ZIP code?
+- id: cell_phone
+  form_q: 9
+  field: cell_phone
+  type: str
+  section: contact
+  stage: post_poa
+  source: secure_form
+  show_if: is_veteran == true
+  ask: What's the best cell phone number to reach you?
+- id: email
+  form_q: 10
+  field: email
+  type: str
+  section: contact
+  stage: post_poa
+  source: secure_form
+  show_if: is_veteran == true
+  ask: What's your email address?
+- id: prior_attorney
+  form_q: 16
+  field: prior_attorney
+  type: bool
+  section: screens
+  stage: screen
+  source: va_records
+  show_if: is_veteran == true
+  ask: Has an attorney or law firm ever helped you with a VA claim before? A VSO like the DAV or VFW doesn't count.
+- id: prior_attorney_name
+  field: prior_attorney_name
+  type: str
+  section: screens
+  stage: post_poa
+  source: va_records
+  cfile: true
+  show_if: prior_attorney == true
+  ask: Do you remember the name of that attorney or firm?
+- id: cfile_discrepancy_check
+  field: cfile_discrepancy_answer
+  type: str
+  section: verification
+  stage: post_poa
+  source: chat
+  probe: true
+  confirms: cfile_discrepancies
+  show_if: cfile_discrepancies truthy
+  ask: 'Your VA claims file shows something different from what we have: {va_service}. Is that right, or is there something we should correct?'
+  ask_with_records: 'Your VA claims file shows something different from what we have: {va_service}. Is that right, or is there something we should correct?'
+- id: dic_claim
+  form_q: 17
+  field: dic_claim
+  type: bool
+  section: screens
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Is this a claim for death benefits for a family member, called DIC or accrued benefits?
+- id: earning_over_1600
+  form_q: 18
+  field: earning_over_1600
+  type: bool
+  section: screens
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Are you currently earning more than $1,600 a month from work?
+- id: receives_ssa
+  form_q: 19
+  field: receives_ssa
+  type: bool
+  section: screens
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Do you currently receive Social Security benefits?
+- id: ssa_interest
+  form_q: 19
+  field: ssa_interest
+  type: bool
+  section: screens
+  stage: post_poa
+  source: chat
+  show_if: receives_ssa == false
+  ask: Would you like to talk with our Social Security benefits department as well?
+- id: partner_share_consent
+  form_q: 20
+  field: partner_share_consent
+  type: bool
+  section: screens
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: We work with a group of partner law firms. If one of our attorneys can't help, may we share your contact information with a partner firm?
+- id: mos
+  form_q: 24
+  field: mos
+  type: list_str
+  section: service
+  stage: post_poa
+  source: chat
+  cfile: true
+  show_if: is_veteran == true
+  ask: What was your job, or MOS, in the service? If you had more than one, list them all.
+- id: retired
+  form_q: 25
+  field: retired
+  type: bool
+  section: service
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Did you retire from the military?
+- id: exposures
+  form_q: 26
+  field: exposures
+  type: list_str
+  section: service
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Were you exposed to anything like Agent Orange, burn pits, Camp Lejeune water, radiation or Gulf War hazards? List any that apply, or say none.
+- id: litigation_contact
+  form_q: 27
+  field: litigation_contact
+  type: bool
+  section: service
+  stage: post_poa
+  source: chat
+  show_if: exposures truthy
+  ask: If there's ongoing litigation about any of those exposures, would you like an attorney to contact you about it?
+- id: claim_conditions
+  form_q: 29
+  field: claim_conditions
+  type: conditions
+  section: conditions
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Which medical conditions would you like our attorneys to help you with?
+- id: other_conditions
+  form_q: 30
+  field: other_conditions
+  type: conditions
+  section: conditions
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Are there any other medical conditions you're dealing with, service-connected or not, such as mental health, sleep apnea, heart problems, high blood pressure, cancer or diabetes? Say none if there aren't.
+- id: marital_status
+  form_q: 31
+  field: marital_status
+  type: enum
+  options:
+  - single
+  - married
+  - divorced
+  - separated
+  - widowed
+  section: family
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: What's your marital status?
+- id: spouse_name
+  form_q: 32
+  field: spouse_name
+  type: str
+  section: family
+  stage: post_poa
+  source: chat
+  show_if: marital_status == married
+  ask: What's your spouse's name?
+- id: children_under_18
+  form_q: 33
+  field: children_under_18
+  type: bool
+  section: family
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Do you have any children under 18?
+- id: next_of_kin
+  form_q: 34
+  field: next_of_kin
+  type: str
+  section: family
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: Who is your next of kin? Their name, relationship to you and phone number.
+- id: heard_about
+  form_q: 35
+  field: heard_about
+  type: str
+  section: marketing
+  stage: post_poa
+  source: chat
+  show_if: is_veteran == true
+  ask: 'Last one for this part: how did you hear about us?'
+- id: internet_source
+  form_q: 36
+  field: internet_source
+  type: str
+  section: marketing
+  stage: post_poa
+  source: chat
+  show_if: heard_about contains internet
+  ask: Where on the internet did you find us?
+
+- id: add_condition
+  field: claim_conditions
+  type: conditions
+  section: conditions
+  stage: reopen
+  source: chat
+  ask: You mentioned you'd like to add something to your claim. Which condition would you like to add?
+
+# The narrative prompts, asked for each claimed condition ({condition} is filled in).
+# h01 ("what condition are you claiming") is answered by the condition list, so it is filled automatically.
+narrative:
+  - {id: h01, auto: true, ask: "Can you tell me the specific condition or issue you're claiming with the VA?"}
+  - {id: h02, ask: "What symptoms do you have from your {condition}?"}
+  - {id: h03, ask: "At their worst, how bad do the symptoms of your {condition} get? Describe a flare-up or a bad day."}
+  - {id: h04, ask: "When did the {condition} symptoms start: during service, right after, or gradually over time?"}
+  - {id: h05, ask: "How often do you have these symptoms: daily, weekly or monthly?"}
+  - {id: h06, ask: "Have the symptoms continued since service, and have they gotten better or worse?"}
+  - {id: h07, ask: "Where were you stationed or deployed when the {condition} began?"}
+  - {id: h08, ask: "Were you on a ship, a base, in the field, in a vehicle, or in a combat zone at the time?"}
+  - {id: h09, ask: "What were the conditions around you, like noise, cramped spaces, extreme weather or hazardous materials?"}
+  - {id: h10, ask: "What event, injury or exposure in service do you think led to your {condition}? What happened?"}
+  - {id: h11, ask: "Did you report it or get treatment at the time? Why or why not?"}
+  - {id: h12, ask: "How does your {condition} affect your ability to work?"}
+  - {id: h13, ask: "Have you missed work or been less productive because of it?"}
+  - {id: h14, ask: "How does it affect your daily activities, relationships or quality of life?"}
+  - {id: h15, ask: "How were things before your military service compared to now?"}
+  - {id: h16, ask: "Is there anything else you want the VA to know about your {condition}?"}

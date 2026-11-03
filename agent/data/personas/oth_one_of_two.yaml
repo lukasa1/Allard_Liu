@@ -1,0 +1,12 @@
+id: oth_one_of_two
+summary: An honorable first enlistment and a second period ending other than honorable. Not a withdrawal; the bad period is flagged on the notes.
+truth:
+  first_name: Luis
+  last_name: Ferreira
+  service_periods:
+    - {branch: army, component: active, start: "2001-01", end: "2005-01", discharge: honorable}
+    - {branch: army, component: active, start: "2006-03", end: "2008-07", discharge: oth}
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: [non_honorable_period, multiple_service_periods]

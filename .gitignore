@@ -6,3 +6,11 @@ __pycache__/
 # Runtime data: encrypted vault, filled PDFs, vault key, audit log. Never commit.
 .data/
 .scratch/
+
+# Local secrets (API keys). Never commit; copy .env.example instead.
+.env
+.env.*
+!.env.example
+
+# Eval output (regenerate with `uv run intake eval`)
+results/

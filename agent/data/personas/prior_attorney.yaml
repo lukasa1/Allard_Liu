@@ -1,0 +1,24 @@
+id: prior_attorney
+summary: A private attorney (Alan Smith) represented this veteran before, so the fee agreement is 20% instead of 30%. VA's records still show that attorney as the active POA, and the C-file holds the old 21-22a.
+truth:
+  first_name: Marcus
+  last_name: Hale
+  prior_attorney: true
+  prior_attorney_name: Alan Smith
+  filed_before: true
+  receiving_va_pay: true
+  rating_pct: 40
+  tdiu: false
+  sc_conditions:
+    - {name: ptsd, rating_pct: 30}
+    - {name: tinnitus, rating_pct: 10}
+  claim_conditions: [tinnitus]
+expected:
+  decision: eligible
+  fee_pct: 20
+  flags: [prior_va_claim]
+cfile:
+  prior_reps:
+    - {name: Alan Smith, kind: attorney, signed: "2019-05-14"}
+  decisions:
+    - {decision_date: "2020-02-03", notified: "2020-02-07", form: "526EZ", filed: "2019-06-01", issues: [{condition: ptsd, outcome: granted, pct: 30}, {condition: tinnitus, outcome: granted, pct: 10}]}

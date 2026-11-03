@@ -1,0 +1,43 @@
+id: recent_decision
+summary: Rated 30% from an old decision (2021), then a 2026 decision granted one condition and denied another. The face note needs the recent decision on a numbered line with its appeal deadline, and the old one under OLD CLAIMS.
+truth:
+  first_name: Hector
+  last_name: Alvarez
+  service_periods:
+    - {branch: marine corps, component: active, start: "2002-06", end: "2010-06", discharge: honorable}
+  filed_before: true
+  receiving_va_pay: true
+  rating_pct: 40
+  tdiu: false
+  sc_conditions:
+    - {name: ptsd, rating_pct: 30}
+    - {name: tinnitus, rating_pct: 10}
+  claim_conditions: [left knee condition]
+  mos: [0311 Rifleman]
+  exposures: [burn pits]
+  litigation_contact: false
+stories:
+  left knee condition:
+    h02: My left knee aches, swells and sometimes gives out on stairs.
+    h03: On bad days I need a cane.
+    h04: During service, after a parachute landing in 2005.
+    h05: Daily.
+    h06: Worse since I got out.
+    h07: Camp Lejeune, North Carolina.
+    h08: In the field, on a jump.
+    h09: Heavy packs and rough terrain.
+    h10: A hard parachute landing that twisted my knee.
+    h11: Yes, I went to medical and got a brace.
+    h12: I can't do the standing jobs I used to.
+    h13: I miss about two days a month.
+    h14: I can't play with my kids or hike anymore.
+    h15: I had no knee problems before.
+    h16: VA denied it once and I think they got it wrong.
+cfile:
+  decisions:
+    - {decision_date: "2021-04-12", notified: "2021-04-16", form: "526EZ", filed: "2020-09-01", issues: [{condition: ptsd, outcome: granted, pct: 30}]}
+    - {decision_date: "2026-03-09", notified: "2026-03-13", form: "526EZ", filed: "2025-10-20", issues: [{condition: tinnitus, outcome: granted, pct: 10}, {condition: left knee condition, outcome: denied}]}
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: [prior_va_claim]

@@ -1,0 +1,35 @@
+id: colloquial_conditions
+summary: Describes every condition in everyday words ("ringing in my ears", "bad back"); the agent must record the VA-style names.
+behaviors: [colloquial_conditions]
+says:
+  tinnitus: ringing in my ears
+  lumbar strain: my bad back
+  sleep apnea: I stop breathing at night
+truth:
+  first_name: Kevin
+  last_name: Doyle
+  claim_conditions: [tinnitus, lumbar strain, sleep apnea]
+stories:
+  lumbar strain:
+    h02: Sharp pain in my lower back, and it goes stiff in the morning.
+    h03: Some days I can't bend over to tie my shoes.
+    h04: After a fall off a truck bed in 2008.
+    h05: Daily.
+    h06: Worse every year.
+    h07: Fort Hood, Texas.
+    h08: On a base, in the motor pool.
+    h09: Heavy lifting all day.
+    h10: I fell about six feet off a truck bed onto concrete.
+    h11: Yes, I went to sick call and got Motrin.
+    h12: I had to give up warehouse work.
+    h13: I miss a few days a month.
+    h14: I can't pick up my kids.
+    h15: I was an athlete before I joined.
+    h16: No.
+  sleep apnea:
+    h02: Loud snoring, gasping awake.
+    h05: Every night.
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: []

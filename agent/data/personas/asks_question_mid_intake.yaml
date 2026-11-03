@@ -1,0 +1,8 @@
+id: asks_question_mid_intake
+summary: Same as baseline_clean, but partway through intake the veteran asks a general question (what an intent to file is) and answers the pending question in the same message.
+truth: {}
+behaviors: [asks_question]
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: []

@@ -1,0 +1,9 @@
+id: oth_only_period
+summary: The only period of service ended with an other-than-honorable discharge. The firm withdraws such cases, so intake should stop and send it to an attorney rather than collect everything.
+truth:
+  first_name: Travis
+  last_name: Boone
+  service_periods:
+    - {branch: marine corps, component: active, start: "2009-08", end: "2011-03", discharge: oth}
+expected:
+  decision: attorney_review

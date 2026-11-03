@@ -1,0 +1,9 @@
+id: not_a_veteran
+summary: Never served. Intake should stop politely at the first question.
+truth:
+  is_veteran: false
+  first_name: Chris
+  last_name: Lang
+  service_periods: []
+expected:
+  decision: not_veteran

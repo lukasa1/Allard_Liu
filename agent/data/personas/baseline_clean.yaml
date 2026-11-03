@@ -1,0 +1,7 @@
+id: baseline_clean
+summary: A straightforward case. One period of honorable Army service, never filed, one condition.
+truth: {}
+expected:
+  decision: eligible
+  fee_pct: 30
+  flags: []

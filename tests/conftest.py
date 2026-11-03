@@ -6,7 +6,12 @@ from io import BytesIO
 # Isolate every test run: its own data dir and vault key, set before poa_skill is imported.
 os.environ["POA_DATA_DIR"] = tempfile.mkdtemp(prefix="poa-test-")
 os.environ.pop("POA_VAULT_KEY", None)
-os.environ.pop("OPENROUTER_API_KEY", None)
+# Empty (not unset) so a developer's .env can't switch tests to a live model: load_dotenv never
+# overrides a variable that already exists.
+os.environ["OPENROUTER_API_KEY"] = ""
+os.environ["INTAKE_PROVIDER"] = "offline"
+os.environ["LIGHTHOUSE_MODE"] = "stub"
+os.environ["DSPY_CACHE"] = "0"
 
 import pytest
 from PIL import Image, ImageDraw
