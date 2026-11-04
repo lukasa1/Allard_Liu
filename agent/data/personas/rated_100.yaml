@@ -1,4 +1,5 @@
 id: rated_100
+split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
 summary: Already rated 100%. The firm signs veterans rated below 100%, so intake should stop.
 truth:
   first_name: Gloria

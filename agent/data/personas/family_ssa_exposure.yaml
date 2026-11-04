@@ -1,4 +1,5 @@
 id: family_ssa_exposure
+split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
 summary: Married with kids, not working, interested in Social Security help, and exposed to burn pits. Exercises the family, referral and exposure branches.
 truth:
   first_name: Angela

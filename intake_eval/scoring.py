@@ -87,6 +87,7 @@ class Score:
     expected_end: str
     end_state: str
     scenario_pass: bool
+    split: str = "dev"  # the persona's split (dev / heldout), reported apart
     critical_errors: list[str] = field(default_factory=list)
     completed: bool = True
     error: str = ""
@@ -404,6 +405,7 @@ def score_run(persona: Persona, run: CaseRun) -> Score:
     fee_doc = service(run.rt, case.case_id).live("fee_agreement")
     s = Score(
         persona_id=persona.id,
+        split=persona.split,
         condition=run.condition,
         expected_end=expected_end(persona, case),
         end_state=end_state(case),
@@ -429,6 +431,6 @@ def score_run(persona: Persona, run: CaseRun) -> Score:
 def crashed_score(persona: Persona, condition: str, exc: BaseException) -> Score:
     """A run that could not even start (e.g. the runtime couldn't be built)."""
     name = type(exc).__name__
-    return Score(persona_id=persona.id, condition=condition, expected_end=EXPECTED_END.get(persona.expected_decision, "?"),
+    return Score(persona_id=persona.id, split=persona.split, condition=condition, expected_end=EXPECTED_END.get(persona.expected_decision, "?"),
                  end_state="crashed", scenario_pass=False, completed=False, error=name,
                  critical_errors=[f"run crashed: {name}"])  # fmt: skip

@@ -1,4 +1,5 @@
 id: reserve_not_in_records
+split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
 summary: Active Navy service, then three years in the Navy Reserve (a Reserve period with no activation). Mentions only the first period unless asked, so only the verification probe or the C-file catches the second DD-214.
 behaviors: [omit_second_period]
 truth:

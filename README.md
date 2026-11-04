@@ -279,7 +279,8 @@ Start case starts the story over.
 
 ## Evaluation (`intake_eval/`)
 
-Synthetic veterans (`agent/data/personas/`, 18) go through **whole cases on the same runtime** the
+Synthetic veterans (`agent/data/personas/`, 18: 12 `dev`, the live pilot's, whose failures the
+code was fixed against, and 6 `heldout`, never tuned against; the report shows them apart) go through **whole cases on the same runtime** the
 demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
 secure form, signs, countersigns as the attorney and waits for the runtime to go idle between
 steps (`runner.py`).

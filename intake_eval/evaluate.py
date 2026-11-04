@@ -27,6 +27,7 @@ from intake_eval.runner import CaseRun, Veteran, run_case
 from intake_eval.scoring import Score, crashed_score, score_run
 
 RESULTS_DIR = REPO_ROOT / "results"
+SPLITS = ("dev", "heldout")  # agent/personas.py Persona.split
 # Model calls per case, estimated before the first live smoke test (an eligible case: two intake
 # passes, one claims-prep turn, four orchestrator wakes). The smoke test's report has the real counts.
 EST_CALLS = {"orchestrator": 12, "intake": 190, "claims_prep": 20, "support": 2, "kb_search": 1, "simulator": 45}
@@ -101,6 +102,8 @@ def _write(out: Path, run_name: str, conditions: list[str], scores: list[Score],
            max_cost: float | None, stopped: bool) -> None:  # fmt: skip
     summary = {"conditions": conditions, "trials": trials, "max_cost": max_cost, "stopped_at_cost": stopped,
                "by_condition": {c: aggregate([s for s in scores if s.condition == c]) for c in conditions},
+               "by_split": {f"{c}/{sp}": aggregate(sub) for c in conditions for sp in SPLITS
+                            if (sub := [s for s in scores if s.condition == c and s.split == sp])},
                "scores": [s.to_dict() for s in scores]}  # fmt: skip
     (out / "summary.json").write_text(json.dumps(summary, indent=2, default=str))
     (out / "report.md").write_text(render_report(run_name, conditions, scores, trials, stopped))
@@ -169,6 +172,11 @@ def headline_line(cond: str, a: dict[str, Any]) -> str:
 
 
 NOTES = {
+    "split": (
+        "`dev`: the 12 personas the live pilot ran, whose failures the code was then fixed against, so "
+        "these numbers are optimistic. `heldout`: personas never tuned against (baseline_clean was in "
+        "the earliest smoke runs, and some share a mechanism with a dev persona)."
+    ),
     "conditions": (
         "Conditions (L32): `ask_no_probes` = intake without the verification probes and without C-file "
         "prefill; `ask` = with the probes, no prefill; `cfile` = probes, prefill from the C-file and a "
@@ -217,6 +225,15 @@ def render_report(run_name: str, conditions: list[str], scores: list[Score], tri
     if stopped:
         lines.append("\n**Stopped early: the traced cost passed --max-cost.** Later runs are missing.")
     lines += ["", NOTES["conditions"], *_section("Headline: structured questions settled in chat", NOTES["headline"])]
+    by_split = {(c, sp): aggregate(sub) for c in conditions for sp in SPLITS
+                if (sub := [s for s in scores if s.condition == c and s.split == sp])}  # fmt: skip
+    if len({sp for _, sp in by_split}) > 1:
+        lines += _section("By split", NOTES["split"])
+        lines += _table(["Condition", "Split", "Runs", "Scenario pass", "Runs w/ critical errors", "Field acc.",
+                         "Structured questions", "Face-note lines", "Cost / case"],
+                        [[c, sp, a["runs"], _pct(a["scenario_pass_rate"]), f"{a['runs_with_critical_errors']} of {a['runs']}",
+                          _pct(a["field_accuracy"]), _num(a["structured_questions"]), _pct(a["facenote_line_accuracy"]),
+                          f"${_num(a['cost_mean'], 4)}"] for (c, sp), a in by_split.items()])  # fmt: skip
     lines += _table(["Condition", "Structured questions", "n", "Runs w/ critical errors", "Field acc.",
                      "Prefilled (share)", "Clarifications", "Turns to signed 21-22a", "pass^k"],
                     [[c, f"**{_num(a['structured_questions'])}**", f"{a['completed_runs']}/{a['runs']}",

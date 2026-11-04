@@ -446,3 +446,18 @@ def test_the_simulated_veteran_remembers_the_question_it_was_made_to_ask():
     sim.turns = [{"assistant_message": "Did you serve?", "reply": "Yes."}]
     sim.said_instead("Quick question: what is an ITF? Yes.")
     assert sim.turns[-1]["reply"] == "Quick question: what is an ITF? Yes."
+
+
+def test_the_report_shows_dev_and_heldout_apart():
+    from intake_eval.scoring import Score
+
+    def score(pid, split, ok):
+        return Score(persona_id=pid, split=split, condition="cfile", expected_end="attorney_review",
+                     end_state="attorney_review" if ok else "needs_human", scenario_pass=ok, completed=True)  # fmt: skip
+
+    scores = [score("a", "dev", True), score("b", "dev", True), score("c", "heldout", False)]
+    text = evaluate.render_report("r", ["cfile"], scores, trials=1)
+    assert "## By split" in text and "| cfile | dev | 2 | 100% |" in text and "| cfile | heldout | 1 | 0% |" in text
+    one = evaluate.render_report("r", ["cfile"], scores[:2], trials=1)
+    assert "## By split" not in one  # a single split: no extra table
+    assert get_persona("rated_100").split == "heldout" and get_persona("prior_attorney").split == "dev"

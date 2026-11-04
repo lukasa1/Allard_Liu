@@ -100,6 +100,7 @@ class Persona:
     identity: dict[str, str] = field(default_factory=dict)  # dob, ssn, middle_initial
     typed: dict[str, str] = field(default_factory=dict)  # secure-form field -> the wrong value the veteran types
     asks: dict[str, Any] = field(default_factory=dict)  # at_reply (1-based), text: a question put before that reply
+    split: str = "dev"  # dev: used while building (the pilot's 12); heldout: never tuned against
     cfile: dict[str, Any] = field(default_factory=dict)
     poa: dict[str, bool] = field(default_factory=dict)
     during_prep: dict[str, str] = field(default_factory=dict)  # message, condition
@@ -144,6 +145,7 @@ def load_persona(path: Path) -> Persona:
         identity=identity,
         typed={k: str(v) for k, v in (data.get("typed") or {}).items()},
         asks=dict(data.get("asks") or {}),
+        split=str(data.get("split", "dev")),
         cfile=dict(data.get("cfile") or {}),
         poa={
             "authorize_7332_records": True,
