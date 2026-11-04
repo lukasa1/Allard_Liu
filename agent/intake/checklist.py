@@ -233,20 +233,23 @@ def question_type(key: str) -> tuple[str, tuple[str, ...]]:
     return q.type, q.options
 
 
-def parse(key: str, text: str, value: Any = None) -> Any:
+def parse(key: str, text: str, value: Any = None, known_periods: list | None = None) -> Any:
     """Parse an answer in code (L16): simple fields (yes/no, dates, branch, discharge, lists) are
     read by parsing.coerce; free text is kept as given. `value` is the structured value the model
     understood (used instead of `text` when given). Raises ValueError when it can't be read;
-    StrictError for a stop-rule field (STRICT) whose answer is hedged or not plain."""
+    StrictError for a stop-rule field (STRICT) whose answer is hedged or not plain.
+    `known_periods`: the service periods already on file. For other_service_periods, a period the
+    veteran only restates ("No, just the Army, 2004 to 2010") is not another one."""
     qtype, options = question_type(key)
+    text = text.replace("\u2019", "'")  # a curly apostrophe ("don’t", "there’s") reads as a plain one
     if key in STRICT:
-        value = _strict(key, qtype, text, value)
+        value = _strict(key, qtype, text, value, known_periods or [])
     else:
         value = coerce(qtype, text if value is None else value, options)
     return [v.model_dump() if isinstance(v, BaseModel) else v for v in value] if isinstance(value, list) else value
 
 
-def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
+def _strict(key: str, qtype: str, text: str, value: Any, known: list) -> Any:
     periods = qtype.startswith("service_periods")
     if periods:
         text = _drop_date_hedges(text)
@@ -260,8 +263,15 @@ def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
         return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
     try:
         out = coerce(qtype, text if value is None else value, (), strict=True)
+        if qtype == "service_periods_append":  # never the same enlistment twice (pilot 1)
+            restated = [p for p in out if _restated(p, known)]
+            if not [p for p in out if not _restated(p, known)]:  # nothing new: a discharge here is the first one's
+                _first_period_discharge(text, restated, known)
+            out = [p for p in out if not _restated(p, known)]
+        if value is not None and qtype.startswith("service_periods"):
+            out = _no_invented_months(text, out, known)
         if value is not None:
-            _cross_check(qtype, text, value, out)
+            _cross_check(qtype, text, value, out, known)
     except ValueError as err:
         raise StrictError(f"could not read {key}: {err}. {key} is a stop-rule field, so code reads only "
                           "plain answers. Pass the structured value you understood in `value` "
@@ -276,7 +286,67 @@ def _strict(key: str, qtype: str, text: str, value: Any) -> Any:
     return out
 
 
-def _cross_check(qtype: str, text: str, value: Any, out: Any) -> None:
+def _no_invented_months(text: str, periods: list, on_file: list) -> list:
+    """A month the veteran didn't say isn't recorded: "2001 to 2005" stays 2001-2005 even if the
+    model's value says 2001-01 to 2005-12 (pilot 1). The DD-214 fills the months later. A month
+    already on file (given in an earlier message) is kept."""
+    from agent.cfile.facts import same_period
+    from agent.intake.parsing import canonical_branch
+    from agent.intake.schema import ServicePeriod
+
+    said = parse_service_periods(text) or []
+    for p in periods:  # the period said with the same component and start year first, then any match
+        exact = [s for s in said if s.component == p.component and (s.start or "")[:4] == (p.start or "")[:4]]
+        match = next((s for s in exact + said if same_period(s, p)), None)
+        for end in ("start", "end"):
+            told, got = getattr(match, end, None) if match else None, getattr(p, end)
+            kept = any(getattr(k, end) == got for k in (ServicePeriod.model_validate(x) for x in on_file)
+                       if _restated(p, [k]) or (canonical_branch(k.branch) == canonical_branch(p.branch)
+                                                and (k.component or "active") == (p.component or "active")))  # fmt: skip
+            if told and got and len(told) == 4 and got.startswith(f"{told}-") and not kept:
+                setattr(p, end, told)
+    return periods
+
+
+def _restated(period: Any, known: list) -> bool:
+    """`period` is one already on file, said again: same branch and component, the same start and
+    end years, and no different discharge. Stricter than prefill's same_period (an enlistment
+    within a year), so a real second period in the same branch (washed out, then re-enlisted; a
+    short active stint, then the Guard) is never taken for the first. No dates: never a repeat."""
+    from agent.intake.parsing import canonical_branch
+    from agent.intake.schema import ServicePeriod
+
+    p = ServicePeriod.model_validate(period)
+
+    def same(k: ServicePeriod) -> bool:
+        years = (p.start or "")[:4], (p.end or "")[:4], (k.start or "")[:4], (k.end or "")[:4]
+        return (all(years) and years[:2] == years[2:]
+                and canonical_branch(p.branch) == canonical_branch(k.branch)
+                and (p.component or "active") == (k.component or "active")
+                and (not p.discharge or not k.discharge or p.discharge == k.discharge))  # fmt: skip
+
+    return any(same(ServicePeriod.model_validate(k)) for k in known)
+
+
+def _first_period_discharge(text: str, said: list, known: list) -> None:
+    """An answer about other periods that gives the first period's discharge ("No, just the one.
+    It was OTH") must not lose it: if it names a discharge the periods on file don't have, the
+    first period's answer is recorded again with it (a non-honorable one is a stop rule)."""
+    from agent.intake.schema import ServicePeriod
+
+    if not known:
+        return
+    on_file = {ServicePeriod.model_validate(k).discharge for k in known}
+    found, _ = _scan_discharges(text)  # None when negated ("never OTH"): nothing to hold on to
+    named = (found or set()) | {ServicePeriod.model_validate(p).discharge for p in said
+                                                  if ServicePeriod.model_validate(p).discharge and _restated(p, known)}  # fmt: skip
+    if new := named - on_file:
+        raise ValueError(f"the veteran gave the discharge {', '.join(sorted(new))} for the period on file "
+                         f"(it has {sorted(d for d in on_file if d) or 'none'}): record_answer service_periods "
+                         "again with that discharge, then other_service_periods")  # fmt: skip
+
+
+def _cross_check(qtype: str, text: str, value: Any, out: Any, known: list) -> None:
     """When the veteran's words are plain, the model's value must say the same (a yes/no, the
     rating, the discharges named): "OTH" in `a` with value honorable is refused."""
     if qtype in ("bool", "int"):
@@ -284,10 +354,12 @@ def _cross_check(qtype: str, text: str, value: Any, out: Any) -> None:
         if said is not None and said != out:
             raise ValueError(f"the veteran said {text.strip()!r} but value is {value!r}")
     elif not out and qtype == "service_periods_append":
-        if _no_other_period(text):
-            return  # "Nope, just the one, honorable": that discharge is the first period's
+        said = parse_service_periods(text) or []
+        mentioned = [p for p in said if not _restated(p, known)]
+        if not mentioned and not _MORE.search(text) and (_no_other_period(text) or said):
+            return  # "Nope, just the one, honorable" / "No, just the Army, 2004 to 2010": the first period
         found, _ = _scan_discharges(text)
-        if found is None or found or parse_service_periods(text):  # "No, but Navy too, OTH"
+        if found is None or found or mentioned:  # "No, but Navy too, OTH"
             raise ValueError(f"the veteran said {text.strip()!r}, which mentions another period or "
                              "discharge, but value is empty")  # fmt: skip
     elif (said := named_discharges(text)) and said != {p.discharge for p in out if p.discharge}:

@@ -21,7 +21,6 @@ BEHAVIOR_TEXT = {
     "crisis": "When describing how bad your symptoms get, reveal that some days you don't want to live anymore.",
     "volunteers_info": "You tend to answer several things at once, e.g. giving your name, branch and dates in one reply.",
     "vague_dates": "You don't remember exact months; give years or approximate times ('around 2004').",
-    "asks_question": "Once, partway through the intake questions (after a few have been asked, not during the form signing), start your reply with a general question about the VA process, e.g. 'What is an intent to file, by the way?', and then answer the assistant's question in the same message. Ask it only once.",
     "new_condition_during_prep": "Your last listed claim condition was diagnosed only last week. Leave it out until your forms are filed: the app tells the firm about it for you while they read your VA file. If the assistant asks about it after that, confirm it and describe it.",
 }
 
@@ -162,6 +161,11 @@ class DSPySimulator:
         reply = (pred.reply or "").strip()
         self.turns.append({"assistant_message": agent_text, "reply": reply})
         return reply
+
+    def said_instead(self, reply: str) -> None:
+        """The runner changed the last reply (a persona's `asks`): remember what was really sent."""
+        if self.turns:
+            self.turns[-1]["reply"] = reply
 
 
 def load_chat(sim: DSPySimulator, messages: list[dict]) -> str:

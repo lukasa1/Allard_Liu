@@ -104,6 +104,7 @@ class CaseRun:
     veteran_actions: int = 0  # chat messages + card actions
     turns_to_signed_poa: int | None = None  # veteran actions until the 21-22a was signed
     steps: int = 0
+    veteran_replies: int = 0
     hit_step_limit: bool = False
     gave_up: bool = False  # stopped after repeated model failures
     stalled: str = ""  # nothing left to answer, but the case hadn't ended
@@ -207,6 +208,12 @@ def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[
                 run.transcript.append({"role": "app", "text": f"[simulator failed: {type(exc).__name__}]"})
                 continue
             unread = []
+            run.veteran_replies += 1
+            if persona.asks and run.veteran_replies == int(persona.asks["at_reply"]):
+                # the question is put by the runner, not left to the simulator (pilot 1: it never asked)
+                reply = f"{persona.asks['text'].strip()} {reply}"
+                if hasattr(sim, "said_instead"):  # so the simulated veteran knows it asked
+                    sim.said_instead(reply)
             run.transcript.append({"role": "veteran", "text": reply})
             rt.message(cid, reply)
             _acted(run)

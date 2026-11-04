@@ -401,3 +401,48 @@ def test_a_mistyped_secure_form_value_is_what_the_simulated_veteran_types():
     values = secure_form_values(p, ["address.line1", "address.city"])
     assert values == {"address.line1": "1178 Maple Avenue", "address.city": "Kenosha"}
     assert p.truth.street == "1187 Maple Avenue" and "1187 Maple Avenue" in p.behaviors[0]
+
+
+def test_scoring_reads_structured_none_and_year_only_answers_as_the_veteran_meant():
+    """Pilot 1's scoring misses: a structured next of kin, ["none"], "air_force", a year alone."""
+    from agent.intake.schema import ServicePeriod as P
+    from intake_eval.scoring import _as_set, _periods_match, _same
+
+    assert _same("Maria Reyes, mother, 262-555-0177", {"name": "Maria Reyes", "relationship": "mom", "phone": "262-555-0177"})
+    assert _as_set(["none"], "exposures") == set() and _as_set(["None"], "other_conditions") == set()
+    key = [P(branch="air force", component="active", start="2007-01", end="2015-01", discharge="honorable")]
+    assert _periods_match(key, [P(branch="air_force", component="active", start="2007", end="2015", discharge="honorable")])
+    assert not _periods_match(key, [P(branch="air force", component="active", start="2008", end="2015", discharge="honorable")])
+    assert not _periods_match(key, key * 2)
+
+
+def test_the_runner_puts_the_personas_question_before_the_reply_it_names():
+    p = get_persona("asks_question_mid_intake")
+    assert p.asks == {"at_reply": 3, "text": "Quick question first: what is an intent to file?"} and not p.behaviors
+
+
+def test_the_question_is_asked_on_the_named_reply_and_unanswered_is_critical(rt, lm, results):
+    persona = get_persona("asks_question_mid_intake")
+    vet = Veteran(persona, lm, rt, script_eligible(lm, persona.id))
+    _, (s,) = evaluate.run_eval([persona], ["cfile"], lambda d: rt, lambda p: vet, run_name="asks")
+    to_intake = [e.data["text"] for e in rt.store.events(vet.case_id, types=("message",)) if e.data.get("from") == "veteran"]
+    assert to_intake[2].startswith("Quick question first: what is an intent to file?")
+    assert not any(t.startswith("Quick question") for i, t in enumerate(to_intake) if i != 2)
+    assert "the veteran's question was never looked up (no kb_search)" in s.critical_errors  # the script never looks it up
+
+
+def test_a_question_never_reached_is_not_a_critical_error(rt, lm, results, monkeypatch):
+    persona = get_persona("asks_question_mid_intake")
+    monkeypatch.setattr(persona, "asks", {"at_reply": 99, "text": "What is an ITF?"})
+    vet = Veteran(persona, lm, rt, script_eligible(lm, persona.id))
+    _, (s,) = evaluate.run_eval([persona], ["cfile"], lambda d: rt, lambda p: vet, run_name="unreached")
+    assert not [e for e in s.critical_errors if "looked up" in e]
+
+
+def test_the_simulated_veteran_remembers_the_question_it_was_made_to_ask():
+    from intake_eval.simulator import DSPySimulator
+
+    sim = DSPySimulator.__new__(DSPySimulator)
+    sim.turns = [{"assistant_message": "Did you serve?", "reply": "Yes."}]
+    sim.said_instead("Quick question: what is an ITF? Yes.")
+    assert sim.turns[-1]["reply"] == "Quick question: what is an ITF? Yes."

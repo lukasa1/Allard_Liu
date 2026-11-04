@@ -1,7 +1,9 @@
 id: asks_question_mid_intake
-summary: Same as baseline_clean, but partway through intake the veteran asks a general question (what an intent to file is) and answers the pending question in the same message.
+summary: Same as baseline_clean, but partway through intake the veteran asks a general question (what an intent to file is) and answers the pending question in the same message. The question is put by the eval runner (asks), so every run asks it.
 truth: {}
-behaviors: [asks_question]
+asks:
+  at_reply: 3
+  text: "Quick question first: what is an intent to file?"
 expected:
   decision: eligible
   fee_pct: 30

@@ -26,6 +26,7 @@ from agent.casefile import STAGE_NAMES, Answer, CaseFile, DocState, Filing, Task
 from agent.harness import AgentSpec, Turn, conversation
 from agent.ingest import redact_chat, untrusted
 from agent.intake import checklist
+from agent.intake.conditions import is_vague_condition
 from agent.intake.documents import (
     OGC_TASK,
     fee_change_task,
@@ -96,8 +97,11 @@ class RecordArgs(BaseModel):
     value: Any = Field(None, description="the structured value you understood. Required for the stop-rule "
                        "fields: is_veteran / receiving_va_pay / prior_attorney true or false; rating_pct an "
                        "integer; service_periods / other_service_periods a list of {branch, component, start, "
-                       "end, discharge} with discharge one of honorable, general, oth, bad_conduct, "
-                       "dishonorable, uncharacterized, or null. Optional for other fields.")
+                       "end, discharge}: start and end as the veteran said them, YYYY-MM or just YYYY "
+                       "when they gave only the year (never a month they didn't say); discharge one of "
+                       "honorable, general, oth, bad_conduct, dishonorable, uncharacterized, or null. "
+                       "claim_conditions / other_conditions a list of VA-style names (\"tinnitus\", "
+                       "\"sleep apnea\"). Optional for other fields.")
     unknown: bool = Field(False, description="true when the veteran said they don't know or decline to say "
                           "(their words in `a`); never for a question you haven't asked")
 
@@ -108,7 +112,11 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
         return {"saved": False, "error": "unknown needs the veteran's own words saying they don't know or "
                 "won't say. You haven't asked yet: finish and ask the question in `reply`."}  # fmt: skip
     try:
-        value = None if args.unknown else checklist.parse(key, args.a, args.value)
+        # other_service_periods: the first answer only ("other" is what's on top); service_periods: what's on
+        # file, so a month given in an earlier message isn't dropped when `a` has only the year
+        main = turn.case.answers.get("service_periods" if key in ("service_periods", "other_service_periods") else "")
+        known = (main.value or []) if main and not main.unknown else None
+        value = None if args.unknown else checklist.parse(key, args.a, args.value, known_periods=known)
     except checklist.StrictError as err:
         return {"saved": False, "error": str(err)}
     except ValueError as err:
@@ -145,6 +153,12 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
     else:
         left = case.missing(_part(case)) or []
         out["still_missing"] = {"count": len(left), "next": left[:6]}
+    if key in ("claim_conditions", "other_conditions") and value and not args.unknown:
+        vague = [c for c in value if is_vague_condition(c)]
+        if vague:  # "back, ears, and sleep" (pilot 1): ask, don't guess which condition is meant
+            out["check"] = (f"{vague} may not be condition names. Ask the veteran what they mean (e.g. "
+                            "ringing in the ears, or trouble hearing?) and record the list again with "
+                            "VA-style names.")  # fmt: skip
     return out
 
 

@@ -69,6 +69,18 @@ _PHRASES: list[tuple[str, str]] = sorted(
 _FILLER = re.compile(r"^(my|the|a|an|some|really|bad|chronic)\s+", re.IGNORECASE)
 
 
+# Words that name a body part or a function, not a condition: "back, ears, and sleep" (pilot 1).
+# (One in the table, like "back", is already read as its condition.)
+VAGUE = frozenset({"ears", "ear", "eyes", "eye", "sleep", "sleeping", "breathing", "head", "stomach", "gut",
+                   "chest", "heart", "lungs", "skin", "feet", "foot", "legs", "leg", "arms", "arm", "hands",
+                   "hand", "hips", "hip", "joints", "nerves", "mental", "mind", "body", "teeth"})  # fmt: skip
+
+
+def is_vague_condition(name: str) -> bool:
+    """A body part or function given as a condition: ask what it is ("ears": ringing, or hearing?)."""
+    return name.strip().lower() in VAGUE
+
+
 def normalize_condition(text: str) -> str:
     """Return the canonical name for one condition phrase, or the cleaned phrase if unknown."""
     cleaned = re.sub(r"\s+", " ", text.strip().strip(".").lower())

@@ -23,8 +23,8 @@ NON_HONORABLE: frozenset[str] = frozenset({"oth", "bad_conduct", "dishonorable"}
 class ServicePeriod(BaseModel):
     branch: str | None = None  # army | navy | air force | marine corps | coast guard | space force
     component: Component | None = None
-    start: str | None = None  # YYYY-MM
-    end: str | None = None  # YYYY-MM
+    start: str | None = None  # YYYY-MM, or YYYY when only the year was given
+    end: str | None = None  # YYYY-MM, or YYYY
     discharge: Discharge | None = None
 
 

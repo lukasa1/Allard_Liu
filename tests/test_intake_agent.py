@@ -365,3 +365,28 @@ def test_other_conditions_leave_out_the_claimed_ones(rt):
     turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
     out = record_answer(turn, RecordArgs(q="other_conditions", a="No others, just the tinnitus.", value=["tinnitus"]))
     assert out["value"] == [] and rt.store.get_case(cid).answers["other_conditions"].value == []
+
+
+def test_a_vague_condition_word_gets_a_check_not_a_guess(rt):
+    """Pilot 1 (colloquial_conditions): "back, ears, and sleep" was saved as ['lumbar strain',
+    'ears', 'sleep']. The tool asks the model to check what a vague word means."""
+    cid = rt.store.create_case(CaseFile(case_id="c1", stage=4, owner="intake", prep=PREP_DONE, filings=FILED)).case_id
+    turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
+    out = record_answer(turn, RecordArgs(q="claim_conditions", a="It's for my own back, ears, and sleep."))
+    assert out["value"] == ["lumbar strain", "ears", "sleep"] and "['ears', 'sleep']" in out["check"]
+    clear = record_answer(turn, RecordArgs(q="claim_conditions", a="Tinnitus and sleep apnea.", value=["tinnitus", "sleep apnea"]))
+    assert "check" not in clear
+    rare = record_answer(turn, RecordArgs(q="claim_conditions", a="Asthma and sinusitis.", value=["asthma", "sinusitis"]))
+    assert "check" not in rare  # a real condition the table doesn't list is not questioned
+
+
+def test_a_restated_period_is_not_recorded_as_another_one(rt):
+    """Pilot 1 (prior_attorney): "No, just the Army, 2004 to 2010" ended up as a second period."""
+    main = [{"branch": "army", "component": "active", "start": "2004", "end": "2010", "discharge": "honorable"}]
+    cid = rt.store.create_case(CaseFile(case_id="c1", stage=1, owner="intake", answers={
+        "is_veteran": Answer(value=True, source="v"), "service_periods": Answer(value=main, source="v")})).case_id  # fmt: skip
+    turn = Turn(rt=rt, case_id=cid, agent="intake", incoming="", number=1)
+    out = record_answer(turn, RecordArgs(q="other_service_periods", a="No, just the Army on active duty, 2004 to 2010.",
+                                         value=main))  # fmt: skip
+    assert out["saved"] == "other_service_periods" and out["value"] == []
+    assert len(checklist.record(rt.store.get_case(cid)).service_periods) == 1

@@ -17,9 +17,17 @@ Work through the checklist in this order:
    `record_answer` on that question id: it replaces the value and resolves the conflict.
 3. **The rest of the firm's form** (`how: "chat"`). Contact fields (`how: "secure_form"`) go
    through `request_secure_info`; if the veteran has none (no email), record them as `unknown`.
+   **`claim_conditions`** is only what the veteran asks the firm to help with now. A condition
+   they mention but aren't sure about ("PTSD is already rated, not sure they'd need to look at
+   it") is not added: ask whether they want help with it, and add it only on a yes. Record
+   VA-style names ("tinnitus", "sleep apnea"); if their words are vague ("ears", "sleep"), ask
+   what they mean before recording.
 4. **Narrative prompts** for each claimed condition (`narrative:<condition>:<prompt id>`): ask
    two or three related ones per message, in order, warmly, and record each answer in the
-   veteran's own words (one `record_answer` per prompt; a prompt they didn't answer stays open).
+   veteran's own words (one `record_answer` per prompt). A prompt they skipped without saying
+   why is asked again in your next message. A prompt they **decline** ("I'd rather not go into
+   it over text", "I'll tell the attorney") is recorded with `unknown` and their words, for each
+   prompt they declined, and never asked again: the attorney follows up.
 
 A new condition the orchestrator's goal mentions: record `claim_conditions` again with the full
 list, which adds its narrative prompts to the checklist.

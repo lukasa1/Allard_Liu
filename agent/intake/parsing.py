@@ -18,7 +18,8 @@ from .conditions import normalize_condition, normalize_conditions
 from .schema import RatedCondition, ServicePeriod
 
 _UNSURE = re.compile(
-    r"\b(not sure|unsure|don'?t know|do not know|don'?t remember|can'?t remember|no idea|no clue)\b",
+    r"\b(not sure|unsure|don'?t know|do not know|don'?t remember|can'?t remember|no idea|no clue|"
+    r"(don'?t|do not) have (any|an) (idea|clue)|no way (to|i can|i could) (know|remember|tell)|no telling)\b",
     re.IGNORECASE,
 )
 _LEAD_YES = re.compile(r"^\W*(yes|yeah|yep|yup|sure|correct|absolutely)\b", re.IGNORECASE)
@@ -36,9 +37,17 @@ _YES = re.compile(  # "I did" / "I am" only as a whole answer: "I'm confused" is
     re.IGNORECASE,
 )
 _NONE = re.compile(
-    r"^\s*(no|none|nope|nothing|n/a|no other|that'?s (it|all)|not that i know)\b(?!\s+(idea|clue))",
+    r"^\s*(no|none|nope|nothing|n/a|no other|that'?s (it|all)|not that i know"
+    # "I don't have any other conditions I'm dealing with" (pilot 1), "I have no others"
+    r"|i (don'?t|do not) (have|know of) any|i have (no|none)"
+    r"|there(?: are|'s| is) (none|nothing|no (other|more|others)\b))"
+    r"\b(?!\s+(idea|clue))",
     re.IGNORECASE,
 )
+# A list item that only says "none" (the model's value ["none"]): no item at all
+NONE_ITEM = re.compile(r"^\s*(none( of (the above|those|them))?|none known|no|nothing|n/?a|not applicable|no exposures?|"
+                       r"no other conditions?)\s*\.?\s*$",
+                        re.IGNORECASE)  # fmt: skip
 
 _NEGATED_CLAUSE = re.compile(r"\b(don'?t|do not|didn'?t|never|none|not|no)\b", re.IGNORECASE)
 
@@ -54,6 +63,20 @@ _BRANCHES = {
     "army": "army",
     "navy": "navy",
 }
+_BRANCH_ALIASES = {"usaf": "air force", "usmc": "marine corps", "uscg": "coast guard", "usn": "navy",
+                   "us army": "army", "u.s. army": "army", "us navy": "navy"}
+
+
+def canonical_branch(branch: str | None) -> str | None:
+    """One spelling per branch: "Air_Force", "air-force", "USAF" -> "air force" (pilot 1: the
+    model wrote "air_force", the C-file "air force", and prefill took them for two enlistments)."""
+    if not branch:
+        return branch
+    low = re.sub(r"[\s_\-]+", " ", branch.strip().lower())
+    low = re.sub(r"^(u\.?\s?s\.?|united states)\s+", "", low)  # "U.S. Navy", "US Air Force"
+    return _BRANCHES.get(low) or _BRANCH_ALIASES.get(low) or low
+
+
 _BRANCH_RE = re.compile(
     r"\b(" + "|".join(re.escape(w) for w in sorted(_BRANCHES, key=len, reverse=True)) + r")\b",
     re.IGNORECASE,
@@ -153,7 +176,9 @@ _DATE = re.compile(
     r"(?P<mdy>\b\d{1,2}/\d{1,2}/(?:19|20)\d{2}\b)"
     r"|(?P<ym>\b(?:19|20)\d{2}-\d{2}\b)"
     r"|(?P<my>\b\d{1,2}/(?:19|20)\d{2}\b)"
-    r"|(?P<name>\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}\b)"
+    # whole month names only: "Marines 2002" is not March, "Mayport 2002" not May (review)
+    r"|(?P<name>\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|"
+    r"sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:19|20)\d{2}\b)"
     r"|(?P<year>\b(?:19|20)\d{2}\b)"
 )
 
@@ -271,8 +296,9 @@ def parse_service_periods(text: str, strict: bool = False) -> list[ServicePeriod
             ServicePeriod(
                 branch=branch,
                 component=component,
-                start=dates[0][0] + ("-01" if dates[0][1] else ""),  # a bare year: from January
-                end=dates[1][0] + ("-12" if dates[1][1] else ""),  # ... to December
+                # a bare year stays a year: a month nobody said isn't recorded (the DD-214 adds it)
+                start=dates[0][0],
+                end=dates[1][0],
                 discharge=discharge,
             )
         )
@@ -306,18 +332,24 @@ def parse_rated_conditions(text: str) -> list[RatedCondition] | None:
     ]
 
 
+# What follows "besides / except / other than" when it points back, not at a new item
+_BACK_REF = re.compile(r"^\W*(that|those|these|it|them|this|what i (said|told you|mentioned)|the above)\W*$",
+                       re.IGNORECASE)  # fmt: skip
+
+
 def parse_list(text: str) -> list[str] | None:
     """Items of a list answer. "None" is []; "No, but my knees hurt" keeps what follows the "but";
     an answer that is only "I don't know" is None (unreadable, so the brain marks it declined)."""
+    text = text.replace("\u2019", "'")
     if _is_only_unsure(text):  # "No idea, honestly": unreadable, so the brain marks it declined
         return None
     if _NONE.match(text):
-        but = re.search(r"\bbut\b", text, re.IGNORECASE)
+        but = re.search(r"\b(but|except( for)?|besides|other than)\b", text, re.IGNORECASE)
         if not but:
             return []
         text = text[but.end():]
-        if _NEGATED_CLAUSE.search(text):  # "None that I know of, but I don't think any apply": still none
-            return []
+        if _NEGATED_CLAUSE.search(text) or _BACK_REF.match(text):  # "...but I don't think any apply" /
+            return []  # "Nothing besides that": still none
     parts = [p.strip().strip(".") for p in re.split(r",|;|\band\b|\n", text)]
     items = [p for p in parts if p and not _is_only_unsure(p)]
     return items or (None if any(parts) else [])
@@ -383,8 +415,8 @@ def _norm_period(p: Any, strict: bool) -> Any:
     comp = out.get("component")
     if comp:
         out["component"] = _phrase_code(_COMPONENTS, comp) or comp
-    if out.get("branch") in _BRANCHES:
-        out["branch"] = _BRANCHES[out["branch"]]
+    if isinstance(out.get("branch"), str):
+        out["branch"] = canonical_branch(out["branch"])
     dis = out.get("discharge")
     if dis and strict:
         out["discharge"] = strict_discharge(dis)
@@ -436,7 +468,7 @@ def coerce(qtype: str, value: Any, options: tuple[str, ...] = (), strict: bool =
                 text = parsed
             return text
         case "list_str" | "conditions":
-            items = [str(v).strip() for v in value if str(v).strip()]
+            items = [str(v).strip() for v in value if str(v).strip() and not NONE_ITEM.match(str(v))]
             kept = [v for v in items if not _is_only_unsure(v)]
             if items and not kept:
                 raise ValueError("an unsure answer is not a list item")

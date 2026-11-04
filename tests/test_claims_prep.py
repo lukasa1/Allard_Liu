@@ -499,3 +499,21 @@ def test_prefill_takes_the_dd214_month_where_the_veteran_gave_a_year():
     period = case.answers["service_periods"].value[0]
     assert (period["start"], period["end"]) == ("2004-06", "2010-05") and "months: DD-214" in case.answers["service_periods"].source
     assert out["months_from_dd214"] == ["service_periods"]
+
+
+def test_prefill_matches_a_period_whatever_the_branch_spelling():
+    """Pilot 1 (dob_swapped): the veteran's "air_force" and the C-file's "air force" were taken for
+    two enlistments, so pass 2 asked about a second period and recorded the same one twice."""
+    from agent.casefile import CaseFile
+    from agent.claims_prep import prefill
+    from agent.claims_prep.facts import build, load
+
+    said = [{"branch": "air_force", "component": "active", "start": "2007", "end": "2015", "discharge": "honorable"}]
+    case = CaseFile(case_id="c", stage=4, answers={"is_veteran": Answer(value=True, source=VETERAN),
+                    "service_periods": Answer(value=said, source=VETERAN)})  # fmt: skip
+    table = [{**f, "id": f"F{n}"} for n, f in enumerate(truth_batch("dob_swapped"), 1)]
+    cf, cites = build(load(table), {"firm_name": "Law Firm", "first_name": "Attorney", "last_name": "1"})
+    out = prefill.apply(case, ["service_periods"], cf, cites)
+    period = case.answers["service_periods"].value[0]
+    assert (period["start"], period["end"]) == ("2007-01", "2015-01") and not out.get("conflicts")
+    assert not [c for c in case.conflicts if c.question == "other_service_periods"]

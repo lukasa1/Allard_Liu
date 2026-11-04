@@ -55,7 +55,7 @@ def test_a_period_without_a_discharge_stays_on_the_screen_checklist():
     checklist.refresh(case)
     assert case.checklist["screen"] == ["service_periods"] and case.stop is None
     (item,) = checklist.missing(case, "screen")
-    assert "discharge is missing" in item.ask and "army 2004-01 to 2010-12" in item.ask
+    assert "discharge is missing" in item.ask and "army 2004 to 2010" in item.ask
     case.answers["other_service_periods"] = Answer(value=checklist.parse("other_service_periods", "Navy reserve 2012 to 2014"),
                                                    source="chat")  # fmt: skip
     checklist.refresh(case)

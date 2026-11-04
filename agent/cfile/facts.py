@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from agent.intake.parsing import canonical_branch
 from agent.intake.schema import RatedCondition, ServicePeriod
 from agent.personas import Persona
 
@@ -78,7 +79,7 @@ def _year(ym: str | None) -> int | None:
 
 def same_period(a: ServicePeriod, b: ServicePeriod) -> bool:
     """The same enlistment if the branch matches and it starts within a year (people round)."""
-    if (a.branch or "").lower() != (b.branch or "").lower():
+    if (canonical_branch(a.branch) or "") != (canonical_branch(b.branch) or ""):
         return False
     ya, yb = _year(a.start), _year(b.start)
     if ya is None or yb is None:  # a free-text or missing date: can't tell them apart

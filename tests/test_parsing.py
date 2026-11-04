@@ -356,3 +356,144 @@ def test_a_qualified_text_is_not_cross_checked():
 def test_a_negated_but_clause_names_nothing(a, want):
     """Live run 2: "None ..., but I don't think any of those apply" was saved as an exposure."""
     assert parse_list(a) == want
+
+
+# ------------------------------------------------------------------------------ pilot 1
+
+
+def test_branch_spellings_are_one_branch():
+    from agent.cfile.facts import same_period
+    from agent.intake.parsing import canonical_branch
+    from agent.intake.schema import ServicePeriod
+
+    assert {canonical_branch(b) for b in ("air_force", "Air-Force", "USAF", "air force")} == {"air force"}
+    assert same_period(ServicePeriod(branch="air force", start="2007-01"), ServicePeriod(branch="air_force", start="2007"))
+
+
+def test_a_restated_first_period_is_no_other_period_and_never_recorded_twice():
+    from agent.intake import checklist
+
+    main = [{"branch": "army", "component": "active", "start": "2004", "end": "2010", "discharge": "honorable"}]
+    said = "No, just the Army on active duty, 2004 to 2010."
+    assert checklist.parse("other_service_periods", said, [], known_periods=main) == []
+    assert checklist.parse("other_service_periods", said, main, known_periods=main) == []  # the model repeats it
+    with pytest.raises(checklist.StrictError):  # a real second period is still not dropped silently
+        checklist.parse("other_service_periods", "No, but Navy Reserve 2012 to 2015, honorable.", [], known_periods=main)
+    reserve = [{"branch": "navy", "component": "reserve", "start": "2012", "end": "2015", "discharge": "honorable"}]
+    assert checklist.parse("other_service_periods", "Navy Reserve 2012 to 2015, honorable", reserve, known_periods=main) == reserve
+
+
+def test_a_month_the_veteran_never_said_is_not_recorded():
+    from agent.intake import checklist
+
+    invented = [{"branch": "army", "component": "active", "start": "2001-01", "end": "2005-12", "discharge": "honorable"}]
+    got = checklist.parse("service_periods", "Army, active duty, 2001 to 2005, honorable.", invented)
+    assert (got[0]["start"], got[0]["end"]) == ("2001", "2005")
+    said = [{"branch": "army", "component": "active", "start": "2004-06", "end": "2010-05", "discharge": "honorable"}]
+    assert checklist.parse("service_periods", "Army active duty, June 2004 to May 2010, honorable.", said) == said
+    assert checklist.parse("service_periods", "Army, 2004 to 2010, honorable")[0]["start"] == "2004"  # no "2004-01"
+
+
+@pytest.mark.parametrize("text", ["I don't have any other conditions I'm dealing with that I know of.",
+                                  "I have no others.", "There are none.", "Nope."])
+def test_more_ways_of_saying_none(text):
+    from agent.intake import checklist
+
+    assert checklist.parse("other_conditions", text) == []
+
+
+def test_a_none_item_in_the_models_list_is_no_item():
+    from agent.intake import checklist
+
+    assert checklist.parse("exposures", "None of those.", ["none"]) == []
+    assert checklist.parse("exposures", "Burn pits.", ["burn pits", "N/A"]) == ["burn pits"]
+
+
+@pytest.mark.parametrize("text", ["Yes, Navy Reserve after that, discharge was OTH",
+                                  "Yes, I was in the Navy Reserve, other than honorable"])
+def test_a_yes_with_another_discharge_and_no_value_is_still_refused(text):
+    """Review: an empty value must not swallow a second period the veteran names (its stop rule)."""
+    from agent.intake import checklist
+
+    main = [{"branch": "army", "component": "active", "start": "2004", "end": "2010", "discharge": "honorable"}]
+    with pytest.raises(checklist.StrictError):
+        checklist.parse("other_service_periods", text, [], known_periods=main)
+
+
+@pytest.mark.parametrize(("main", "text", "value"), [
+    # washed out, then re-enlisted in the same branch
+    ({"branch": "army", "component": "active", "start": "2004", "end": "2004", "discharge": "uncharacterized"},
+     "Yes, I went back in: Army 2005 to 2010, honorable.",
+     {"branch": "army", "component": "active", "start": "2005", "end": "2010", "discharge": "honorable"}),
+    # a short active stint, then the Guard
+    ({"branch": "army", "component": "active", "start": "2004", "end": "2005", "discharge": "honorable"},
+     "Yes, Army National Guard 2005 to 2011, general.",
+     {"branch": "army", "component": "guard", "start": "2005", "end": "2011", "discharge": "general"}),
+    # the first period has no dates
+    ({"branch": "army", "component": "active", "start": None, "end": None, "discharge": "honorable"},
+     "Army Reserve 2012 to 2015, OTH.",
+     {"branch": "army", "component": "reserve", "start": "2012", "end": "2015", "discharge": "oth"}),
+])  # fmt: skip
+def test_a_real_second_period_in_the_same_branch_is_kept(main, text, value):
+    from agent.intake import checklist
+
+    assert checklist.parse("other_service_periods", text, [value], known_periods=[main]) == [value]
+
+
+@pytest.mark.parametrize("text", ["There's none.", "There's nothing else.", "I don’t have any others."])
+def test_none_with_a_contraction_or_a_curly_apostrophe(text):
+    from agent.intake import checklist
+
+    assert checklist.parse("other_conditions", text) == []
+
+
+def test_an_exception_after_a_none_is_kept():
+    from agent.intake.parsing import parse_list
+
+    assert parse_list("I don't have any other conditions except my knees") == ["my knees"]
+    assert parse_list("There are no others besides PTSD.") == ["PTSD"]
+    assert parse_list("I don't have any idea") is None  # not a "none": unreadable, asked again
+    assert parse_list("Nothing besides that") == [] and parse_list("None other than what I told you") == []
+    assert parse_list("There's no way I can remember") != []  # not a "none"
+
+
+def test_a_month_from_an_earlier_message_is_kept():
+    from agent.intake import checklist
+
+    on_file = [{"branch": "army", "component": "active", "start": "2004-06", "end": "2010-05", "discharge": None}]
+    value = [{**on_file[0], "discharge": "honorable"}]
+    got = checklist.parse("service_periods", "Army 2004 to 2010, honorable.", value, known_periods=on_file)
+    assert (got[0]["start"], got[0]["end"]) == ("2004-06", "2010-05")
+
+
+@pytest.mark.parametrize(("on_file", "text", "value"), [
+    ("honorable", "No, just the one. It was OTH", []),  # the first period's discharge, said here
+    ("honorable", "No. Army only, and it was other than honorable", None),
+    (None, "No, just the Army 2004 to 2010, other than honorable",
+     [{"branch": "army", "component": "active", "start": "2004", "end": "2010", "discharge": "oth"}]),
+])  # fmt: skip
+def test_a_discharge_given_while_answering_other_periods_is_never_lost(on_file, text, value):
+    """Review: a non-honorable discharge for the first period, said in the other-periods answer,
+    must reach service_periods (its stop rule), not vanish with an empty other_service_periods."""
+    from agent.intake import checklist
+
+    main = [{"branch": "army", "component": "active", "start": "2004", "end": "2010", "discharge": on_file}]
+    with pytest.raises(checklist.StrictError, match="record_answer service_periods"):
+        checklist.parse("other_service_periods", text, value, known_periods=main)
+    assert checklist.parse("other_service_periods", "No, just the one, honorable", [],
+                           known_periods=[{**main[0], "discharge": "honorable"}]) == []  # fmt: skip
+
+
+def test_a_branch_name_is_not_read_as_a_month():
+    from agent.intake.parsing import parse_service_periods
+
+    assert [(p.branch, p.start) for p in parse_service_periods("Marines 2002 to 2006, OTH")] == [("marine corps", "2002")]
+    assert parse_service_periods("Navy, Mayport 2002 to 2006")[0].start == "2002"
+    assert parse_service_periods("Army, March 2004 to May 2010, honorable")[0].start == "2004-03"
+
+
+def test_us_branch_prefixes():
+    from agent.intake.parsing import canonical_branch
+
+    assert [canonical_branch(b) for b in ("U.S. Navy", "US Air Force", "United States Marine Corps")] == [
+        "navy", "air force", "marine corps"]  # fmt: skip

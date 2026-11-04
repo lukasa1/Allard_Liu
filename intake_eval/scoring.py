@@ -29,7 +29,8 @@ Cost and latency per agent from the traces (L5, config.PRICES), plus the simulat
 
 A critical error changes what the firm does next: a wrong end state or stop decision, a missed
 service period, a missed prior claim, a wrong fee, a missed crisis escalation, a missed DOB
-mismatch, a 21-22a signed with a value the veteran corrected in chat, claims prep not finishing,
+mismatch, a 21-22a signed with a value the veteran corrected in chat, a veteran's question never
+looked up, claims prep not finishing,
 wrong decision lines on the face note, a new condition the orchestrator never sent back to intake,
 or a run that crashed, stalled, gave up or hit the limit.
 """
@@ -39,6 +40,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
+from itertools import permutations
 from typing import Any
 
 from agent.casefile import CaseFile
@@ -50,6 +52,7 @@ from agent.claims_prep.verify import missing as cite_missing
 from agent.intake import checklist
 from agent.intake.conditions import normalize_condition
 from agent.intake.documents import service
+from agent.intake.parsing import NONE_ITEM, canonical_branch
 from agent.intake.questions import is_visible
 from agent.personas import Persona
 from intake_eval.runner import CaseRun
@@ -156,7 +159,10 @@ def _words(text: str) -> set[str]:
 def _same(expected: Any, actual: Any) -> bool:
     """Free text is right when it says what the key says, in the veteran's own words: two thirds
     of the key's words ("Maria Reyes, mother, 262-555-0177" vs "my mom, Maria Reyes. Her number is
-    262-555-0177."). Anything else must match exactly."""
+    262-555-0177."). A structured answer ({name, relationship, phone}) is read as its values.
+    Anything else must match exactly."""
+    if isinstance(expected, str) and isinstance(actual, dict):
+        actual = ", ".join(str(v) for v in actual.values() if v)
     if isinstance(expected, str) and isinstance(actual, str):
         if _norm(expected) == _norm(actual):
             return True
@@ -166,13 +172,29 @@ def _same(expected: Any, actual: Any) -> bool:
 
 
 def _as_set(values: list[Any], name: str) -> set[str]:
+    values = [v for v in values if not NONE_ITEM.match(str(v))]  # ["none"] is no item
     if name in ("claim_conditions", "other_conditions"):
         return {normalize_condition(str(v)) for v in values}
     return {" ".join(str(v).lower().split()) for v in values}
 
 
 def _period(p: Any) -> str:
-    return str((p.branch, p.component, p.discharge, p.start, p.end))
+    return str((canonical_branch(p.branch), p.component, p.discharge, p.start, p.end))
+
+
+def _periods_match(expected: list[Any], got: list[Any]) -> bool:
+    """The same periods, in order of start. A date given as a year alone ("2004 to 2010") is right
+    when the key's date is in that year: the veteran said what they knew."""
+    def date_ok(want: str | None, have: str | None) -> bool:
+        return want == have or bool(want and have and len(have) == 4 and want.startswith(f"{have}-"))
+
+    def same(e: Any, g: Any) -> bool:
+        return (canonical_branch(e.branch) == canonical_branch(g.branch) and e.component == g.component
+                and e.discharge == g.discharge and date_ok(e.start, g.start) and date_ok(e.end, g.end))  # fmt: skip
+
+    if len(expected) != len(got):
+        return False
+    return any(all(same(e, g) for e, g in zip(expected, perm, strict=True)) for perm in permutations(got))
 
 
 def _due(case: CaseFile, persona: Persona, name: str) -> bool:
@@ -216,7 +238,8 @@ def score_fields(persona: Persona, case: CaseFile) -> list[FieldResult]:
         out.append(FieldResult(name, sorted(exp), sorted(act), status, _source(case, name)))
     if _due(case, persona, "service_periods") and persona.expected_decision != "not_veteran":
         exp, act = sorted(map(_period, truth.service_periods)), sorted(map(_period, got.service_periods))
-        status = "missing" if len(act) < len(exp) else "correct" if exp == act else "wrong"
+        status = ("missing" if len(act) < len(exp)
+                  else "correct" if _periods_match(truth.service_periods, got.service_periods) else "wrong")  # fmt: skip
         out.append(FieldResult("service_periods", exp, act, status, _source(case, "service_periods")))
     return out
 
@@ -362,6 +385,9 @@ def critical_errors(s: Score, run: CaseRun, persona: Persona, case: CaseFile) ->
         left = [k for k, v in persona.typed.items() if _dotted(svc.vault.veteran(), k) == v]
         if poa and poa.status != "draft" and left:
             out.append(f"signed the 21-22a with the uncorrected {', '.join(left)}")
+    asked = persona.asks and run.veteran_replies >= int(persona.asks["at_reply"])
+    if asked and s.kb_calls == 0:  # the veteran's question wasn't looked up (D14: no answer beyond the KB)
+        out.append("the veteran's question was never looked up (no kb_search)")
     if s.flag_decision_correct is False:
         out.append(f"flag decision: expected {s.flag_decision_expected}, got {s.flag_decisions or 'no flag'}")
     return out
