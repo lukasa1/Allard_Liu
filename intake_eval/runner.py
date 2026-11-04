@@ -26,6 +26,7 @@ from typing import Any, Protocol
 
 from PIL import Image, ImageDraw
 
+from agent import clock
 from agent.casefile import CaseFile, EvalCondition
 from agent.claims_prep.agent import spec as claims_prep_spec
 from agent.harness import CANNED_REPLY
@@ -137,15 +138,26 @@ def finished(case: CaseFile) -> bool:
 
 def run_case(persona: Persona, condition: EvalCondition, make_rt: Callable[[], Runtime], sim: Veteran,
              max_cost: float | None = None, spent: float = 0.0) -> CaseRun:  # fmt: skip
-    """`max_cost`: stop when `spent` (earlier runs) plus this run's trace cost passes it."""
-    rt = make_rt()
-    case = rt.open_case(persona.id, eval_condition=condition)
-    run = CaseRun(persona.id, condition, rt, case.case_id, sim=sim)
-    try:
-        _drive(run, persona, sim, lambda: max_cost is not None and spent + run.cost() > max_cost)
-    except Exception as exc:  # noqa: BLE001 - keep the partial transcript; scored as a crash
-        run.error = traceback.format_exc()
-        run.transcript.append({"role": "app", "text": f"[run crashed: {type(exc).__name__}: {exc}]"})
+    """`max_cost`: stop when `spent` (earlier runs) plus this run's trace cost passes it. The case
+    runs on the pinned clock and seeded IDs (agent/clock.py), so a rerun on the same code sends the
+    same prompts and DSPy's cache answers it."""
+    with clock.pinned(f"{persona.id}|{condition}"):
+        rt = make_rt()
+        case = rt.open_case(persona.id, eval_condition=condition)
+        run = CaseRun(persona.id, condition, rt, case.case_id, sim=sim)
+        try:
+            _drive(run, persona, sim, lambda: max_cost is not None and spent + run.cost() > max_cost)
+        except Exception as exc:  # noqa: BLE001 - keep the partial transcript; scored as a crash
+            run.error = traceback.format_exc()
+            run.transcript.append({"role": "app", "text": f"[run crashed: {type(exc).__name__}: {exc}]"})
+        # Let a last background turn (claims prep) finish while the clock is still pinned, so it
+        # can't draw the next case's IDs; never lose the run to it.
+        try:  # after a failure (perhaps a hang already waited out), only a short wait
+            rt.wait_until_idle(case.case_id, timeout=60 if run.error else idle_timeout_s())
+        except Exception as exc:  # noqa: BLE001 - a turn crashed or hung after the last step
+            if not run.error:
+                run.error = traceback.format_exc()
+                run.transcript.append({"role": "app", "text": f"[run crashed: {type(exc).__name__}: {exc}]"})
     return run
 
 
@@ -222,11 +234,12 @@ def _use_card(run: CaseRun, persona: Persona, card: dict) -> None:
             documents.save_signature(rt, cid, signature_png())
             note = "[veteran draws and saves a signature]"
         else:
-            if not documents.sign_card_open(rt, cid, card["form"]):  # the demo's check: newest card, live draft
+            shown = (card["document_id"], card["version"])
+            if not documents.sign_card_open(rt, cid, card["form"], shown):  # the demo's check
                 run.transcript.append({"role": "app", "text": f"[Sign card for an old {card['form']} draft ignored]"})
                 return
             documents.sign(rt, cid, card["form"], consent_text=card["consent_text"], ip="127.0.0.1",
-                           user_agent="eval simulator")  # fmt: skip
+                           user_agent="eval simulator", shown=shown)  # fmt: skip
             note = f"[veteran clicks Sign on the {card['form']}]"
     except (ValueError, WorkflowError) as err:  # e.g. a secure form that was already submitted
         run.transcript.append({"role": "app", "text": f"[{kind} card no longer valid: {err}]"})

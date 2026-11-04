@@ -10,15 +10,13 @@ click handler, which records the user's own intent, and `countersign()` from the
 """
 
 import json
-import secrets
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import date
 from pathlib import Path
 
 from poa_skill import fee_agreement
 from poa_skill import form_21_22a as form
-from poa_skill.documents import Document, DocumentStore, now_iso, sha256
+from poa_skill.documents import CLOCK, Document, DocumentStore, now_iso, sha256, today_iso
 from poa_skill.vault import DEFAULT_DATA_DIR, FIELDS, Vault
 
 REP_CONFIG = Path(__file__).resolve().parent.parent / "config" / "representative.json"
@@ -106,7 +104,7 @@ class PoaService:
         if unknown:
             raise WorkflowError(f"unknown fields: {unknown}; allowed: {sorted(FIELDS)}")
         req = {
-            "id": "req_" + secrets.token_hex(6),
+            "id": "req_" + CLOCK["token_hex"](6),
             "fields": fields,
             "purpose": purpose,
             "status": "pending",
@@ -261,18 +259,22 @@ class PoaService:
             return False, "the secure-form data changed after this draft was filled: refresh the draft first"
         return True, "ready"
 
-    def sign(self, doc_id: str, *, consent_text: str, ip: str, user_agent: str) -> Document:
-        """HOST-ONLY. Called from the user's click on Sign, never from an agent tool."""
+    def sign(self, doc_id: str, *, consent_text: str, ip: str, user_agent: str,
+             expected_version: int | None = None) -> Document:
+        """HOST-ONLY. Called from the user's click on Sign, never from an agent tool.
+        `expected_version`: the version the signer was shown; checked again just before stamping."""
         ok, why = self.ready_to_sign(doc_id)
         if not ok:
             raise WorkflowError(why)
         doc = self.docs.get(doc_id)
+        if expected_version is not None and doc.version != expected_version:
+            raise WorkflowError("this draft changed after the signer was shown it: show the new version")
         kind = kind_of(doc)
         if consent_text != kind.consent:
             raise WorkflowError("the signer must be shown the current e-sign consent")
         draft = self.docs.pdf(doc_id)
         signature = self.vault.signature()
-        signed = kind.sign(draft, signature, date.today().isoformat())
+        signed = kind.sign(draft, signature, today_iso())
         doc.status = "signed"
         doc.signed_at = now_iso()
         doc.updated_at = doc.signed_at
@@ -297,7 +299,7 @@ class PoaService:
         if doc is None or doc.status != "signed":
             raise WorkflowError(f"only a signed document can be countersigned ({doc.status if doc else 'none'})")
         signed = self.docs.pdf(doc_id)
-        stamped = kind_of(doc).countersign(signed, attorney, date.today().isoformat())
+        stamped = kind_of(doc).countersign(signed, attorney, today_iso())
         doc.status, doc.version = "countersigned", doc.version + 1
         doc.countersigned_at = doc.updated_at = now_iso()
         doc.countersign_audit = {

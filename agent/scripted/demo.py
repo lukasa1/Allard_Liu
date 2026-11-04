@@ -87,7 +87,7 @@ def story() -> Story:
     turn(
         "intake",
         call("get_signature", form="21-22a"),
-        final(reply="Please draw your signature below."),
+        final(reply="Please sign below: draw it, or choose Type and type your name."),
     )
     turn(
         "intake",

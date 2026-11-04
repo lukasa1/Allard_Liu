@@ -3,8 +3,7 @@ truth: claims prep's script in the tests and in the scripted demo."""
 
 from __future__ import annotations
 
-from datetime import date
-
+from agent import clock
 from agent.cfile import vbms
 from agent.cfile.facts import truth_facts
 from agent.claims_prep.prefill import QUESTIONS
@@ -20,7 +19,7 @@ def firm() -> str:
 
 def the_cfile(persona: str) -> vbms.CFile:
     """The C-file claims prep will pull: the firm's own 21-22a is filed today."""
-    return vbms.pull(persona, (firm(), date.today().isoformat()))
+    return vbms.pull(persona, (firm(), clock.today().isoformat()))
 
 
 def cite(doc: vbms.Document, last: bool = False) -> dict:
@@ -64,7 +63,7 @@ def truth_batch(persona: str) -> list[dict]:
         name, kind, signed = (
             (rep.name, rep.kind, rep.signed)
             if rep
-            else (firm(), "attorney", date.today().isoformat())
+            else (firm(), "attorney", clock.today().isoformat())
         )
         out.append(
             {

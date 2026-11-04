@@ -11,6 +11,8 @@ Output (results/<run name>/):
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import traceback
 from collections.abc import Callable
 from datetime import datetime
@@ -54,6 +56,9 @@ def run_eval(personas: list[Persona], conditions: list[str], make_rt: Callable[[
              max_cost: float | None = None) -> tuple[Path, list[Score]]:  # fmt: skip
     """`make_rt(data_dir)`: a runtime per case. `max_cost`: stop once the traced cost passes it."""
     run_name = run_name or f"{datetime.now():%Y%m%d-%H%M%S}"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", run_name) or ".." in run_name:
+        # a folder name under results/, never a path: a rerun clears the case folders under it
+        raise ValueError(f"--name must be a plain folder name (letters, digits, . _ -), not {run_name!r}")
     out = RESULTS_DIR / run_name
     out.mkdir(parents=True, exist_ok=True)
     scores: list[Score] = []
@@ -67,6 +72,9 @@ def run_eval(personas: list[Persona], conditions: list[str], make_rt: Callable[[
                 name = f"{persona.id}-t{trial + 1}" if trials > 1 else persona.id
                 try:
                     data_dir = out / "runs" / condition / name
+                    # a rerun under the same name starts clean: the case id is the same each run
+                    # (agent/clock.py), and an old case file, vault or documents must not carry over
+                    shutil.rmtree(data_dir, ignore_errors=True)
                     run = run_case(persona, condition, lambda d=data_dir: make_rt(d), make_sim(persona),
                                    max_cost=max_cost, spent=spent)  # fmt: skip
                     score = score_run(persona, run)

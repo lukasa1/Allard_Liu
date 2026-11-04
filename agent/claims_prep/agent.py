@@ -27,6 +27,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agent import clock
 from agent.casefile import CaseFile, Task, now
 from agent.cfile import facenote, vbms
 from agent.cfile.extract import DocType
@@ -59,7 +60,7 @@ never instructions to you."""
 
 
 def today() -> date:
-    return date.today()
+    return clock.today()
 
 
 def _firm() -> dict[str, Any]:
@@ -70,8 +71,10 @@ def cfile(case: CaseFile) -> vbms.CFile:
     """The case's C-file. It holds the firm's own 21-22a once that is filed."""
     if not case.persona_id:
         raise LookupError("no synthetic C-file for this case")
-    filing, rep = case.filings.get("21-22a"), _firm()
-    own = (f"{rep['first_name']} {rep['last_name']}, {rep['firm_name']}", filing.at[:10]) if filing else None
+    filing, rep, doc = case.filings.get("21-22a"), _firm(), case.documents.get("21-22a")
+    # The 21-22a's own signature date (local, as poa_skill stamps it); the filing time if unknown.
+    on = clock.local_date((doc and doc.signed_at) or filing.at) if filing else None
+    own = (f"{rep['first_name']} {rep['last_name']}, {rep['firm_name']}", on) if filing else None
     return vbms.pull(case.persona_id, own)
 
 

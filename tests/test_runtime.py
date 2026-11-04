@@ -271,3 +271,107 @@ def test_an_owner_turn_with_no_reply_is_nudged_once_then_canned(rt, lm):
     rt.message(cid, "Army, 2004 to 2010.")
     rt.wait_until_idle()
     assert messages(rt, cid)[-1] == ("intake", CANNED_REPLY)
+
+
+def test_a_retried_turns_repeated_card_shows_once_where_it_last_came():
+    from agent.runtime import _last_of_each
+
+    sign, preview = {"type": "sign_button", "document_id": "d", "version": 1}, {"type": "document_preview", "v": 2}
+    assert _last_of_each([sign, preview, sign]) == [preview, sign]  # the Sign card stays the newest
+    assert _last_of_each([preview, preview]) == [preview]
+
+
+def test_the_pinned_clock_stands_still_and_hands_back_the_live_one():
+    from datetime import UTC, datetime
+
+    import pytest
+
+    from agent import clock
+    from poa_skill import documents as poa_documents
+
+    with clock.pinned("a"):
+        first = (clock.now_iso(), clock.now_iso(), poa_documents.now_iso(), clock.token_hex(6))
+        with pytest.raises(RuntimeError), clock.pinned("b"):  # one case at a time
+            pass
+    with clock.pinned("a"):
+        again = (clock.now_iso(), clock.now_iso(), poa_documents.now_iso(), clock.token_hex(6))
+    assert first == again and first[0] == first[1] == clock.PINNED_START.isoformat()
+    assert not clock.is_pinned() and abs((clock.now() - datetime.now(UTC)).total_seconds()) < 5
+    assert poa_documents.CLOCK == poa_documents.LIVE_CLOCK and clock.token_hex(6) != first[3]
+
+
+def test_nothing_reads_the_wall_clock_or_random_ids_past_agent_clock():
+    """Every timestamp, date and random id in a prompt must come from agent/clock.py (or poa_skill's
+    CLOCK), or an eval rerun stops matching the cache. The DOB range check is the one exception."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    allowed = {"agent/clock.py", "poa_skill/documents.py"}
+    pattern = re.compile(r"date\.today\(\)|datetime\.now\(|datetime\.utcnow\(|uuid\.uuid4|secrets\.(token_|choice)|random\.")
+    found = []
+    for path in [*root.glob("agent/**/*.py"), *root.glob("poa_skill/**/*.py"), *root.glob("intake_eval/**/*.py")]:
+        rel = path.relative_to(root).as_posix()
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            if rel not in allowed and pattern.search(line):
+                found.append(f"{rel}:{n}: {line.strip()}")
+    exceptions = ("run_name = run_name or", "<= d <= date.today()")  # the results folder name; the DOB check
+    assert [f for f in found if not any(e in f for e in exceptions)] == []
+
+
+def test_a_reply_held_by_a_crisis_holds_the_turns_cards_too(rt, lm):
+    """The rule's crisis message stays the last word: a secure-form card the interrupted turn made
+    is not shown after it (D3)."""
+    from conftest import VETERAN
+    from intake_fixtures import SCREEN_STEPS
+
+    cid = opened(rt, lm)
+    gate = threading.Event()
+    lm.turn("intake", *SCREEN_STEPS, call("request_secure_info", fields=list(VETERAN), purpose="For the 21-22a."),
+            pause(gate), final(reply="Please fill in the secure form."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, "Yes, Army 2004 to 2010, honorable. Never filed. No lawyer.")
+    # the turn has run the secure-form tool and waits at the gate (its 1 + 6 + 1 + 1st prompt)
+    until(lambda: len(lm.prompts("intake")) == 1 + len(SCREEN_STEPS) + 2)
+    rt.message(cid, "Honestly I just want to kill myself.")
+    gate.set()
+    rt.wait_until_idle()
+    out = rt.updates(cid)
+    assert (out[-1].kind, out[-1].payload["text"]) == ("message", CRISIS_MESSAGE)
+    assert not [o for o in out if o.kind == "card"]
+    assert [[c["type"] for c in e.data["cards"]] for e in events(rt, cid, "cards_held")] == [["secure_form"]]
+
+
+@pytest.mark.parametrize("ending", ["no reply", "unusable output", "crash"])
+def test_a_silent_failed_or_crashed_turn_after_a_crisis_holds_its_cards(rt, lm, monkeypatch, ending):
+    """Held by the same rule as a reply, however the turn ended."""
+    from conftest import VETERAN
+    from intake_fixtures import SCREEN_STEPS
+
+    cid = opened(rt, lm)
+    gate = threading.Event()
+    last = {"no reply": [final(reply="")], "unusable output": [bad(), bad()], "crash": [final(reply="Hi")]}[ending]
+    lm.turn("intake", *SCREEN_STEPS, call("request_secure_info", fields=list(VETERAN), purpose="For the 21-22a."),
+            pause(gate), *last)  # fmt: skip
+    lm.turn("orchestrator", final())
+    if ending == "crash":
+        run = rt.harness.run
+
+        def crashing(spec, turn):
+            out = run(spec, turn)
+            if turn.cards:
+                raise RuntimeError("boom")
+            return out
+
+        monkeypatch.setattr(rt.harness, "run", crashing)
+    rt.message(cid, "Yes, Army 2004 to 2010, honorable. Never filed. No lawyer.")
+    until(lambda: len(lm.prompts("intake")) == 1 + len(SCREEN_STEPS) + 2)
+    rt.message(cid, "Honestly I just want to kill myself.")
+    gate.set()
+    if ending == "crash":
+        with pytest.raises(RuntimeError):
+            rt.wait_until_idle()
+    rt.wait_until_idle()
+    out = rt.updates(cid)
+    assert CRISIS_MESSAGE in [o.payload.get("text") for o in out] and not [o for o in out if o.kind == "card"]
+    assert [[c["type"] for c in e.data["cards"]] for e in events(rt, cid, "cards_held")] == [["secure_form"]]

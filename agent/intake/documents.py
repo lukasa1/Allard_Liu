@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date, timedelta
 
+from agent import clock
 from agent.casefile import Answer, CaseFile, DocState, Task
 from agent.intake.checklist import VAULT_FIELD, fee_pct
 from poa_skill.service import FORMS, PoaService, kind_of, load_representative
@@ -42,22 +43,31 @@ def masked_answers(svc: PoaService, stored: list[str], source: str) -> Callable[
     return apply
 
 
-def refresh_drafts(rt, case_id: str, svc: PoaService) -> list[str]:
+def refresh_drafts(rt, case_id: str, svc: PoaService, post=None) -> list[str]:
     """Re-render the unsigned drafts the vault change made stale; each gets a new preview card
-    (so a Sign card shown before is no longer the newest: the veteran reviews the change first)."""
+    (so a Sign card shown before is no longer the newest: the veteran reviews the change first).
+    `post`: an agent turn's card list (posted after its reply); by default, posted now."""
     changed = svc.refresh_drafts()
     for doc in changed:
-        rt.post_card(case_id, "intake", preview_card(svc, doc))
+        card = preview_card(svc, doc)
+        post(card) if post else rt.post_card(case_id, "intake", card)
     return [kind_of(d).key for d in changed]
 
 
-def sign_card_open(rt, case_id: str, form: str) -> bool:
+def sign_card_open(rt, case_id: str, form: str, shown: tuple[str, int] | None = None) -> bool:
     """The form's newest card is a Sign card for its current draft (a preview after it, from
     update_draft or a secure-form correction, means the veteran must review the change first)."""
     cards = [o.payload for o in rt.updates(case_id) if o.kind == "card"
              and o.payload.get("form") == form and o.payload["type"] in ("sign_button", "document_preview")]  # fmt: skip
     live = service(rt, case_id).live(form)
-    return bool(cards and live) and cards[-1]["type"] == "sign_button" and cards[-1]["document_id"] == live.id
+    # The version too: update_draft edits a draft in place (same id, new version), and its new preview
+    # card is posted after the turn's reply, so until then the old Sign card is still the newest.
+    # `shown`: the (document_id, version) of the card the veteran clicked, which must be that newest
+    # card: a Sign card for a newer version can arrive with its preview just before a click on the old one.
+    newest = cards[-1] if cards else {}
+    on_card = (newest.get("document_id"), newest.get("version"))
+    return bool(live) and newest.get("type") == "sign_button" and on_card == (live.id, live.version) \
+        and (shown is None or tuple(shown) == on_card)
 
 
 def signed_change_task(svc: PoaService, before: dict, keys: list[str], how: str) -> Task | None:
@@ -122,16 +132,21 @@ def save_signature(rt, case_id: str, data_uri: str) -> None:
     rt.event(case_id, "signature_saved", {}, actor="veteran")
 
 
-def sign(rt, case_id: str, form: str, consent_text: str, ip: str = "", user_agent: str = "") -> None:
-    """The veteran clicked Sign on `form`'s Sign card (the only way a document is signed)."""
+def sign(rt, case_id: str, form: str, consent_text: str, ip: str = "", user_agent: str = "",
+         shown: tuple[str, int] | None = None) -> None:
+    """The veteran clicked Sign on `form`'s Sign card (the only way a document is signed). `shown`:
+    the (document_id, version) on that card; the draft must still be exactly that one."""
     svc = service(rt, case_id)
     doc = svc.live(form)
     if doc is None:
         raise ValueError(f"no {form} to sign")
+    if shown is not None and (doc.id, doc.version) != tuple(shown):
+        raise ValueError("the document changed after this Sign button was shown: review the new version")
     if form == "fee_agreement" and doc.terms.get("fee_pct") != fee_pct(rt.store.get_case(case_id)):
         raise ValueError("the fee terms changed since this draft was shown (prior representation was "
                          "re-recorded): the fee agreement must be prepared again")  # fmt: skip
-    doc = svc.sign(doc.id, consent_text=consent_text, ip=ip, user_agent=user_agent)
+    doc = svc.sign(doc.id, consent_text=consent_text, ip=ip, user_agent=user_agent,
+                   expected_version=shown[1] if shown is not None else None)
 
     def apply(case: CaseFile) -> None:
         case.documents[form] = DocState(document_id=doc.id, signed_at=doc.signed_at)
@@ -152,7 +167,7 @@ def countersign(rt, case_id: str, by: str) -> None:
         for f, d in done.items():
             state = case.documents.setdefault(f, DocState(document_id=d.id, signed_at=d.signed_at))
             state.countersigned_at, state.countersigned_by = d.countersigned_at, by
-        due = date.fromisoformat(done["fee_agreement"].signed_at[:10]) + timedelta(days=OGC_DAYS)
+        due = date.fromisoformat(clock.local_date(done["fee_agreement"].signed_at)) + timedelta(days=OGC_DAYS)
         if "fee_agreement" not in case.filings:
             case.tasks.append(Task(kind="deadline", text=OGC_TASK, due=due.isoformat()))
 

@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
+from agent import clock
 from agent.cfile.facts import CfileFacts, Decision
 
 THIN = "-" * 44
@@ -126,7 +127,7 @@ def render(
     firm: str = "Law Firm",
     as_of: date | None = None,
 ) -> FaceNote:
-    as_of = as_of or date.today()
+    as_of = as_of or clock.today()
     today = as_of.isoformat()
     flags: list[str] = []
 

@@ -30,13 +30,13 @@ from __future__ import annotations
 
 import re
 import tempfile
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from agent import clock
 from agent.casefile import Answer, CaseFile, DocState, Filing, PrepState, StopRule
 from agent.harness import Harness
 from agent.ingest import CRISIS_MESSAGE
@@ -127,7 +127,12 @@ def _changed(before: dict, after: dict, allowed: set[str]) -> list[str]:
 
 
 def score_one(rt: SupportOnly, m: dict[str, Any]) -> SupportScore:
-    cid = rt.store.create_case(base_case(m["phase"], uuid.uuid4().hex[:12])).case_id
+    with clock.pinned(f"support|{m['phase']}|{m['text']}"):  # repeatable prompts, so a rerun is answered from the cache
+        return _score_one(rt, m)
+
+
+def _score_one(rt: SupportOnly, m: dict[str, Any]) -> SupportScore:
+    cid = rt.store.create_case(base_case(m["phase"], clock.token_hex(6))).case_id
     before = rt.store.get_case(cid).model_dump(mode="json")
     rt.message(cid, m["text"])
     rt.wait_until_idle(cid, timeout=180)

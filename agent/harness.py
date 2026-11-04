@@ -75,6 +75,7 @@ class Turn:
     owner_at_start: bool = False
     kind: str = "event"  # the Job kind; a "message" turn's incoming is the veteran's words
     deferred: list[Job] = field(default_factory=list)  # queued after the turn ends
+    cards: list[dict] = field(default_factory=list)  # posted after the turn's reply, so the chat reads in order
     handoff: str | None = None  # orchestrator: the one handoff of this wake
     acted: bool = False  # orchestrator: a handoff, move or staff task went through this wake
     flags_shown: list[int] = field(default_factory=list)  # orchestrator: flags its context listed

@@ -26,15 +26,15 @@ re-derives the stage (agent.stages.settle).
 from __future__ import annotations
 
 import dataclasses
+import json
 import threading
-import uuid
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent import stages
+from agent import clock, stages
 from agent.casefile import CaseFile, EvalCondition, Flag, SubagentResult, Task
 from agent.harness import CANNED_REPLY, OWNING, AgentSpec, Harness, Turn, TurnOutcome
 from agent.ingest import (
@@ -84,7 +84,7 @@ class Runtime:
     # ---------------------------------------------------------------- ways in
 
     def open_case(self, persona_id: str | None = None, eval_condition: EvalCondition = "cfile") -> CaseFile:
-        case = self.store.create_case(CaseFile(case_id=uuid.uuid4().hex[:12], persona_id=persona_id,
+        case = self.store.create_case(CaseFile(case_id=clock.token_hex(6), persona_id=persona_id,
                                                eval_condition=eval_condition))  # fmt: skip
         self._wake(case.case_id, self.store.append_event(case.case_id, "case_opened", {}, actor="host"))
         return case
@@ -328,9 +328,12 @@ class Runtime:
         text = f"[event] {job.incoming}" if (job.kind, job.agent) == ("event", "intake") else job.incoming
         turn = Turn(self, case_id, job.agent, text, self._turns[key], owner_at_start=case.owner == job.agent,
                     kind=job.kind)  # fmt: skip
-        outcome = self.harness.run(spec, turn)
-        if outcome.reply:
-            self._deliver(case_id, turn.agent, outcome.reply, job.to_person, turn.owner_at_start)
+        try:
+            outcome = self.harness.run(spec, turn)
+            if outcome.reply:
+                self._deliver(case_id, turn.agent, outcome.reply, job.to_person, turn.owner_at_start)
+        finally:  # the cards its tools made follow the reply that introduces them (even if it crashed)
+            self._post_cards(case_id, turn, job.to_person)
         after: list[Job] = []
         if job.agent == "orchestrator":
             self._after_wake(case_id, turn, outcome)
@@ -340,24 +343,48 @@ class Runtime:
             deferred.front = True
         return list(reversed(turn.deferred)) + after
 
+    def _held(self, case_id: str, agent: str, to_person: int, owner_at_start: bool) -> str | None:
+        """D3: why what a turn says now must not reach the veteran, or None. A turn that started
+        before a person took over (a crisis, a request for a person), or that lost the case
+        meanwhile, is not heard: the rule's message is the last word. Neither is the
+        orchestrator on a case a rule parked."""
+        case = self.store.get_case(case_id)
+        with self._cond:
+            ruled = self._to_person_count.get(case_id, 0)
+        if ruled != to_person:
+            return "the case went to a person by rule"
+        if agent == "orchestrator" and case.parked and ruled:
+            return f"the case is {case.side_state} after a hand-off to a person by rule"
+        if owner_at_start and case.owner != agent and case.stop is None:
+            return f"{agent} lost the case during the turn ({case.side_state or 'no owner'})"
+        return None
+
     def _deliver(self, case_id: str, agent: str, reply: str, to_person: int, owner_at_start: bool = False) -> None:
-        """D3: a reply to a message queued before a person took over (a crisis, a request for a
-        person), or written after the case was taken from the agent, is not sent: the rule's
-        message is the last word. So is the orchestrator's reply on a case a rule parked."""
+        """A turn's reply, unless it is held (D3, `_held`)."""
         with self._say_lock:
-            case = self.store.get_case(case_id)
-            with self._cond:
-                ruled = self._to_person_count.get(case_id, 0)
-            why = "the case went to a person by rule" if ruled != to_person else None
-            if why is None and agent == "orchestrator" and case.parked and ruled:
-                why = f"the case is {case.side_state} after a hand-off to a person by rule"
-            if why is None and owner_at_start and case.owner != agent and case.stop is None:
-                why = f"{agent} lost the case during the turn ({case.side_state or 'no owner'})"
+            why = self._held(case_id, agent, to_person, owner_at_start)
             if why:
                 self.store.append_event(case_id, "reply_held", {"agent": agent, "reason": why, "text": reply},
                                         actor=agent)  # fmt: skip
             else:
                 self.say(case_id, agent, reply)
+
+    def _post_cards(self, case_id: str, turn: Turn, to_person: int) -> None:
+        """The cards a turn's tools made, after its reply. A repeat (a retried attempt, harness L4,
+        repeats its tool calls) shows once, where it last came, so the newest card stays the
+        newest. Held by the same rule as the reply (D3), whether the turn replied, said nothing or
+        crashed: the rule's message stays the last word. Held cards are kept in the event."""
+        cards = _last_of_each(turn.cards)
+        if not cards:
+            return
+        with self._say_lock:
+            why = self._held(case_id, turn.agent, to_person, turn.owner_at_start)
+            if why:
+                self.store.append_event(case_id, "cards_held", {"agent": turn.agent, "reason": why, "cards": cards},
+                                        actor=turn.agent)  # fmt: skip
+            else:
+                for card in cards:
+                    self.post_card(case_id, turn.agent, card)
 
     def _after_wake(self, case_id: str, turn: Turn, outcome: TurnOutcome) -> None:
         def handled(case: CaseFile) -> None:
@@ -418,6 +445,12 @@ class Runtime:
         if outcome.reply:
             self.patch(case_id, lambda c: setattr(c, "awaiting_veteran", True), actor=spec.name)
         return []
+
+
+def _last_of_each(cards: list[dict]) -> list[dict]:
+    """The cards in order, an exact repeat kept only where it last appears."""
+    keys = [json.dumps(c, sort_keys=True) for c in cards]
+    return [c for i, c in enumerate(cards) if keys[i] not in keys[i + 1:]]
 
 
 def make_runtime(data_dir: Path, lm, kb: QATool | None = None) -> Runtime:

@@ -336,3 +336,59 @@ def test_free_text_fields_score_by_what_they_say():
     assert _same("a friend", "I heard about you guys from a friend.")
     assert not _same("Maria Reyes, mother, 262-555-0177", "John Smith, brother, 414-555-0100")
     assert not _same("single", "married") and not _same(True, False)
+
+
+def test_a_rerun_of_a_case_sends_the_same_prompts(tmp_path, results):
+    """The pinned clock and seeded IDs (agent/clock.py): two runs of one case ask the model exactly
+    the same things, so DSPy's cache answers a rerun. A random id or a live timestamp in any prompt
+    fails this."""
+    from agent.runtime import make_runtime
+    from agent.scripted.kb import FaqKB
+    from agent.scripted.lm import ScriptedLM
+
+    def prompts(d):
+        lm = ScriptedLM()
+        rt = make_runtime(d, lm, kb=FaqKB())
+        persona = get_persona("baseline_clean")
+        vet = Veteran(persona, lm, rt, script_eligible(lm, persona.id))
+        evaluate.run_eval([persona], ["cfile"], lambda _: rt, lambda p: vet, run_name=d.name)
+        return [(s.agent, s.system, s.user) for s in lm.seen]
+
+    first, second = prompts(tmp_path / "a"), prompts(tmp_path / "b")
+    assert len(first) > 50 and first == second
+
+
+def test_an_eval_rerun_under_the_same_name_starts_each_case_clean(results):
+    """The case id is the same each run (agent/clock.py), so a rerun under the same --name must not
+    find the last run's case file, vault or documents in the case's data folder."""
+    from agent.runtime import make_runtime
+    from agent.scripted.kb import FaqKB
+    from agent.scripted.lm import ScriptedLM
+
+    persona = get_persona("baseline_clean")
+    for _ in range(2):
+        lm, holder = ScriptedLM(), {}
+
+        def make_rt(d, lm=lm, holder=holder):
+            holder["rt"] = make_runtime(d, lm, kb=FaqKB())
+            holder["vet"] = Veteran(persona, lm, holder["rt"], script_eligible(lm, persona.id))
+            return holder["rt"]
+
+        _, (s,) = evaluate.run_eval([persona], ["cfile"], make_rt, lambda p, h=holder: Lazy(h), run_name="same")
+        assert (s.end_state, s.completed, s.critical_errors) == ("attorney_review", True, [])
+
+
+class Lazy:
+    """The simulated veteran, built with the runtime (make_rt runs first, inside run_case)."""
+
+    def __init__(self, holder):
+        self.h = holder
+
+    def __getattr__(self, name):
+        return getattr(self.h["vet"], name)
+
+
+@pytest.mark.parametrize("name", ["/tmp/x", "../up", "a/b", ".hidden"])
+def test_an_eval_name_must_be_a_plain_folder_name(results, name):
+    with pytest.raises(ValueError, match="plain folder name"):
+        evaluate.run_eval([], ["cfile"], lambda d: None, lambda p: None, run_name=name)

@@ -16,13 +16,12 @@ rules run on every answer (checklist.stop_rule).
 from __future__ import annotations
 
 import json
-import secrets
-import string
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from agent import clock
 from agent.casefile import STAGE_NAMES, Answer, CaseFile, DocState, Filing, Task, now
 from agent.harness import AgentSpec, Turn, conversation
 from agent.ingest import redact_chat, untrusted
@@ -84,7 +83,7 @@ def _part(case: CaseFile) -> str:
 
 
 def _post(turn: Turn, card: dict) -> None:
-    turn.rt.post_card(turn.case_id, "intake", card)
+    turn.cards.append(card)  # the runtime posts it after this turn's reply
 
 
 # ------------------------------------------------------------------------------ memory
@@ -238,7 +237,7 @@ def update_draft(turn: Turn, args: DraftArgs) -> dict:
 
     turn.rt.patch(turn.case_id, apply, "intake")
     _post(turn, preview_card(svc, doc))
-    others = refresh_drafts(turn.rt, turn.case_id, svc)  # the other form's draft shows the change too
+    others = refresh_drafts(turn.rt, turn.case_id, svc, post=turn.cards.append)  # the other form's draft too
     return {**svc.describe(doc), "also_refreshed": others,
             "note": "The preview is updated. Ask the veteran to check it again."}  # fmt: skip
 
@@ -250,7 +249,7 @@ def get_signature(turn: Turn, args: FormArgs) -> dict:
         return {"error": f"no unsigned {args.form} draft" + ("" if doc else ": call fill_pdf first")}
     if not svc.vault.has_signature():
         _post(turn, {"type": "signature_pad"})
-        return {"status": "signature pad open", "note": "Wait for the veteran to draw and save a "
+        return {"status": "signature pad open", "note": "Wait for the veteran to draw or type, and save, a "
                 "signature, then call get_signature again."}  # fmt: skip
     if args.form == "fee_agreement" and doc.terms.get("fee_pct") != checklist.fee_pct(turn.case):
         return {"ready": False, "reason": "the fee terms changed since the draft (prior representation was "
@@ -258,7 +257,7 @@ def get_signature(turn: Turn, args: FormArgs) -> dict:
     ok, why = svc.ready_to_sign(doc.id)
     if not ok:
         return {"ready": False, "reason": why}
-    _post(turn, {"type": "sign_button", "form": args.form, "document_id": doc.id,
+    _post(turn, {"type": "sign_button", "form": args.form, "document_id": doc.id, "version": doc.version,
                  "consent_text": FORMS[args.form].consent})  # fmt: skip
     return {"ready": True, "note": "The Sign card is showing. Only the veteran's click signs. Wait."}
 
@@ -277,14 +276,14 @@ class FaxArgs(BaseModel):
 def _letters(n: int = 10) -> str:
     """A simulated confirmation code of letters only, so the trace scrubber (which masks a run of
     7+ digits) never hides part of it."""
-    return "".join(secrets.choice(string.ascii_uppercase) for _ in range(n))
+    return clock.letters(n)
 
 
 def submit_va(turn: Turn, args: SubmitArgs) -> dict:
     """Simulated filing with VA (L21): a fake confirmation number; the ITF date for the ITF."""
     data = {}
     if args.form == "itf":
-        today = date.today()
+        today = clock.today()
         data = {"itf_date": today.isoformat(), "expires": (today + timedelta(days=365)).isoformat()}
     filing = Filing(confirmation=f"VA-{_letters()}", data=data)
     case = turn.rt.patch(turn.case_id, lambda c: c.filings.__setitem__(args.form, filing), "intake")

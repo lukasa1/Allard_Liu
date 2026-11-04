@@ -245,16 +245,20 @@ read-only support alongside.
 
 `uv run intake serve` (needs the key), then http://localhost:8000:
 
-**No key:** `uv run intake serve --scripted` (D26) plays one case, Hector Alvarez (`recent_decision`),
-with no model. Press **Tab** to take the line the input box suggests and **Enter** to send it, submit
-the secure form (its test values are filled in), sign, and countersign as the cards appear. The
-agents follow the script, so typing something else won't change their answers; the box then
-suggests nothing rather than a line that no longer fits. One case at a time: Start case starts the story over.
+**One test veteran:** the demo, live or scripted, currently plays one persona, Hector Alvarez
+(`recent_decision`). The other 16 personas run in the eval (`intake simulate`, `intake eval`).
 
-1. Pick a synthetic **test veteran** (its synthetic C-file is what claims prep pulls) and press
-   **Start case**. The left side is the **veteran's screen** (the chat and its cards, documents
-   shown in the card); above it, **You are playing…** lists who you play (the same facts and
-   condition stories the eval's simulated veteran plays from), and the secure form is filled in
+**No key:** `uv run intake serve --scripted` (D26) plays the same case with no model. Press **Tab**
+to take the line the input box suggests and **Enter** to send it, submit the secure form (its test
+values are filled in), sign (draw, or choose Type for your name in a script font), and countersign
+as the cards appear. The agents follow the script, so typing something else won't change their
+answers; the box then suggests nothing rather than a line that no longer fits. One case at a time:
+Start case starts the story over.
+
+1. Press **Start case** (the test veteran's synthetic C-file is what claims prep pulls). The left
+   side is the **veteran's screen** (the chat and its cards, documents shown in the card); above
+   it, **You are playing…** lists who you play (the same facts and condition stories the eval's
+   simulated veteran plays from), and the secure form is filled in
    with them. The right side is the **firm's, internal**: Attorney (countersign, the documents),
    Case, Answers, Face note, Event log. You type as the veteran; whenever the agents are idle the
    input box suggests a reply in grey (the eval's simulated veteran writes it from the chat so far,
@@ -307,6 +311,21 @@ message), so the step that crosses it finishes first. A model slug with no price
 `agent/config.py` would count as $0, so `--max-cost` is refused for it, and without `--max-cost`
 the command warns. Output: `results/<name>/report.md`, `summary.json`, transcripts and each case's
 traces.
+
+**Reruns come from the cache.** Each case (and each support message) runs on a pinned clock and
+seeded IDs (`agent/clock.py`): every timestamp is the same fixed instant (2026-11-03 17:00 UTC,
+not the wall clock), and case ids, document ids and confirmation codes come from a generator
+seeded with the case's name (dates are local, so a machine whose local date at 17:00 UTC is not
+11-03, e.g. at UTC+8, gets its own cache entries). A rerun on the same code then sends the model the same prompts and
+DSPy's response cache (`~/.dspy_cache`) answers them: no cost, and minutes instead of an hour.
+After a change, only the calls from the first prompt it alters are paid. kb_search (OpenRouter's
+web search, called directly, not through DSPy) keeps its answers in the same cache while pinned,
+since its answer is part of the agent's next prompt; the live demo always searches. A rerun can
+still differ where wall time matters (a turn's time limit; the message `new_condition_during_prep`
+sends while claims prep runs), and the run goes on from there, paid. So `intake simulate` and
+`intake eval` replay a case they have run before: for fresh samples set `DSPY_CACHE=0`, or use
+`--trials` > 1 (pass^k), which turns the cache off. `tests/test_eval.py` checks that two runs of a
+case send identical prompts; `tests/test_runtime.py` that nothing else reads the wall clock.
 
 ## Tests
 

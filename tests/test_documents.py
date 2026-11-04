@@ -106,7 +106,8 @@ def test_a_secure_form_correction_refreshes_the_draft_and_voids_the_sign_card(rt
     svc.save_signature(signature_uri)
     doc = svc.prepare(CONSENTS)
     rt.post_card(cid, "intake", preview_card(svc, doc))
-    rt.post_card(cid, "intake", {"type": "sign_button", "form": "21-22a", "document_id": doc.id, "consent_text": "x"})
+    rt.post_card(cid, "intake", {"type": "sign_button", "form": "21-22a", "document_id": doc.id, "version": doc.version,
+                                  "consent_text": "x"})  # fmt: skip
     assert documents.sign_card_open(rt, cid, "21-22a")
 
     req = svc.create_capture_request(["address.city"], "Your new city.")
@@ -126,6 +127,44 @@ def test_a_secure_form_correction_refreshes_the_draft_and_voids_the_sign_card(rt
         svc.sign(doc.id, consent_text="x", ip="", user_agent="")
 
 
+def test_a_sign_card_for_an_older_version_of_the_draft_is_void(rt, signature_uri):
+    """update_draft edits the draft in place (same id, new version) and its new preview card waits
+    for the turn's reply: until it is posted, the old Sign card must not sign the edited draft."""
+    cid = rt.store.create_case(screened()).case_id
+    svc = documents.service(rt, cid)
+    svc.vault.put(VETERAN)
+    svc.save_signature(signature_uri)
+    doc = svc.prepare(CONSENTS)
+    rt.post_card(cid, "intake", {"type": "sign_button", "form": "21-22a", "document_id": doc.id, "version": doc.version,
+                                  "consent_text": "x"})  # fmt: skip
+    assert documents.sign_card_open(rt, cid, "21-22a")
+    edited = svc.edit(doc.id, {"address.city": "Waukesha"}, actor="intake")  # no new card yet
+    assert edited.id == doc.id and edited.version == doc.version + 1
+    assert not documents.sign_card_open(rt, cid, "21-22a")
+
+
+def test_a_click_on_an_old_sign_card_does_not_sign_the_newer_version(rt, signature_uri):
+    """One turn edits the draft and shows a new Sign card; the veteran clicks the old one before the
+    page has drawn the new cards. The click names the version it was shown: refused."""
+    cid = rt.store.create_case(screened()).case_id
+    svc = documents.service(rt, cid)
+    svc.vault.put(VETERAN)
+    svc.save_signature(signature_uri)
+    doc = svc.prepare(CONSENTS)
+    old = (doc.id, doc.version)
+    edited = svc.edit(doc.id, {"address.city": "Waukesha"}, actor="intake")
+    rt.post_card(cid, "intake", preview_card(svc, edited))
+    rt.post_card(cid, "intake", {"type": "sign_button", "form": "21-22a", "document_id": edited.id,
+                                  "version": edited.version, "consent_text": "x"})  # fmt: skip
+    assert not documents.sign_card_open(rt, cid, "21-22a", old)
+    assert documents.sign_card_open(rt, cid, "21-22a", (edited.id, edited.version))
+    with pytest.raises(ValueError, match="changed after this Sign button"):
+        documents.sign(rt, cid, "21-22a", FORMS["21-22a"].consent, shown=old)
+    with pytest.raises(WorkflowError, match="changed after the signer"):  # the last check, at stamping
+        svc.sign(doc.id, consent_text=FORMS["21-22a"].consent, ip="", user_agent="", expected_version=old[1])
+    assert svc.live("21-22a").status == "draft"
+
+
 def test_the_demo_refuses_a_sign_click_after_a_newer_preview(rt, signature_uri):
     from demo.app import app, get_runtime
 
@@ -134,11 +173,13 @@ def test_the_demo_refuses_a_sign_click_after_a_newer_preview(rt, signature_uri):
     svc.vault.put(VETERAN)
     svc.save_signature(signature_uri)
     doc = svc.prepare(CONSENTS)
-    rt.post_card(cid, "intake", {"type": "sign_button", "form": "21-22a", "document_id": doc.id, "consent_text": "x"})
+    rt.post_card(cid, "intake", {"type": "sign_button", "form": "21-22a", "document_id": doc.id, "version": doc.version,
+                                  "consent_text": "x"})  # fmt: skip
     rt.post_card(cid, "intake", preview_card(svc, svc.edit(doc.id, {"address.city": "Waukesha"}, actor="intake")))
     app.dependency_overrides[get_runtime] = lambda: rt
     try:
-        r = TestClient(app).post(f"/api/cases/{cid}/sign/21-22a", json={"consent_text": "x"})
+        r = TestClient(app).post(f"/api/cases/{cid}/sign/21-22a", json={"consent_text": "x", "document_id": doc.id,
+                                                                         "version": doc.version})  # fmt: skip
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 409 and svc.live("21-22a").status == "draft"

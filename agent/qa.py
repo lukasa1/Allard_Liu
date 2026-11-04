@@ -12,6 +12,7 @@ answer with no official source is not given either. Tests use a fixed FAQ stand-
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import re
 from collections.abc import Callable
@@ -84,16 +85,33 @@ class WebSearchQA:
     def __call__(self, question: str) -> QAResult:
         if _NEEDS_PERSON.search(question):
             return QAResult(text="", handoff=True)
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+        # Pinned (an eval case, agent/clock.py): the same question gets the answer it got before.
+        # The answer goes into the agent's next prompt, so a fresh search that found other pages
+        # would make every later prompt differ and miss the model cache. Live: always searched.
+        key = self._cache_key(question) if _cache_on() else None
+        if key is not None and (hit := _cache().get(key)) is not None:
+            return dataclasses.replace(hit, usage={})  # from the cache: no cost
+        result = self._search(question)
+        if key is not None:
+            _cache().put(key, result)
+        return result
+
+    def _cache_key(self, question: str) -> dict:
+        # The whole request: any change to it (prompt, model, domains, plugin settings) asks afresh.
+        # A handoff ("no official source") is kept too, so a rerun repeats it.
+        return {"kb_search": self._request(question)}
+
+    def _request(self, question: str) -> dict:
+        return {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": QA_SYSTEM},
                 {"role": "user", "content": question},
             ],
-            max_tokens=2000,
+            "max_tokens": 2000,
             # engine pinned to Exa: unset, OpenRouter uses OpenAI's native search for openai/*
             # models (different price, domain filtering not guaranteed).
-            extra_body={
+            "extra_body": {
                 "plugins": [
                     {
                         "id": "web",
@@ -103,7 +121,10 @@ class WebSearchQA:
                     }
                 ]
             },
-        )
+        }
+
+    def _search(self, question: str) -> QAResult:
+        resp = self.client.chat.completions.create(**self._request(question))
         usage = _usage(resp)
         msg = resp.choices[0].message
         text = (msg.content or "").strip()
@@ -117,6 +138,19 @@ class WebSearchQA:
         if not sources:  # an answer we can't attribute to an official page isn't given
             return QAResult(text="", handoff=True, usage=usage)
         return QAResult(text=text, sources=sources[:2], usage=usage)
+
+
+def _cache_on() -> bool:
+    from agent import clock
+
+    return clock.is_pinned() and os.environ.get("DSPY_CACHE", "1") != "0"
+
+
+def _cache():
+    """DSPy's response cache (~/.dspy_cache), shared with the model calls."""
+    import dspy
+
+    return dspy.cache
 
 
 def _usage(resp) -> dict:

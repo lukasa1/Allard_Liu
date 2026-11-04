@@ -164,6 +164,37 @@ def test_web_search_qa_restricts_domains_and_requires_official_sources():
     assert WebSearchQA(client=FakeOpenRouter("HANDOFF", []), model="m")("q?").handoff
 
 
+def test_web_search_answers_are_reused_only_on_the_pinned_clock(monkeypatch):
+    """An eval case (pinned, agent/clock.py) gets the same answer for the same question, at no
+    cost, so the agent's next prompt repeats and the model cache holds; the live demo always searches."""
+    from agent import clock, qa
+
+    class Store(dict):
+        def get(self, key):
+            return super().get(repr(key))
+
+        def put(self, key, value):
+            self[repr(key)] = value
+
+    store = Store()
+    monkeypatch.setattr(qa, "_cache", lambda: store)
+    monkeypatch.setenv("DSPY_CACHE", "1")  # conftest turns it off for every other test
+    calls = []
+    client = FakeOpenRouter(usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, cost=0.01))
+    client.create = lambda f=client.create, **kw: calls.append(1) or f(**kw)
+    kb = WebSearchQA(client=client, model="m")
+    kb("What is an intent to file?"), kb("What is an intent to file?")
+    assert len(calls) == 2  # live: searched both times
+    with clock.pinned("case"):
+        first, again = kb("What is an intent to file?"), kb("What is an intent to file?")
+        kb("How long does a review take?")
+    assert len(calls) == 4 and again.text == first.text and first.usage["cost"] == 0.01 and again.usage == {}
+    monkeypatch.setenv("DSPY_CACHE", "0")  # --trials > 1: fresh samples
+    with clock.pinned("case"):
+        kb("What is an intent to file?")
+    assert len(calls) == 5
+
+
 @pytest.mark.parametrize("text", [
     "Will I win my case?", "How much do I owe VA?", "Do I owe VA money for an overpayment?",
     "I have a VA debt, what do I do?",
@@ -185,3 +216,19 @@ def test_web_qa_records_usage():
         "What is a supplemental claim?")  # fmt: skip
     assert r.usage == {"prompt_tokens": 120, "completion_tokens": 40, "cost": 0.0123}
     assert r.sources == ["https://www.va.gov/disability/"]
+
+
+def test_a_cached_web_search_answer_round_trips_through_dspys_disk_cache(tmp_path, monkeypatch):
+    from dspy.clients.cache import Cache
+
+    from agent import clock, qa
+
+    real = Cache(enable_disk_cache=True, enable_memory_cache=False, disk_cache_dir=str(tmp_path), disk_size_limit_bytes=10**7)
+    monkeypatch.setattr(qa, "_cache", lambda: real)
+    monkeypatch.setenv("DSPY_CACHE", "1")
+    client = FakeOpenRouter(usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, cost=0.01))
+    with clock.pinned("case"):
+        first = WebSearchQA(client=client, model="m")("What is an intent to file?")
+        client.create = lambda **kw: pytest.fail("searched again")
+        again = WebSearchQA(client=client, model="m")("What is an intent to file?")
+    assert (again.text, again.sources, again.usage) == (first.text, first.sources, {})

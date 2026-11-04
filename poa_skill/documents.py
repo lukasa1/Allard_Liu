@@ -17,9 +17,19 @@ from cryptography.fernet import Fernet
 
 from poa_skill.vault import DEFAULT_DATA_DIR, load_key
 
+# The clock and the ID source. A host that needs repeatable runs replaces them (the agent's eval
+# pins them: agent/clock.py); otherwise the real clock and random IDs.
+LIVE_CLOCK = {"now": lambda: datetime.now(UTC), "token_hex": secrets.token_hex}
+CLOCK = dict(LIVE_CLOCK)
+
 
 def now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return CLOCK["now"]().isoformat(timespec="seconds")
+
+
+def today_iso() -> str:
+    """Today's local date: the date a signature carries."""
+    return CLOCK["now"]().astimezone().date().isoformat()
 
 
 def sha256(b: bytes) -> str:
@@ -57,7 +67,7 @@ class DocumentStore:
 
     # ── records ────────────────────────────────────────────────────────────────────────────
     def new_id(self) -> str:
-        return "doc_" + secrets.token_hex(6)
+        return "doc_" + CLOCK["token_hex"](6)
 
     def save(self, doc: Document, pdf: bytes) -> None:
         self.dir.mkdir(parents=True, exist_ok=True)

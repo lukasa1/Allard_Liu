@@ -8,8 +8,8 @@ It needs OPENROUTER_API_KEY (D7). Without the key the page still loads and says 
 case endpoint answers 503 with the same message. `intake serve --scripted` (D26) needs no key:
 it plays one scripted case (agent/scripted/demo.py) on the same runtime with no model.
 
-Pick a synthetic test veteran (its synthetic C-file is what claims prep pulls) and chat as the
-veteran. Agents reach the page only through the outbox, which the page polls
+The demo plays one synthetic test veteran, live or scripted: Hector Alvarez (recent_decision; its
+synthetic C-file is what claims prep pulls). Chat as the veteran. Agents reach the page only through the outbox, which the page polls
 (GET /api/cases/<id>/updates?since=<seq>), so a reply from a background turn (the orchestrator's
 wake, claims prep's return, pass 2's first question) shows up without the veteran typing.
 
@@ -35,8 +35,11 @@ from agent import config
 from agent.casefile import STAGE_NAMES, CaseFile
 from agent.ingest import redact_chat
 from agent.intake import documents
-from agent.personas import get_persona, load_personas
+from agent.personas import get_persona
 from agent.runtime import Runtime, make_runtime
+from agent.scripted.demo import (
+    PERSONA as DEMO_PERSONA,  # the one test veteran the demo plays, live or scripted
+)
 from poa_skill.service import FORMS, WorkflowError
 
 config.load_env()
@@ -111,14 +114,10 @@ def index():
 
 @app.get("/api/config")
 def get_config(rt: MaybeRuntime):
-    personas = load_personas()
     out = {"ready": rt is not None, "message": None if rt else NO_KEY, "attorney": documents.attorney_name(),
            "scripted": scripted()}  # fmt: skip
-    if scripted():
-        from agent.scripted import demo
-
-        personas = [p for p in personas if p.id == demo.PERSONA]
-    out["personas"] = [{"id": p.id, "name": p.display_name, "summary": p.summary} for p in personas]
+    p = get_persona(DEMO_PERSONA)
+    out["personas"] = [{"id": p.id, "name": p.display_name, "summary": p.summary}]
     return out
 
 
@@ -128,13 +127,11 @@ class NewCase(BaseModel):
 
 @app.post("/api/cases")
 def new_case(body: NewCase, rt: Live):
-    if body.persona_id not in {p.id for p in load_personas()}:
-        raise HTTPException(404, f"unknown test veteran {body.persona_id!r}")
+    if body.persona_id != DEMO_PERSONA:
+        raise HTTPException(404, f"the demo plays {DEMO_PERSONA!r} only")
     if scripted():  # one case at a time: a new case starts the story over
         from agent.scripted import demo
 
-        if body.persona_id != demo.PERSONA:
-            raise HTTPException(404, f"the scripted demo plays {demo.PERSONA!r} only")
         rt.wait_until_idle()
         demo.story().load(rt.harness.lm)
     return {"case_id": rt.open_case(body.persona_id).case_id}
@@ -256,6 +253,8 @@ def signature(case_id: str, body: Signature, rt: Live):
 
 class SignClick(BaseModel):
     consent_text: str
+    document_id: str  # from the Sign card that was clicked
+    version: int
 
 
 @app.post("/api/cases/{case_id}/sign/{form}")
@@ -263,11 +262,12 @@ def sign(case_id: str, form: str, body: SignClick, request: Request, rt: Live):
     if form not in FORMS:
         raise HTTPException(404, f"no form {form!r}")
     _active(_case(rt, case_id))
-    if not documents.sign_card_open(rt, case_id, form):
+    shown = (body.document_id, body.version)
+    if not documents.sign_card_open(rt, case_id, form, shown):
         raise HTTPException(409, "This Sign button is no longer valid: the document changed after it was shown.")
     try:
         documents.sign(rt, case_id, form, body.consent_text, ip=request.client.host if request.client else "",
-                       user_agent=request.headers.get("user-agent", ""))  # fmt: skip
+                       user_agent=request.headers.get("user-agent", ""), shown=shown)  # fmt: skip
     except (WorkflowError, ValueError) as e:
         raise HTTPException(400, str(e)) from e
     return {"signed": form}

@@ -9,11 +9,11 @@ each agent's recent conversation is read from it (L3). The SSN is never here.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from agent import clock
 from agent.ingest import untrusted
 
 Agent = Literal["orchestrator", "intake", "claims_prep", "support"]
@@ -37,7 +37,7 @@ STAGE_NAMES = {
 
 
 def now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return clock.now_iso()
 
 
 class Answer(BaseModel):

@@ -11,16 +11,18 @@ from fastapi.testclient import TestClient
 from helpers import events, until
 from intake_fixtures import SCREEN_STEPS, prefill_pass2
 
+import demo.app as demo_app
 from agent.intake import checklist
 from agent.scripted.lm import call, final, pause
 from agent.scripted.prep import prep_steps
 from demo.app import app, get_runtime
 
-PERSONA = "baseline_clean"
+PERSONA = "baseline_clean"  # the flow tests below are written for this one; the fixture lets the demo play it
 
 
 @pytest.fixture
-def client(rt):
+def client(rt, monkeypatch):
+    monkeypatch.setattr(demo_app, "DEMO_PERSONA", PERSONA)
     app.dependency_overrides[get_runtime] = lambda: rt
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -81,20 +83,22 @@ def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
 
     lm.turn("intake", call("get_signature", form="21-22a"), final(reply="Please draw your signature."))
     d.say("Yes, it's right.")
+    shown = [(o["kind"], o["payload"].get("text") or o["payload"]["type"]) for o in d.poll()[-2:]]
+    assert shown == [("message", "Please draw your signature."), ("card", "signature_pad")]  # the reply, then its card
     lm.turn("intake", call("get_signature", form="21-22a"), final(reply="Click Sign when you're ready."))
     d.post("/signature", {"data_uri": "data:image/png;base64,AAAA"}, status=400)
     d.post("/signature", {"data_uri": signature_uri})
     poa = d.card("sign_button")
     lm.turn("intake", call("fill_pdf", form="fee_agreement", fields={}),
             final(reply="Here's the fee agreement: 30% of past-due benefits, only if you win. Do you agree?"))  # fmt: skip
-    d.post("/sign/21-22a", {"consent_text": poa["consent_text"]})
+    d.post("/sign/21-22a", {k: poa[k] for k in ("consent_text", "document_id", "version")})
     assert d.card("document_preview")["form"] == "fee_agreement"
-    d.post("/sign/fee_agreement", {"consent_text": "x"}, status=409)  # no Sign card for it yet
+    d.post("/sign/fee_agreement", {"consent_text": "x", "document_id": "x", "version": 1}, status=409)  # no Sign card yet
 
     lm.turn("intake", call("get_signature", form="fee_agreement"), final(reply="Click Sign to sign it."))
     d.say("Yes, I agree.")
     lm.turn("intake", final(reply="Our attorney is reviewing both documents now."))
-    d.post("/sign/fee_agreement", {"consent_text": d.card("sign_button")["consent_text"]})
+    d.post("/sign/fee_agreement", {k: d.card("sign_button")[k] for k in ("consent_text", "document_id", "version")})
     p = d.panel()
     assert (p["stage"], p["owner"], p["side_state"], p["can_countersign"]) == (2, "intake", "waiting_on_attorney", True)
     assert {f: x["status"] for f, x in p["documents"].items()} == {"21-22a": "signed", "fee_agreement": "signed"}
@@ -176,6 +180,7 @@ def test_an_ssn_typed_in_chat_is_hidden_before_it_is_shown_or_routed(client, rt,
 
 def test_unknown_cases_and_personas_are_refused(client):
     assert client.post("/api/cases", json={"persona_id": "nobody"}).status_code == 404
+    assert client.post("/api/cases", json={"persona_id": "recent_decision"}).status_code == 404  # not the demo's
     assert client.get("/api/cases/nope").status_code == 404
     assert client.post("/api/cases/nope/countersign").status_code == 404
 
@@ -194,7 +199,6 @@ def test_with_no_key_the_page_loads_and_says_to_set_it():
 def test_autoplay_suggests_the_simulated_veterans_next_reply(client, rt, lm, monkeypatch):
     from dspy.utils.dummies import DummyLM
 
-    import demo.app as demo_app
 
     sim_lm = DummyLM([{"reply": "Yes, Army, 2004 to 2010."}])
     sim_lm.copy = lambda **kw: sim_lm  # keep its history readable here
@@ -253,9 +257,9 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     ) == {"errors": {}}
     next_line()
     d.post("/signature", {"data_uri": signature_uri})
-    d.post("/sign/21-22a", {"consent_text": d.card("sign_button")["consent_text"]})
+    d.post("/sign/21-22a", {k: d.card("sign_button")[k] for k in ("consent_text", "document_id", "version")})
     next_line()
-    d.post("/sign/fee_agreement", {"consent_text": d.card("sign_button")["consent_text"]})
+    d.post("/sign/fee_agreement", {k: d.card("sign_button")[k] for k in ("consent_text", "document_id", "version")})
     d.post("/countersign")
     for _ in demo.PASS2_LINES:
         next_line()
@@ -272,8 +276,9 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     app_module._scripted_runtime.cache_clear()
 
 
-def test_the_character_tab_shows_who_the_presenter_plays(client, rt, lm):
+def test_the_character_tab_shows_who_the_presenter_plays(client, rt, lm, monkeypatch):
     """The presenter sees the persona's facts and stories (what the simulated veteran plays from)."""
+    monkeypatch.setattr(demo_app, "DEMO_PERSONA", "recent_decision")  # the demo's own veteran
     lm.turn("orchestrator", call("run_intake", goal="Pass 1."), final(reply="Welcome!"))
     lm.turn("intake", final(reply="Did you serve?"))
     cid = client.post("/api/cases", json={"persona_id": "recent_decision"}).json()["case_id"]
@@ -305,3 +310,14 @@ def test_a_scripted_suggestion_follows_the_last_reply_not_a_count(monkeypatch, t
     rt.store.append_event(cid, "message", {"from": "veteran", "to": "intake", "text": "hm"}, actor="veteran")
     assert d.post("/suggest") == {"text": ""}  # the veteran spoke last: nothing to answer yet
     app_module._scripted_runtime.cache_clear()
+
+
+def test_the_live_demo_plays_the_scripted_demos_veteran_only(rt):
+    """Live and scripted, the page offers one test veteran: Hector Alvarez (recent_decision)."""
+    app.dependency_overrides[get_runtime] = lambda: rt
+    try:
+        c = TestClient(app)
+        assert [p["id"] for p in c.get("/api/config").json()["personas"]] == ["recent_decision"]
+        assert c.post("/api/cases", json={"persona_id": "baseline_clean"}).status_code == 404
+    finally:
+        app.dependency_overrides.clear()

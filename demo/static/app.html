@@ -5,20 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VA Claims Agent</title>
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap">
 <style>
   :root { --ink:#132446; --muted:#5b6475; --line:#d9dde5; --bg:#f6f7f9; --card:#fff; --accent:#2f5d50; --warn:#9a3412; --soft:#eef1f5; --pill:#e6ecf5; }
   * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.45 system-ui, -apple-system, sans-serif; color:var(--ink); background:var(--bg); }
+  body { margin:0; font:15px/1.45 system-ui, -apple-system, sans-serif; color:var(--ink); background:var(--bg); height:100vh; height:100dvh; display:flex; flex-direction:column; }
+  header, #banner { flex:none; }
   header { padding:10px 16px; border-bottom:1px solid var(--line); background:var(--card); display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   header h1 { font-size:17px; margin:0 8px 0 0; }
   .badge { font-size:12px; padding:2px 8px; border-radius:999px; background:var(--pill); }
   .badge.warn { background:#fde8d8; color:var(--warn); }
   .setup { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-left:auto; }
   #banner { display:none; margin:12px 16px 0; padding:10px 14px; border-radius:10px; background:#fde8d8; color:var(--warn); }
-  main { display:grid; grid-template-columns:minmax(320px, 1fr) minmax(360px, 1fr); gap:14px; padding:14px; height:calc(100vh - 58px); }
-  @media (max-width: 900px) { main { grid-template-columns:1fr; height:auto; } #log { max-height:70vh; } }
+  /* main takes what the header and banner leave, so the chat's input box stays on screen */
+  main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(320px, 1fr) minmax(360px, 1fr); grid-template-rows:minmax(0, 1fr); gap:14px; padding:14px; }
+  @media (max-width: 900px) { body { height:auto; } main { grid-template-columns:1fr; grid-template-rows:auto; } #log { min-height:300px; max-height:70vh; }
+    form.chat { position:sticky; bottom:0; background:var(--card); border-radius:0 0 10px 10px; z-index:1; } }
   section { background:var(--card); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-height:0; }
-  #log { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:300px; }
+  #log { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:120px; }
+  .side, #status, form.chat { flex:none; }
+  /* the role sheet gives way before the input box does, on a short screen */
+  details.role { flex:0 1 auto; min-height:0; overflow:auto; }
   .msg { max-width:88%; padding:8px 12px; border-radius:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
   .user { align-self:flex-end; background:var(--ink); color:#fff; }
   .bot { align-self:flex-start; background:var(--soft); }
@@ -39,6 +47,11 @@
   .grid label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
   .err { color:var(--warn); font-size:12px; }
   canvas.pad { width:100%; height:150px; border:1px dashed var(--muted); border-radius:8px; touch-action:none; }
+  .sigmode { display:flex; gap:4px; margin:4px 0 8px; }
+  .sigmode[hidden] { display:none; }
+  .sigmode button { padding:4px 12px; font-size:13px; }
+  .sigmode button:not(.on) { background:#fff; color:var(--ink); }
+  .sigtype { margin-bottom:8px; }
   .tabs { display:flex; gap:4px; padding:8px 10px 0; border-bottom:1px solid var(--line); flex-wrap:wrap; }
   .tabs button { background:none; color:var(--muted); border:none; border-bottom:2px solid transparent; border-radius:0; padding:6px 10px; }
   .tabs button.on { color:var(--ink); border-bottom-color:var(--ink); font-weight:600; }
@@ -68,7 +81,7 @@
   .side.firm { background:#f3eefb; color:#5b3a8c; border-radius:10px 10px 0 0; }
   details.role { border-bottom:1px solid var(--line); padding:6px 14px; font-size:13px; background:#fffbeb; }
   details.role summary { cursor:pointer; font-weight:600; }
-  details.role .body { max-height:38vh; overflow:auto; padding:4px 0 6px; }
+  details.role .body { max-height:30vh; overflow:auto; padding:4px 0 6px; }
   .card iframe { width:100%; height:360px; border:1px solid var(--line); border-radius:8px; margin:6px 0; }
 </style>
 </head>
@@ -87,7 +100,7 @@
   <section>
     <div class="side vet">Veteran's screen <span class="muted">what the veteran sees: the chat and its cards</span></div>
     <details class="role" id="role" hidden><summary id="role-title">You are playing…</summary><div class="body" id="pane-character"></div></details>
-    <div id="log"><div class="msg sys">Pick a test veteran and press <b>Start case</b>. You play the veteran here; on the right, the firm's side (you also play the attorney there).</div></div>
+    <div id="log"><div class="msg sys">Press <b>Start case</b>. You play the veteran here; on the right, the firm's side (you also play the attorney there).</div></div>
     <div id="status"></div>
     <form class="chat" id="chat"><input id="text" placeholder="Type a message as the veteran" autocomplete="off" disabled><button id="send" disabled>Send</button></form>
   </section>
@@ -116,7 +129,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const log = $("#log");
 const FORM = {"21-22a": "VA Form 21-22a", fee_agreement: "fee agreement"};
 const STAGES = {1: "Screening", 2: "Account opening", 3: "Filed", 4: "C-file: claims prep, pass 2", 5: "Ready for attorney review"};
-let caseId = null, since = 0, timer = null, panel = null, shownDoc = null, secureSample = null;
+let caseId = null, since = 0, timer = null, panel = null, shownDoc = null, secureSample = null, vetName = "";
 
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function linkify(s) { return esc(s).replace(/(https:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); }
@@ -166,7 +179,7 @@ $("#start").onclick = async () => {
   try {
     caseId = (await api("/api/cases", {persona_id: p.value})).case_id;
     const ch = await api(casePath("/character"));
-    secureSample = ch.secure; renderCharacter(ch);
+    secureSample = ch.secure; vetName = ch.name || ""; renderCharacter(ch);
     $("#text").disabled = false; $("#send").disabled = false;
     timer = setInterval(poll, 1500); poll();
   } catch (e) { say(e.message, "sys"); }
@@ -276,7 +289,9 @@ function preview(c) {  // the veteran reads the draft in the card itself
   shownDoc = c.form;  // the attorney tab follows the newest document too
 }
 
-// Signature pad: draw only; trimmed to the ink before upload.
+// Signature pad: draw it, or type a name and it is written in a script font. Either way the
+// canvas is trimmed to the ink and uploaded as the same PNG.
+const SIG_FONT = '"Dancing Script", "Snell Roundhand", "Segoe Script", "Brush Script MT", cursive';
 function trimmed(canvas) {
   const ctx = canvas.getContext("2d"), {width: w, height: h} = canvas, data = ctx.getImageData(0, 0, w, h).data;
   let minX = w, minY = h, maxX = -1, maxY = -1;
@@ -289,18 +304,64 @@ function trimmed(canvas) {
   out.getContext("2d").drawImage(canvas, l, t, ow, oh, 0, 0, ow, oh);
   return out.toDataURL("image/png");
 }
+function writeName(canvas, name) {  // the typed name, as large as fits, centred (the context is scaled to CSS px)
+  const ctx = canvas.getContext("2d"), r = ctx.getTransform().a || 1, w = canvas.width / r, h = canvas.height / r;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore();
+  if (!name) return;
+  let size = 64;
+  const fit = () => { ctx.font = `600 ${size}px ${SIG_FONT}`; return ctx.measureText(name).width <= w - 24; };
+  while (!fit() && size > 14) size--;
+  const squeeze = Math.min(1, (w - 24) / ctx.measureText(name).width);  // a very long name: narrower, never cut off
+  ctx.save(); ctx.fillStyle = "#132446"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.translate(w / 2, h / 2); ctx.scale(squeeze, 1); ctx.fillText(name, 0, 0); ctx.restore();
+}
+const fontReady = () => document.fonts ? document.fonts.load(`600 40px "Dancing Script"`).catch(() => {}) : Promise.resolve();
+fontReady();  // start fetching the script font now, not when Type is first pressed
 function signaturePad(c) {
-  const card = addCard(c, `<h3>Your signature</h3><p class="muted">Draw it once. It is placed on a document only when you click Sign.</p><canvas class="pad"></canvas><div style="display:flex;gap:8px;margin-top:8px"><button class="ghost" data-clear>Clear</button><button data-save>Save signature</button></div>`);
-  const canvas = $("canvas", card), ratio = Math.max(window.devicePixelRatio || 1, 1);
-  canvas.width = canvas.offsetWidth * ratio; canvas.height = canvas.offsetHeight * ratio;
-  canvas.getContext("2d").scale(ratio, ratio);
+  const card = addCard(c, `<h3>Your signature</h3><p class="muted" data-help>Draw it, or type your name. It is placed on a document only when you click Sign.</p>
+    <div class="sigmode" role="group" aria-label="How to sign"><button type="button" class="on" data-mode="draw" aria-pressed="true">Draw</button><button type="button" data-mode="type" aria-pressed="false">Type</button></div>
+    <div class="sigtype" hidden><input data-name aria-label="Your full name, as your signature" placeholder="Type your full name" autocomplete="off" maxlength="60"></div>
+    <canvas class="pad"></canvas><div style="display:flex;gap:8px;margin-top:8px"><button class="ghost" data-clear>Clear</button><button data-save>Save signature</button></div>`);
+  const canvas = $("canvas", card), nameIn = $("[data-name]", card), b = $("[data-save]", card);
   const pad = typeof SignaturePad !== "undefined" ? new SignaturePad(canvas, {penColor: "#132446"}) : null;
-  if (!pad) $(".err", card).textContent = "The signature library didn't load (no internet?).";
-  $("[data-clear]", card).onclick = () => pad && pad.clear();
-  const b = $("[data-save]", card);
+  let mode = pad ? "draw" : "type";
+  const redraw = () => writeName(canvas, nameIn.value.trim());
+  // The canvas's pixels follow its on-screen size (and the screen's density): sized now, and again
+  // when the window or the column changes (a drawing is kept; a typed name is redrawn to fit).
+  const size = () => {
+    const ratio = Math.max(window.devicePixelRatio || 1, 1), w = canvas.offsetWidth, h = canvas.offsetHeight;
+    if (!w || (canvas.width === Math.round(w * ratio) && canvas.height === Math.round(h * ratio))) return;
+    const strokes = pad && mode === "draw" ? pad.toData() : null;
+    canvas.width = Math.round(w * ratio); canvas.height = Math.round(h * ratio);
+    canvas.getContext("2d").scale(ratio, ratio);
+    if (strokes) { pad.clear(); pad.fromData(strokes); } else if (mode === "type") redraw();
+  };
+  size();
+  if (window.ResizeObserver) new ResizeObserver(() => card.isConnected && card.dataset.open && size()).observe(canvas);
+  const setMode = (m, {focus = true} = {}) => {
+    mode = m;
+    card.querySelectorAll(".sigmode button").forEach(x => { const on = x.dataset.mode === m; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on); });
+    $(".sigtype", card).hidden = m !== "type";
+    if (pad) { pad.clear(); m === "draw" ? pad.on() : pad.off(); }
+    if (m === "type") {
+      if (!nameIn.value) nameIn.value = vetName;
+      redraw(); if (focus) nameIn.focus();
+      fontReady().then(() => mode === "type" && redraw());
+    } else writeName(canvas, "");
+  };
+  card.querySelectorAll(".sigmode button").forEach(x => x.onclick = () => { if (x.dataset.mode !== mode) setMode(x.dataset.mode); });
+  nameIn.oninput = redraw;
+  nameIn.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); b.click(); } };
+  if (!pad) {  // the drawing library didn't load (no internet?): typing only, and the chat keeps the focus
+    $(".sigmode", card).hidden = true;
+    $("[data-help]", card).textContent = "Type your name (drawing isn't available: the signature library didn't load). It is placed on a document only when you click Sign.";
+    setMode("type", {focus: false});
+  }
+  $("[data-clear]", card).onclick = () => { if (mode === "type") { nameIn.value = ""; redraw(); nameIn.focus(); } else if (pad) pad.clear(); };
   b.onclick = () => act(card, b, async () => {
-    const uri = pad && !pad.isEmpty() ? trimmed(canvas) : null;
-    if (!uri) throw new Error("Draw your signature first.");
+    if (mode === "type") { await fontReady(); redraw(); }  // never upload the fallback font by a fast Enter
+    const uri = mode === "type" ? (nameIn.value.trim() ? trimmed(canvas) : null) : (pad && !pad.isEmpty() ? trimmed(canvas) : null);
+    if (!uri) throw new Error(mode === "type" ? "Type your name first." : "Draw your signature first, or choose Type.");
     await api(casePath("/signature"), {data_uri: uri});
     retire(card, `Signature saved. <img alt="" src="${uri}" style="max-height:40px;vertical-align:middle">`);
   });
@@ -310,7 +371,7 @@ function signButton(c) {
   const card = addCard(c, `<h3>Sign the ${esc(FORM[c.form])}</h3><p class="muted">${esc(c.consent_text)}</p><button>Sign</button>`);
   const b = $("button", card);
   b.onclick = () => act(card, b, async () => {
-    await api(casePath(`/sign/${c.form}`), {consent_text: c.consent_text});
+    await api(casePath(`/sign/${c.form}`), {consent_text: c.consent_text, document_id: c.document_id, version: c.version});
     retire(card, `✓ You signed the ${esc(FORM[c.form])}.`);
   });
 }
