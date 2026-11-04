@@ -392,3 +392,12 @@ class Lazy:
 def test_an_eval_name_must_be_a_plain_folder_name(results, name):
     with pytest.raises(ValueError, match="plain folder name"):
         evaluate.run_eval([], ["cfile"], lambda d: None, lambda p: None, run_name=name)
+
+
+def test_a_mistyped_secure_form_value_is_what_the_simulated_veteran_types():
+    from intake_eval.runner import secure_form_values
+
+    p = get_persona("corrects_after_preview")
+    values = secure_form_values(p, ["address.line1", "address.city"])
+    assert values == {"address.line1": "1178 Maple Avenue", "address.city": "Kenosha"}
+    assert p.truth.street == "1187 Maple Avenue" and "1187 Maple Avenue" in p.behaviors[0]

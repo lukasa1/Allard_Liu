@@ -98,6 +98,7 @@ class Persona:
     style: str = ""
     expected: dict[str, Any] = field(default_factory=dict)  # decision, fee_pct, flag_decision
     identity: dict[str, str] = field(default_factory=dict)  # dob, ssn, middle_initial
+    typed: dict[str, str] = field(default_factory=dict)  # secure-form field -> the wrong value the veteran types
     cfile: dict[str, Any] = field(default_factory=dict)
     poa: dict[str, bool] = field(default_factory=dict)
     during_prep: dict[str, str] = field(default_factory=dict)  # message, condition
@@ -140,6 +141,7 @@ def load_persona(path: Path) -> Persona:
         style=data.get("style", ""),
         expected=dict(data.get("expected", {})),
         identity=identity,
+        typed={k: str(v) for k, v in (data.get("typed") or {}).items()},
         cfile=dict(data.get("cfile") or {}),
         poa={
             "authorize_7332_records": True,

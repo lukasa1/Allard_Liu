@@ -25,9 +25,10 @@ write a line yourself: you record the facts, and each line carries the facts it 
 
 ## Rules
 
-- **Prior rep (the firm's SOP):** check every appointment form (21-22 or 21-22a). A form with
-  revocation details is not a current prior rep: the header says `No prior rep`. Otherwise the
-  newest form's representative is the prior rep. The firm's **own** 21-22a is in the file too
+- **Prior rep:** check every appointment form (21-22 or 21-22a) and record each one. Only a
+  private attorney or agent counts as a prior rep; a VSO (a 21-22) never does. A form with
+  revocation details is not a current prior rep either (the firm's SOP). With none left, the
+  header says `No prior rep`; otherwise the newest one is the prior rep. The firm's **own** 21-22a is in the file too
   (it was filed before the pull): record it like the others; code knows it is not a prior rep.
 - "Nothing found" lines (no DD-214 facts, no code sheet, no prior rep) hold only if every
   document of that type has a fact recorded from it.

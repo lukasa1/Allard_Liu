@@ -29,8 +29,9 @@ Cost and latency per agent from the traces (L5, config.PRICES), plus the simulat
 
 A critical error changes what the firm does next: a wrong end state or stop decision, a missed
 service period, a missed prior claim, a wrong fee, a missed crisis escalation, a missed DOB
-mismatch, claims prep not finishing, wrong decision lines on the face note, a new condition the
-orchestrator never sent back to intake, or a run that crashed, stalled, gave up or hit the limit.
+mismatch, a 21-22a signed with a value the veteran corrected in chat, claims prep not finishing,
+wrong decision lines on the face note, a new condition the orchestrator never sent back to intake,
+or a run that crashed, stalled, gave up or hit the limit.
 """
 
 from __future__ import annotations
@@ -355,9 +356,21 @@ def critical_errors(s: Score, run: CaseRun, persona: Persona, case: CaseFile) ->
         out.append("face note: wrong decision lines (appeal deadlines at risk)")
     if persona.identity.get("dob_typed") and case.prep.face_note and not any("DOB mismatch" in t.text for t in case.tasks):
         out.append("missed the DOB mismatch between intake and the DD-214")
+    if persona.typed:  # a value the veteran mistyped and corrected in chat must not be on the signed 21-22a
+        svc = service(run.rt, case.case_id)
+        poa = svc.live("21-22a")
+        left = [k for k, v in persona.typed.items() if _dotted(svc.vault.veteran(), k) == v]
+        if poa and poa.status != "draft" and left:
+            out.append(f"signed the 21-22a with the uncorrected {', '.join(left)}")
     if s.flag_decision_correct is False:
         out.append(f"flag decision: expected {s.flag_decision_expected}, got {s.flag_decisions or 'no flag'}")
     return out
+
+
+def _dotted(d: dict, name: str) -> Any:
+    for part in name.split("."):
+        d = d.get(part) if isinstance(d, dict) else None
+    return d
 
 
 def score_run(persona: Persona, run: CaseRun) -> Score:

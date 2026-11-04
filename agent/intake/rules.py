@@ -50,8 +50,8 @@ RULES: dict[str, Rule] = {
         Rule(
             "fee_pct",
             "firm_policy",
-            "PLACEHOLDER, unconfirmed by the firm: 30% standard; 20% when a prior private attorney "
-            "or agent represented the veteran. VA withholds at most 20% (38 CFR 14.636(h)); above "
+            "30% standard; 20% when a prior private attorney or agent represented the veteran (a "
+            "VSO doesn't count). VA withholds at most 20% (38 CFR 14.636(h)); above "
             "that the client pays the firm directly.",
         ),
         Rule(
@@ -65,8 +65,7 @@ RULES: dict[str, Rule] = {
 
 
 def fee_pct(record: IntakeRecord) -> int:
-    """The fee % offered to a new client. A PLACEHOLDER for firm policy: the firm's SOP only says
-    how to read the % off an existing C-file, not how the firm chooses it for a new client (plan
-    Q1, unconfirmed). Nothing else may rely on the "prior attorney -> 20%" rule."""
+    """The fee % offered to a new client: 20% if a private attorney or agent represented them
+    before (a VSO doesn't count), else 30% (the firm's rule, confirmed 2026-11-03, plan Q1)."""
     return 20 if record.prior_attorney else 30
 

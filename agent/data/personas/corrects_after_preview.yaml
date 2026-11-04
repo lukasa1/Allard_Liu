@@ -1,0 +1,19 @@
+id: corrects_after_preview
+summary: Mistypes their street number in the secure form (1178 instead of 1187). On seeing the 21-22a preview they say it's wrong and give the right address in chat. Intake must correct the draft (update_draft), show the new version, and only then ask for the signature.
+behaviors:
+  - "When the assistant shows you your VA Form 21-22a and asks whether it looks right, say no: the street address on it is wrong, you mistyped it, it should be 1187 Maple Avenue (not 1178). Once the assistant says it fixed it and shows you the form again, say it looks right now."
+typed:
+  address.line1: 1178 Maple Avenue
+truth:
+  first_name: Denise
+  last_name: Whitfield
+  street: 1187 Maple Avenue
+  city: Kenosha
+  state: WI
+  zip: "53140"
+  service_periods:
+    - {branch: army, component: active, start: "2003-01", end: "2009-12", discharge: honorable}
+  mos: [92Y Unit Supply Specialist]
+expected:
+  decision: eligible
+  fee_pct: 30

@@ -125,6 +125,10 @@ def test_prior_rep_is_the_newest_form_without_revocation_details():
     revoked = CfileFacts(prior_reps=[facts.prior_reps[2]])
     head = render(revoked, fee_pct=30, itf_date=None, intake_dob=None).lines[0]
     assert (head.text, head.sources) == ("FA 30%; No prior rep", ("case:fee_agreement", "prior_reps.0", "none:poa_form:prior_representative"))
+    # a VSO is never a prior rep (D15), even a current one and the newest
+    vso = CfileFacts(prior_reps=[PriorRep(name="Older Firm", kind="attorney", signed="2019-01-01", revoked="2020-01-01"),
+                                 PriorRep(name="DAV", kind="vso", signed="2025-01-01")])  # fmt: skip
+    assert render(vso, fee_pct=30, itf_date=None, intake_dob=None).lines[0].text == "FA 30%; No prior rep"
 
 
 def test_a_veteran_with_no_rating_decision_gets_a_plain_sc_line():

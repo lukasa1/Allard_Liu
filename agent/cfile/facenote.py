@@ -143,9 +143,10 @@ def render(
         """A decision dated by its notification letter cites both."""
         return (f"decisions.{i}",) + ((f"decisions.{i}.notified",) if facts.decisions[i].notified else ())
 
-    # The firm's SOP: an appointment form (21-22 or 21-22a) with revocation details is not a prior
-    # rep. Newest by signed date; on a tie (or no dates) the last in document order.
-    active = [(i, r) for i, r in enumerate(facts.prior_reps) if not r.revoked]
+    # A prior rep is a private attorney or agent (a VSO doesn't count: the firm's rule, as intake's
+    # question says, D15) on an appointment form without revocation details (the firm's SOP).
+    # Newest by signed date; on a tie (or no dates) the last in document order.
+    active = [(i, r) for i, r in enumerate(facts.prior_reps) if not r.revoked and r.kind in ("attorney", "agent")]
     if active:
         i, newest = max(reversed(active), key=lambda ir: ir[1].signed or "")
         prior, prior_src = f"Prior rep {newest.name}", (f"prior_reps.{i}",)

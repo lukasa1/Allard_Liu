@@ -184,8 +184,9 @@ the lead's POA skill (`poa_skill/`). Where we differ:
 Candidate deviations from the build, for the lead to confirm:
 - **D14:** "no legal advice beyond the KB" is enforced by instructions and kb_search's hand-off,
   not by code: the reply is a model output a guard can't inspect.
-- **D15:** a prior representative is any 21-22 or 21-22a in the C-file without revocation details,
-  VSOs included (the firm's SOP rule).
+- **D15:** a prior representative is a private attorney or agent on a 21-22a in the C-file without
+  revocation details; a VSO (a 21-22) is recorded but never counts (Max confirmed 2026-11-03, as
+  intake's question already said). Fee: 20% with a prior rep, else 30%.
 - **D16:** a non-honorable period stops to `needs_human` even before filing; the plan (§2) says
   `closed`. An attorney decides, since most of these discharges need a VA character-of-discharge
   determination (38 CFR 3.12) rather than a rejection.
@@ -246,7 +247,7 @@ read-only support alongside.
 `uv run intake serve` (needs the key), then http://localhost:8000:
 
 **One test veteran:** the demo, live or scripted, currently plays one persona, Hector Alvarez
-(`recent_decision`). The other 16 personas run in the eval (`intake simulate`, `intake eval`).
+(`recent_decision`). The other 17 personas run in the eval (`intake simulate`, `intake eval`).
 
 **No key:** `uv run intake serve --scripted` (D26) plays the same case with no model. Press **Tab**
 to take the line the input box suggests and **Enter** to send it, submit the secure form (its test
@@ -278,7 +279,7 @@ Start case starts the story over.
 
 ## Evaluation (`intake_eval/`)
 
-Synthetic veterans (`agent/data/personas/`, 17) go through **whole cases on the same runtime** the
+Synthetic veterans (`agent/data/personas/`, 18) go through **whole cases on the same runtime** the
 demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
 secure form, signs, countersigns as the attorney and waits for the runtime to go idle between
 steps (`runner.py`).
@@ -291,8 +292,9 @@ steps (`runner.py`).
   orchestrator (scenario pass rate, flag decisions, refused moves); claims prep (face-note line
   accuracy, `verify` passed, citation precision); cost and latency per agent from the traces;
   pass^k with `--trials`. **Critical errors** (a wrong end state or stop decision, a missed
-  service period, prior claim, crisis or DOB mismatch, a wrong fee, unfinished prep, a new
-  condition never sent back to intake, a crashed or stalled run) void the headline.
+  service period, prior claim, crisis or DOB mismatch, a mistyped value left on the signed
+  21-22a, a wrong fee, unfinished prep, a new condition never sent back to intake, a crashed or
+  stalled run) void the headline.
 - **Customer support** (`support_eval.py`): 81 labeled messages through the real runtime: flags,
   hand-offs to a person, status answers, no promised dates, cited kb answers, every crisis
   caught, the case unchanged. `--luke` selects the 50-message subset matching the lead's set.
@@ -300,7 +302,7 @@ steps (`runner.py`).
 ```bash
 uv run intake simulate --persona baseline_clean --max-cost 1    # one case, printed
 uv run intake eval --personas baseline_clean --conditions cfile --name smoke --max-cost 1
-uv run intake eval --name full --max-cost 20                    # 17 personas x 3 conditions
+uv run intake eval --name full --max-cost 20                    # 18 personas x 3 conditions
 uv run intake support-eval --max-cost 1
 ```
 

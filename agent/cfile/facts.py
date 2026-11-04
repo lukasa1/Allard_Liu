@@ -59,8 +59,8 @@ class CfileFacts(BaseModel):
 
 
 def newest_private_rep(facts: CfileFacts) -> PriorRep | None:
-    """The most recent private attorney or agent: newest by signed date, ties by document order
-    (the same rule as the face note's header)."""
+    """The most recent private attorney or agent (a VSO is not a prior rep, D15): newest by signed
+    date, ties by document order."""
     private = [r for r in facts.prior_reps if r.kind in ("attorney", "agent")]
     return max(reversed(private), key=lambda r: r.signed or "") if private else None
 

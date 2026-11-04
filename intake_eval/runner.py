@@ -80,6 +80,7 @@ def secure_form_values(p: Persona, fields: list[str]) -> dict[str, str]:
         "address.city": t.city or "", "address.state": t.state or "", "address.zip": t.zip or "",
         "phone": t.cell_phone or "", "email": t.email or "", "va_file_number": "", "service_number": "",
     }  # fmt: skip
+    values.update(p.typed)  # what this veteran mistypes (corrects_after_preview)
     return {f: values.get(f, "") for f in fields}
 
 
