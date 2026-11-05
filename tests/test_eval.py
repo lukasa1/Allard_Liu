@@ -609,6 +609,11 @@ def test_support_scoring_promises_and_citations():
     assert not promised_date("I can't predict VA's timing, but we'll message you as soon as anything changes.", on_case)
     assert _cited("https://www.va.gov/decision-reviews/higher-level-review/", "Source: VA.gov/decision-reviews/higher-level-review")
     assert not _cited("https://www.va.gov/a?x=1", "Source: va.gov/b")
+    from intake_eval.support_eval import _named
+    assert _named("https://www.va.gov/a/b/", "VA's FAQ (va.gov) says so.") and _named("https://www.va.gov/a", "See www.VA.gov.")
+    assert not _named("https://www.va.gov/a", "See myva.gov.") and not _named("https://www.va.gov/a", "VA says so.")
+    assert _named("https://www.benefits.va.gov/x/", "Source: va.gov") and _named("https://www.va.gov:443/a?q=1", "See VA.gov.")
+    assert _named("https://www.va.gov/a/", "Source: va.gov/a")  # cited is named
 
 
 def test_a_veteran_who_remembers_differently_is_played_and_scored_by_condition():

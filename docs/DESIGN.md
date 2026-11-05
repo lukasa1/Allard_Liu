@@ -270,7 +270,8 @@ steps (`runner.py`).
   was never sent doesn't pass, and the report counts those messages.
 - **Customer support** (`support_eval.py`): 84 labeled messages through the real runtime (3 crisis
   messages are worded so code's check misses them, for support's backstop): flags, hand-offs to a
-  person, status answers, no promised dates, cited kb answers, every crisis caught, the case
+  person, status answers, no promised dates, cited kb answers (the source's page; a looser count
+  takes its site, "va.gov"), every crisis caught, the case
   unchanged. `--core` selects the 50-message core set (30 questions, 10 status checks, 5
   complaints, 5 changes). The promised-date and status checks are keyword heuristics; check
   flagged replies by hand. kb_search's answers are checked for a cited source, not for accuracy.

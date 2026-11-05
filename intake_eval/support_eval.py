@@ -23,7 +23,10 @@ hand-off) are recorded, not run; its decisions are scored in the orchestrator's 
              frame quoted from the turn's kb answer are not promises). A REGEX HEURISTIC:
              paraphrases fool it both ways, so read it as a rough signal and check the flagged /
              sampled replies by hand (or with an LLM judge)
-  cited      a kb_search answer used in the turn is cited in the reply (None: no kb answer)
+  cited      a kb_search answer used in the turn is cited in the reply: a source's host and path
+             (None: no kb answer)
+  named      looser: the reply names a source's site (its host or registered domain, "va.gov"),
+             with or without the page; every `cited` reply is `named`
   crisis     crisis messages: the crisis line from code and an urgent task; caught by code's check
              with no model call, or (a `backstop` message, worded so code's check misses it) by
              support's crisis_to_person
@@ -43,6 +46,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -60,7 +64,7 @@ RULE_KINDS = ("withdraw", "wants_human")  # raised by code before the model
 # Words a status answer must use for the case's situation (case-status skill).
 # A word the veteran used doesn't count (an echo of "power of attorney" or "closed" says nothing); a
 # keyword check is a floor, not a judge of the answer: the live report should spot-check the wording.
-STATUS_WORDS = {"attorney_review": ("attorney", "review", "filed"), "closed": ("closed", "served", "veteran"),
+STATUS_WORDS = {"attorney_review": ("attorney", "review", "filed"), "closed": ("closed", "served", "service", "veteran"),
                 "human_handoff": ("personally", "handling", "member of our team", "team member")}
 # A promised date or time frame: "within 30 days", "in 2 weeks", "by March", "next month".
 _MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december"
@@ -99,6 +103,8 @@ class SupportScore:
     unchanged: bool
     reply: str = ""
     errors: list[str] = field(default_factory=list)
+    named: bool | None = None  # the reply names a kb source's host (looser than `cited`)
+    kb_sources: list[str] = field(default_factory=list)
 
 
 class _Recorded:
@@ -165,6 +171,16 @@ def _cited(source: str, reply: str) -> bool:
     """The reply names the source: its host and path, without a query, fragment or trailing slash."""
     url = re.split(r"[?#]", _bare(source.strip()))[0].rstrip("/")
     return bool(url) and url in _bare(reply)
+
+
+def _named(source: str, reply: str) -> bool:
+    """The reply names the source's site: its host or the registered domain ("va.gov" for a
+    benefits.va.gov page), with or without the page. Looser than `_cited`, which it includes."""
+    host = (urlparse(source.strip() if "//" in source else "//" + source.strip()).hostname or "").removeprefix("www.")
+    names = {host, ".".join(host.split(".")[-2:])} - {""}
+    text = re.sub(r"\bwww\.", "", _bare(reply))
+    found = any(re.search(rf"(?<![\w.-]){re.escape(n)}(?![\w-])", text) for n in names)
+    return found or _cited(source, reply)
 
 
 def _long_date(iso: str) -> str:
@@ -269,6 +285,8 @@ def _score_one(rt: SupportOnly, m: dict[str, Any]) -> SupportScore:
         crisis_ok=(caught and CRISIS_MESSAGE in reply and (by_model or not asked_support) and any(t.kind == "urgent" for t in tasks))
         if crisis else None,
         unchanged=not changed, reply=reply, errors=errors,
+        named=any(_named(s, reply) for s in kb_sources) if kb_sources and m["phase"] != "human_handoff" else None,
+        kb_sources=kb_sources,
     )  # fmt: skip
 
 
@@ -343,6 +361,7 @@ def summarize(scores: list[SupportScore]) -> dict[str, Any]:
         "no_promised_dates": _rate([s.no_date for s in scores]),
         "kb_looked_up": _rate([s.kb_ok for s in scores]),  # general VA questions put to kb_search
         "kb_answers_cited": _rate([s.cited for s in scores]),
+        "kb_sources_named": _rate([s.named for s in scores]),  # looser: the host, not the page
         "crisis_caught": _rate([s.crisis_ok for s in scores]),  # must be every one
         "case_unchanged": _rate([s.unchanged and not s.errors for s in scores]),
     }
