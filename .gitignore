@@ -13,5 +13,12 @@ __pycache__/
 .env.*
 !.env.example
 
-# Eval output (regenerate with `uv run intake eval`)
-results/
+# Eval output (regenerate with `uv run intake eval`). The midpoint results are kept so they can be
+# read without a paid run; their runs/ (filled PDFs, vault, traces) is not.
+results/*
+!results/midpoint/
+results/midpoint/*
+!results/midpoint/report.md
+!results/midpoint/summary.json
+!results/midpoint/transcripts/
+!results/support-midpoint/

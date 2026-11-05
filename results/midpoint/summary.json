@@ -1,0 +1,5736 @@
+{
+  "conditions": [
+    "cfile"
+  ],
+  "trials": 1,
+  "max_cost": 8.0,
+  "stopped_at_cost": false,
+  "by_condition": {
+    "cfile": {
+      "runs": 20,
+      "completed_runs": 20,
+      "scenario_pass_rate": 1.0,
+      "runs_with_critical_errors": 0,
+      "critical_errors": 0,
+      "pass_hat_k": 1,
+      "field_accuracy": 0.9902272727272727,
+      "structured_questions": 17.75,
+      "clarifications": 1.2,
+      "narrative_answers": 12.75,
+      "veteran_messages": 18.8,
+      "prefill_share": 0.04148784548784549,
+      "turns_to_signed_poa": 9.625,
+      "kb_calls": 2,
+      "kb_sourced": 1,
+      "resumed_after": 1.0,
+      "scripted_sent": "5/5",
+      "asked": 1,
+      "ask_answer_ok": "0/1",
+      "untested": 0,
+      "flag_decisions_correct": "1/1",
+      "refused": {
+        "intake": 11
+      },
+      "facenote_line_accuracy": 0.99375,
+      "facenote_fact_checks": 0.9910714285714286,
+      "verify_passed": "15/16",
+      "citation_precision": 1.0,
+      "uncertain_lines": 2,
+      "cost_total": 2.8756721,
+      "cost_mean": 0.143783605,
+      "model_failures": 2,
+      "per_agent": {
+        "orchestrator": {
+          "calls_mean": 10.7,
+          "cost_total": 0.1742316,
+          "cost_mean": 0.00871158,
+          "latency_per_call": 2.0402570093457943
+        },
+        "intake": {
+          "calls_mean": 96.5,
+          "cost_total": 2.1606584,
+          "cost_mean": 0.10803292,
+          "latency_per_call": 2.8027202072538855
+        },
+        "claims_prep": {
+          "calls_mean": 10.2,
+          "cost_total": 0.3310586,
+          "cost_mean": 0.01655293,
+          "latency_per_call": 2.9400098039215683
+        },
+        "support": {
+          "calls_mean": 0.2,
+          "cost_total": 0.001767,
+          "cost_mean": 8.834999999999999e-05,
+          "latency_per_call": 1.6495000000000002
+        },
+        "simulator": {
+          "calls_mean": 18.85,
+          "cost_total": 0.2076139,
+          "cost_mean": 0.010380694999999999,
+          "latency_per_call": 0.0
+        },
+        "judge": {
+          "calls_mean": 0.05,
+          "cost_total": 0.0003426,
+          "cost_mean": 1.713e-05,
+          "latency_per_call": 0.0
+        }
+      }
+    }
+  },
+  "by_split": {
+    "cfile/dev": {
+      "runs": 14,
+      "completed_runs": 14,
+      "scenario_pass_rate": 1.0,
+      "runs_with_critical_errors": 0,
+      "critical_errors": 0,
+      "pass_hat_k": 1,
+      "field_accuracy": 0.986038961038961,
+      "structured_questions": 18.857142857142858,
+      "clarifications": 0.8571428571428571,
+      "narrative_answers": 13.928571428571429,
+      "veteran_messages": 19.928571428571427,
+      "prefill_share": 0.046072617858332145,
+      "turns_to_signed_poa": 9.75,
+      "kb_calls": 1,
+      "kb_sourced": 1,
+      "resumed_after": 1.0,
+      "scripted_sent": "5/5",
+      "asked": 1,
+      "ask_answer_ok": "0/1",
+      "untested": 0,
+      "flag_decisions_correct": "1/1",
+      "refused": {
+        "intake": 9
+      },
+      "facenote_line_accuracy": 0.9916666666666667,
+      "facenote_fact_checks": 0.9880952380952381,
+      "verify_passed": "11/12",
+      "citation_precision": 1.0,
+      "uncertain_lines": 2,
+      "cost_total": 2.152728,
+      "cost_mean": 0.15376628571428572,
+      "model_failures": 1,
+      "per_agent": {
+        "orchestrator": {
+          "calls_mean": 10.928571428571429,
+          "cost_total": 0.1249451,
+          "cost_mean": 0.008924650000000001,
+          "latency_per_call": 2.0475620915032677
+        },
+        "intake": {
+          "calls_mean": 102.64285714285714,
+          "cost_total": 1.6264892,
+          "cost_mean": 0.1161778,
+          "latency_per_call": 2.84577313848295
+        },
+        "claims_prep": {
+          "calls_mean": 10.571428571428571,
+          "cost_total": 0.2410457,
+          "cost_mean": 0.01721755,
+          "latency_per_call": 3.0244797297297294
+        },
+        "support": {
+          "calls_mean": 0.2857142857142857,
+          "cost_total": 0.001767,
+          "cost_mean": 0.0001262142857142857,
+          "latency_per_call": 1.6495000000000002
+        },
+        "simulator": {
+          "calls_mean": 20.0,
+          "cost_total": 0.15813839999999998,
+          "cost_mean": 0.0112956,
+          "latency_per_call": 0.0
+        },
+        "judge": {
+          "calls_mean": 0.07142857142857142,
+          "cost_total": 0.0003426,
+          "cost_mean": 2.447142857142857e-05,
+          "latency_per_call": 0.0
+        }
+      }
+    },
+    "cfile/heldout": {
+      "runs": 6,
+      "completed_runs": 6,
+      "scenario_pass_rate": 1.0,
+      "runs_with_critical_errors": 0,
+      "critical_errors": 0,
+      "pass_hat_k": 1,
+      "field_accuracy": 1.0,
+      "structured_questions": 15.166666666666666,
+      "clarifications": 2.0,
+      "narrative_answers": 10.0,
+      "veteran_messages": 16.166666666666668,
+      "prefill_share": 0.03079004329004329,
+      "turns_to_signed_poa": 9.25,
+      "kb_calls": 1,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "scripted_sent": "0/0",
+      "asked": 0,
+      "ask_answer_ok": "0/0",
+      "untested": 0,
+      "flag_decisions_correct": "0/0",
+      "refused": {
+        "intake": 2
+      },
+      "facenote_line_accuracy": 1.0,
+      "facenote_fact_checks": 1.0,
+      "verify_passed": "4/4",
+      "citation_precision": 1.0,
+      "uncertain_lines": 0,
+      "cost_total": 0.7229441,
+      "cost_mean": 0.12049068333333333,
+      "model_failures": 1,
+      "per_agent": {
+        "orchestrator": {
+          "calls_mean": 10.166666666666666,
+          "cost_total": 0.0492865,
+          "cost_mean": 0.008214416666666667,
+          "latency_per_call": 2.0219344262295085
+        },
+        "intake": {
+          "calls_mean": 82.16666666666667,
+          "cost_total": 0.5341692,
+          "cost_mean": 0.0890282,
+          "latency_per_call": 2.677229208924949
+        },
+        "claims_prep": {
+          "calls_mean": 9.333333333333334,
+          "cost_total": 0.09001289999999999,
+          "cost_mean": 0.015002149999999999,
+          "latency_per_call": 2.7167678571428566
+        },
+        "support": {
+          "calls_mean": 0.0,
+          "cost_total": 0,
+          "cost_mean": 0.0,
+          "latency_per_call": null
+        },
+        "simulator": {
+          "calls_mean": 16.166666666666668,
+          "cost_total": 0.0494755,
+          "cost_mean": 0.008245916666666667,
+          "latency_per_call": 0.0
+        },
+        "judge": {
+          "calls_mean": 0.0,
+          "cost_total": 0,
+          "cost_mean": 0.0,
+          "latency_per_call": null
+        }
+      }
+    }
+  },
+  "scores": [
+    {
+      "persona_id": "asks_question_mid_intake",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": 0,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Maria Reyes, mother, 262-555-0177",
+          "got": "Maria Reyes (mother), 262-555-0177",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend told me about you guys.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 21,
+      "narrative_answers": 15,
+      "clarifications": 2,
+      "veteran_messages": 25,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 10,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 1,
+      "kb_sourced": 1,
+      "resumed_after": 1,
+      "ask_answer": {
+        "ok": false,
+        "missing": [
+          "It tells VA that the veteran plans to file a claim."
+        ],
+        "wrong": [],
+        "cost_usd": 0.0003426
+      },
+      "scripted_sent": true,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 2
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 11,
+          "input_tokens": 71615,
+          "output_tokens": 3228,
+          "cost_usd": 0.0087755,
+          "latency_s": 23.437
+        },
+        "intake": {
+          "calls": 127,
+          "input_tokens": 1088729,
+          "output_tokens": 52865,
+          "cost_usd": 0.14230540000000003,
+          "latency_s": 319.98200000000014
+        },
+        "claims_prep": {
+          "calls": 10,
+          "input_tokens": 124936,
+          "output_tokens": 6092,
+          "cost_usd": 0.015539599999999999,
+          "latency_s": 31.715999999999998
+        },
+        "simulator": {
+          "calls": 25,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.01357,
+          "latency_s": 0.0
+        },
+        "judge": {
+          "calls": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0003426,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.18053310000000003,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "baseline_clean",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "heldout",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Maria Reyes, mother, 262-555-0177",
+          "got": "Maria Reyes (mom), 262-555-0177",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend recommended you guys.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 20,
+      "narrative_answers": 15,
+      "clarifications": 0,
+      "veteran_messages": 20,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.047619047619047616,
+      "turns_to_signed_poa": 8,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 81873,
+          "output_tokens": 4091,
+          "cost_usd": 0.0102328,
+          "latency_s": 27.381
+        },
+        "intake": {
+          "calls": 104,
+          "input_tokens": 886626,
+          "output_tokens": 45250,
+          "cost_usd": 0.11128759999999999,
+          "latency_s": 290.5130000000001
+        },
+        "claims_prep": {
+          "calls": 10,
+          "input_tokens": 124678,
+          "output_tokens": 5456,
+          "cost_usd": 0.015195799999999999,
+          "latency_s": 30.820999999999998
+        },
+        "simulator": {
+          "calls": 20,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.009576600000000001,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.1462928,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "colloquial_conditions",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Amy Doyle",
+          "got": "Amy Doyle",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Amy Doyle, wife, 254-555-0131",
+          "got": "Amy Doyle, she's my wife, and her number is 254-555-0131.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend told me about you guys.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "lumbar strain",
+            "sleep apnea",
+            "tinnitus"
+          ],
+          "got": [
+            "lumbar strain",
+            "sleep apnea",
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits (iraq)"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 21,
+      "narrative_answers": 45,
+      "clarifications": 0,
+      "veteran_messages": 33,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 9,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 86929,
+          "output_tokens": 4138,
+          "cost_usd": 0.0107619,
+          "latency_s": 27.176000000000002
+        },
+        "intake": {
+          "calls": 174,
+          "input_tokens": 1816312,
+          "output_tokens": 97000,
+          "cost_usd": 0.23013120000000006,
+          "latency_s": 575.1049999999994
+        },
+        "claims_prep": {
+          "calls": 12,
+          "input_tokens": 154151,
+          "output_tokens": 6741,
+          "cost_usd": 0.0187856,
+          "latency_s": 38.166000000000004
+        },
+        "simulator": {
+          "calls": 33,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.024915299999999994,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.28459400000000007,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "corrects_after_preview",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Robert Whitfield, brother, 262-555-0158",
+          "got": "{'name': 'Robert Whitfield', 'relationship': 'brother', 'phone': '262-555-0158'}",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend told me about you guys.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "92y unit supply specialist"
+          ],
+          "got": [
+            "92y unit supply specialist"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2003-01', '2009-12')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2003-01', '2009-12')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 23,
+      "narrative_answers": 15,
+      "clarifications": 1,
+      "veteran_messages": 25,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.041666666666666664,
+      "turns_to_signed_poa": 11,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 80220,
+          "output_tokens": 3680,
+          "cost_usd": 0.009862,
+          "latency_s": 26.874999999999996
+        },
+        "intake": {
+          "calls": 121,
+          "input_tokens": 1054377,
+          "output_tokens": 50599,
+          "cost_usd": 0.13073719999999997,
+          "latency_s": 325.8749999999998
+        },
+        "claims_prep": {
+          "calls": 10,
+          "input_tokens": 124899,
+          "output_tokens": 6116,
+          "cost_usd": 0.0155479,
+          "latency_s": 35.189
+        },
+        "simulator": {
+          "calls": 25,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0141679,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.17031499999999997,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "crisis_backstop",
+      "condition": "cfile",
+      "expected_end": "needs_human",
+      "end_state": "needs_human",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Diane Kowalski",
+          "got": "Diane",
+          "status": "wrong",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Diane Kowalski, wife, 920-555-0194",
+          "got": "My next of kin is my wife, Diane Kowalski. Her number is 920-555-0194.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend told me about you guys.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "ptsd"
+          ],
+          "got": [
+            "ptsd"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 0.95,
+      "structured_questions": 21,
+      "narrative_answers": 0,
+      "clarifications": 0,
+      "veteran_messages": 15,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 9,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": true,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 14,
+          "input_tokens": 93618,
+          "output_tokens": 4283,
+          "cost_usd": 0.011503300000000001,
+          "latency_s": 31.549999999999994
+        },
+        "intake": {
+          "calls": 81,
+          "input_tokens": 697348,
+          "output_tokens": 31928,
+          "cost_usd": 0.08569880000000003,
+          "latency_s": 199.06199999999998
+        },
+        "claims_prep": {
+          "calls": 10,
+          "input_tokens": 124524,
+          "output_tokens": 6264,
+          "cost_usd": 0.015584399999999998,
+          "latency_s": 36.842
+        },
+        "simulator": {
+          "calls": 15,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0059529,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.11873940000000004,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "crisis_disclosure",
+      "condition": "cfile",
+      "expected_end": "needs_human",
+      "end_state": "needs_human",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Ellen Archer, mother, 920-555-0177",
+          "got": "Ellen Archer (mother), 920-555-0177",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "friend",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "ptsd"
+          ],
+          "got": [
+            "ptsd"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 20,
+      "narrative_answers": 0,
+      "clarifications": 0,
+      "veteran_messages": 15,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.047619047619047616,
+      "turns_to_signed_poa": 9,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": true,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 77926,
+          "output_tokens": 3990,
+          "cost_usd": 0.0097876,
+          "latency_s": 24.921000000000003
+        },
+        "intake": {
+          "calls": 79,
+          "input_tokens": 655990,
+          "output_tokens": 30627,
+          "cost_usd": 0.08091250000000001,
+          "latency_s": 183.08599999999993
+        },
+        "claims_prep": {
+          "calls": 11,
+          "input_tokens": 139558,
+          "output_tokens": 6218,
+          "cost_usd": 0.017064799999999998,
+          "latency_s": 32.968
+        },
+        "simulator": {
+          "calls": 15,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.005824299999999999,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.11358920000000002,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "dd214_discharge_differs",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "heldout",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Keisha Price, sister, 414-555-0175",
+          "got": "My sister, Keisha Price. Her number is 414-555-0175.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "internet",
+          "got": "I found you guys on the internet.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": "a Facebook group for veterans",
+          "got": "I found you guys on Facebook, in a veterans group.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "bilateral knee condition"
+          ],
+          "got": [
+            "bilateral knee condition"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "11b infantryman"
+          ],
+          "got": [
+            "11b infantryman"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'general', '2006-02', '2012-01')"
+          ],
+          "got": [
+            "('army', 'active', 'general', '2006-02', '2012-01')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; discharge: DD-214, C-file p. 1; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 21,
+      "narrative_answers": 15,
+      "clarifications": 8,
+      "veteran_messages": 27,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 11,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 13,
+          "input_tokens": 88147,
+          "output_tokens": 4908,
+          "cost_usd": 0.0112687,
+          "latency_s": 28.290000000000003
+        },
+        "intake": {
+          "calls": 129,
+          "input_tokens": 1125238,
+          "output_tokens": 61126,
+          "cost_usd": 0.14308680000000004,
+          "latency_s": 350.1120000000001
+        },
+        "claims_prep": {
+          "calls": 12,
+          "input_tokens": 155461,
+          "output_tokens": 5887,
+          "cost_usd": 0.018489600000000002,
+          "latency_s": 31.426
+        },
+        "simulator": {
+          "calls": 27,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0160451,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.18889020000000004,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "dob_swapped",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": 0,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Carl Brooks, father, 608-555-0140",
+          "got": "{'name': 'Carl Brooks', 'relationship': 'father', 'phone': '608-555-0140'}",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "I heard about you guys from a friend.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "bilateral hearing loss"
+          ],
+          "got": [
+            "bilateral hearing loss"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "aircraft armament systems"
+          ],
+          "got": [
+            "aircraft armament systems"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('air force', 'active', 'honorable', '2007-01', '2015-01')"
+          ],
+          "got": [
+            "('air force', 'active', 'honorable', '2007-01', '2015-01')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 21,
+      "narrative_answers": 15,
+      "clarifications": 2,
+      "veteran_messages": 20,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 8,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 11,
+          "input_tokens": 72508,
+          "output_tokens": 2997,
+          "cost_usd": 0.008749299999999998,
+          "latency_s": 18.160999999999998
+        },
+        "intake": {
+          "calls": 111,
+          "input_tokens": 978998,
+          "output_tokens": 59660,
+          "cost_usd": 0.12772980000000006,
+          "latency_s": 322.621
+        },
+        "claims_prep": {
+          "calls": 9,
+          "input_tokens": 109573,
+          "output_tokens": 6590,
+          "cost_usd": 0.0142523,
+          "latency_s": 34.239
+        },
+        "simulator": {
+          "calls": 20,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.009606599999999998,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.16033800000000006,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "family_ssa_exposure",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "heldout",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": 0,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Derek Brooks",
+          "got": "Derek Brooks",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Derek Brooks, husband, 715-555-0166",
+          "got": "Derek Brooks, husband, 715-555-0166",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "internet",
+          "got": "I found you on the internet, through a Google search.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": "Google",
+          "got": "I found you on the internet, through a Google search.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "security forces"
+          ],
+          "got": [
+            "security forces"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('air force', 'active', 'honorable', '2005-09', '2013-08')"
+          ],
+          "got": [
+            "('air force', 'active', 'honorable', '2005-09', '2013-08')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 23,
+      "narrative_answers": 15,
+      "clarifications": 3,
+      "veteran_messages": 22,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.041666666666666664,
+      "turns_to_signed_poa": 9,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 1,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 82909,
+          "output_tokens": 3724,
+          "cost_usd": 0.0101529,
+          "latency_s": 23.333
+        },
+        "intake": {
+          "calls": 126,
+          "input_tokens": 1135148,
+          "output_tokens": 61615,
+          "cost_usd": 0.1443223,
+          "latency_s": 354.48199999999974
+        },
+        "claims_prep": {
+          "calls": 16,
+          "input_tokens": 224127,
+          "output_tokens": 7934,
+          "cost_usd": 0.0263797,
+          "latency_s": 44.666
+        },
+        "simulator": {
+          "calls": 22,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.011376,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.19223089999999998,
+      "model_failures": 1
+    },
+    {
+      "persona_id": "forgot_prior_claim",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "rating_pct",
+          "expected": 30,
+          "got": 30,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Daniel Okafor",
+          "got": "Daniel",
+          "status": "wrong",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Daniel Okafor, husband, 757-555-0139",
+          "got": "{'name': 'Daniel Okafor', 'relationship': 'husband', 'phone': '757-555-0139'}",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "I heard about you guys from a friend.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "sleep apnea"
+          ],
+          "got": [
+            "sleep apnea"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "aviation machinist's mate"
+          ],
+          "got": [
+            "aviation machinist's mate"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "exposures",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('navy', 'active', 'honorable', '1998-03', '2006-02')"
+          ],
+          "got": [
+            "('navy', 'active', 'honorable', '1998-03', '2006-02')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 0.9545454545454546,
+      "structured_questions": 24,
+      "narrative_answers": 15,
+      "clarifications": 0,
+      "veteran_messages": 24,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.04,
+      "turns_to_signed_poa": 12,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 0.9,
+      "facenote_lines": [
+        9,
+        10
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": false,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": false,
+      "uncertain_lines": 2,
+      "citation_precision": 1.0,
+      "facts": 9,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 11,
+          "input_tokens": 77197,
+          "output_tokens": 3358,
+          "cost_usd": 0.009398700000000001,
+          "latency_s": 24.14
+        },
+        "intake": {
+          "calls": 118,
+          "input_tokens": 1044403,
+          "output_tokens": 50520,
+          "cost_usd": 0.1297003,
+          "latency_s": 319.99899999999997
+        },
+        "claims_prep": {
+          "calls": 15,
+          "input_tokens": 225278,
+          "output_tokens": 7590,
+          "cost_usd": 0.0263228,
+          "latency_s": 42.562
+        },
+        "simulator": {
+          "calls": 26,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.015226199999999999,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.180648,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "new_condition_during_prep",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Carmen Ortega",
+          "got": "Carmen",
+          "status": "wrong",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Carmen Ortega, wife, 608-555-0171",
+          "got": "Carmen Ortega, wife, 608-555-0171",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "I heard about you guys from a friend.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "sleep apnea",
+            "tinnitus"
+          ],
+          "got": [
+            "sleep apnea",
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 0.95,
+      "structured_questions": 21,
+      "narrative_answers": 30,
+      "clarifications": 4,
+      "veteran_messages": 33,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 12,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": true,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [
+        "reopen_intake"
+      ],
+      "flag_decision_expected": "reopen_intake",
+      "flag_decision_correct": true,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        8,
+        8
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 5,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 11,
+          "input_tokens": 77273,
+          "output_tokens": 3303,
+          "cost_usd": 0.0093788,
+          "latency_s": 23.740999999999996
+        },
+        "intake": {
+          "calls": 150,
+          "input_tokens": 1409950,
+          "output_tokens": 69310,
+          "cost_usd": 0.17565000000000006,
+          "latency_s": 437.7660000000001
+        },
+        "claims_prep": {
+          "calls": 17,
+          "input_tokens": 234139,
+          "output_tokens": 9469,
+          "cost_usd": 0.0281484,
+          "latency_s": 55.295
+        },
+        "support": {
+          "calls": 4,
+          "input_tokens": 13460,
+          "output_tokens": 842,
+          "cost_usd": 0.001767,
+          "latency_s": 6.598000000000001
+        },
+        "simulator": {
+          "calls": 32,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.022689699999999997,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.23763390000000006,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "not_a_veteran",
+      "condition": "cfile",
+      "expected_end": "closed",
+      "end_state": "closed",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "litigation_contact",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Pat Lang, mother, 262-555-0109",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "mos",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "exposures",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 1,
+      "narrative_answers": 0,
+      "clarifications": 0,
+      "veteran_messages": 1,
+      "cfile_prefilled": 0,
+      "prefill_share": 0.0,
+      "turns_to_signed_poa": null,
+      "fee_expected": null,
+      "fee_got": null,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": null,
+      "facenote_lines": [
+        0,
+        0
+      ],
+      "facenote_checks": {},
+      "verify_passed": null,
+      "uncertain_lines": 0,
+      "citation_precision": null,
+      "facts": 0,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 5,
+          "input_tokens": 20035,
+          "output_tokens": 1083,
+          "cost_usd": 0.002545,
+          "latency_s": 7.319999999999999
+        },
+        "intake": {
+          "calls": 5,
+          "input_tokens": 29160,
+          "output_tokens": 1324,
+          "cost_usd": 0.0035780000000000005,
+          "latency_s": 9.25
+        },
+        "simulator": {
+          "calls": 1,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0001716,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.0062946,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "oth_one_of_two",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Ana Ferreira, sister, 414-555-0128",
+          "got": "{'name': 'Ana Ferreira', 'relationship': 'sister', 'phone': '414-555-0128'}",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "I heard about you guys from a friend.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 2"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2001-01', '2005-01')",
+            "('army', 'active', 'oth', '2006-03', '2008-07')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2001-01', '2005-01')",
+            "('army', 'active', 'oth', '2006-03', '2008-07')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file pp. 1, 2; months: DD-214, C-file pp. 1, 2; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 20,
+      "narrative_answers": 15,
+      "clarifications": 1,
+      "veteran_messages": 23,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.047619047619047616,
+      "turns_to_signed_poa": 11,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        9,
+        9
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 8,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 11,
+          "input_tokens": 73587,
+          "output_tokens": 3497,
+          "cost_usd": 0.0091072,
+          "latency_s": 20.642
+        },
+        "intake": {
+          "calls": 112,
+          "input_tokens": 976098,
+          "output_tokens": 45934,
+          "cost_usd": 0.12057679999999997,
+          "latency_s": 270.15499999999986
+        },
+        "claims_prep": {
+          "calls": 14,
+          "input_tokens": 189819,
+          "output_tokens": 6054,
+          "cost_usd": 0.0220089,
+          "latency_s": 32.664
+        },
+        "simulator": {
+          "calls": 23,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0121001,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.16379299999999997,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "oth_only_period",
+      "condition": "cfile",
+      "expected_end": "needs_human",
+      "end_state": "needs_human",
+      "scenario_pass": true,
+      "split": "heldout",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Linda Boone, mother, 910-555-0151",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "3531 motor vehicle operator"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('marine corps', 'active', 'oth', '2009-08', '2011-03')"
+          ],
+          "got": [
+            "('marine corps', 'active', 'oth', '2009', '2011')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 3,
+      "narrative_answers": 0,
+      "clarifications": 0,
+      "veteran_messages": 3,
+      "cfile_prefilled": 0,
+      "prefill_share": 0.0,
+      "turns_to_signed_poa": null,
+      "fee_expected": null,
+      "fee_got": null,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": null,
+      "facenote_lines": [
+        0,
+        0
+      ],
+      "facenote_checks": {},
+      "verify_passed": null,
+      "uncertain_lines": 0,
+      "citation_precision": null,
+      "facts": 0,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 5,
+          "input_tokens": 22228,
+          "output_tokens": 1151,
+          "cost_usd": 0.0027983,
+          "latency_s": 7.7459999999999996
+        },
+        "intake": {
+          "calls": 11,
+          "input_tokens": 68691,
+          "output_tokens": 3530,
+          "cost_usd": 0.0086341,
+          "latency_s": 24.421999999999997
+        },
+        "simulator": {
+          "calls": 3,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0006714,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.012103800000000001,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "prior_attorney",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "rating_pct",
+          "expected": 40,
+          "got": 40,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": "Alan Smith",
+          "got": "Alan Smith",
+          "status": "correct",
+          "source": "C-file p. 6"
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Tina Hale",
+          "got": "Tina Hale",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Tina Hale, wife, 715-555-0162",
+          "got": "Tina Hale (wife), 715-555-0162",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "I heard about you from a friend.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "bilateral hearing loss"
+          ],
+          "got": [
+            "bilateral hearing loss"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [
+            "88m motor transport operator"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 23,
+      "narrative_answers": 15,
+      "clarifications": 2,
+      "veteran_messages": 21,
+      "cfile_prefilled": 3,
+      "prefill_share": 0.11538461538461539,
+      "turns_to_signed_poa": 8,
+      "fee_expected": 20,
+      "fee_got": 20,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        10,
+        10
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 11,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 83825,
+          "output_tokens": 3976,
+          "cost_usd": 0.0103705,
+          "latency_s": 24.21
+        },
+        "intake": {
+          "calls": 119,
+          "input_tokens": 1082207,
+          "output_tokens": 60016,
+          "cost_usd": 0.1382286999999999,
+          "latency_s": 328.196
+        },
+        "claims_prep": {
+          "calls": 14,
+          "input_tokens": 200498,
+          "output_tokens": 6982,
+          "cost_usd": 0.0235408,
+          "latency_s": 36.278
+        },
+        "simulator": {
+          "calls": 21,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.011285300000000002,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.1834252999999999,
+      "model_failures": 1
+    },
+    {
+      "persona_id": "rated_100",
+      "condition": "cfile",
+      "expected_end": "closed",
+      "end_state": "closed",
+      "scenario_pass": true,
+      "split": "heldout",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": 100,
+          "got": 100,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Minh Pham",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Minh Pham, husband, 608-555-0188",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2004-06', '2010-05')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 5,
+      "narrative_answers": 0,
+      "clarifications": 0,
+      "veteran_messages": 3,
+      "cfile_prefilled": 0,
+      "prefill_share": 0.0,
+      "turns_to_signed_poa": null,
+      "fee_expected": null,
+      "fee_got": null,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": null,
+      "facenote_lines": [
+        0,
+        0
+      ],
+      "facenote_checks": {},
+      "verify_passed": null,
+      "uncertain_lines": 0,
+      "citation_precision": null,
+      "facts": 0,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 6,
+          "input_tokens": 27100,
+          "output_tokens": 1722,
+          "cost_usd": 0.003571,
+          "latency_s": 11.261
+        },
+        "intake": {
+          "calls": 13,
+          "input_tokens": 84738,
+          "output_tokens": 5391,
+          "cost_usd": 0.0111693,
+          "latency_s": 33.047
+        },
+        "simulator": {
+          "calls": 3,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.000735,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.0154753,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "recent_decision",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "rating_pct",
+          "expected": 40,
+          "got": 40,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "tdiu",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Maria Alvarez",
+          "got": "Maria Alvarez",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Maria Alvarez, wife, 414-555-0143",
+          "got": "Maria Alvarez (wife), 414-555-0143",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "I heard about you from a friend.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "left knee condition"
+          ],
+          "got": [
+            "left knee condition"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "0321 reconnaissance man"
+          ],
+          "got": [
+            "0321 reconnaissance man"
+          ],
+          "status": "correct",
+          "source": "C-file p. 1"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [
+            "burn pits"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('marine corps', 'active', 'honorable', '2002-06', '2010-06')"
+          ],
+          "got": [
+            "('marine corps', 'active', 'honorable', '2002-06', '2010-06')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file p. 1; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 23,
+      "narrative_answers": 15,
+      "clarifications": 0,
+      "veteran_messages": 19,
+      "cfile_prefilled": 2,
+      "prefill_share": 0.08,
+      "turns_to_signed_poa": 8,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        13,
+        13
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 12,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 83320,
+          "output_tokens": 3980,
+          "cost_usd": 0.010322000000000001,
+          "latency_s": 24.139000000000003
+        },
+        "intake": {
+          "calls": 107,
+          "input_tokens": 933995,
+          "output_tokens": 50305,
+          "cost_usd": 0.11855199999999996,
+          "latency_s": 449.72700000000003
+        },
+        "claims_prep": {
+          "calls": 15,
+          "input_tokens": 227401,
+          "output_tokens": 8371,
+          "cost_usd": 0.026925599999999994,
+          "latency_s": 41.533
+        },
+        "simulator": {
+          "calls": 19,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.009908099999999998,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.16570769999999996,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "reserve_not_in_records",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "heldout",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": "single",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Anil Nair, father, 920-555-0136",
+          "got": "My dad, Anil Nair. He's my father, and his number is 920-555-0136.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend told me about you guys.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "migraines"
+          ],
+          "got": [
+            "migraines"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "hospital corpsman"
+          ],
+          "got": [
+            "hospital corpsman"
+          ],
+          "status": "correct",
+          "source": "C-file p. 2"
+        },
+        {
+          "field": "exposures",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('navy', 'active', 'honorable', '2008-07', '2012-07')",
+            "('navy', 'reserve', 'honorable', '2014-01', '2016-12')"
+          ],
+          "got": [
+            "('navy', 'active', 'honorable', '2008-07', '2012-07')",
+            "('navy', 'reserve', 'honorable', '2014-01', '2016-12')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; months: DD-214, C-file pp. 1, 2; veteran, chat 17:00 UTC; months: DD-214, C-file pp. 1, 2"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 19,
+      "narrative_answers": 15,
+      "clarifications": 1,
+      "veteran_messages": 22,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.05,
+      "turns_to_signed_poa": 9,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        9,
+        9
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 8,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 13,
+          "input_tokens": 92668,
+          "output_tokens": 3992,
+          "cost_usd": 0.011262799999999998,
+          "latency_s": 25.327
+        },
+        "intake": {
+          "calls": 110,
+          "input_tokens": 936441,
+          "output_tokens": 44050,
+          "cost_usd": 0.11566910000000001,
+          "latency_s": 267.29799999999994
+        },
+        "claims_prep": {
+          "calls": 18,
+          "input_tokens": 260208,
+          "output_tokens": 7854,
+          "cost_usd": 0.029947799999999993,
+          "latency_s": 45.226
+        },
+        "simulator": {
+          "calls": 22,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0110714,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.1679511,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "two_service_periods",
+      "condition": "cfile",
+      "expected_end": "attorney_review",
+      "end_state": "attorney_review",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "marital_status",
+          "expected": "married",
+          "got": "married",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "spouse_name",
+          "expected": "Joan Whitaker",
+          "got": "Joan",
+          "status": "wrong",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Joan Whitaker, wife, 608-555-0116",
+          "got": "{'name': 'Joan Whitaker', 'relationship': 'wife', 'phone': '608-555-0116'}",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": "A friend told me about you guys. He's had good luck with a claim of his own.",
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "tinnitus"
+          ],
+          "got": [
+            "tinnitus"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "88m motor transport operator",
+            "92y unit supply specialist"
+          ],
+          "got": [
+            "88m motor transport operator",
+            "92y unit supply specialist"
+          ],
+          "status": "correct",
+          "source": "C-file pp. 1, 2"
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "gulf war hazards"
+          ],
+          "got": [
+            "gulf war hazards"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '1990-06', '1994-06')",
+            "('army', 'reserve', 'honorable', '2003-01', '2004-12')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '1990-06', '1994-06')",
+            "('army', 'reserve', 'honorable', '2003-01', '2004-12')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 0.95,
+      "structured_questions": 21,
+      "narrative_answers": 15,
+      "clarifications": 0,
+      "veteran_messages": 22,
+      "cfile_prefilled": 1,
+      "prefill_share": 0.045454545454545456,
+      "turns_to_signed_poa": 10,
+      "fee_expected": 30,
+      "fee_got": 30,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": null,
+      "untested": false,
+      "handoffs": [
+        "intake",
+        "claims_prep",
+        "intake"
+      ],
+      "refused": {
+        "intake": 1
+      },
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": 1.0,
+      "facenote_lines": [
+        9,
+        9
+      ],
+      "facenote_checks": {
+        "dob": true,
+        "service_periods": true,
+        "mos": true,
+        "combined_rating": true,
+        "sc_conditions": true,
+        "decisions": true,
+        "prior_reps": true
+      },
+      "verify_passed": true,
+      "uncertain_lines": 0,
+      "citation_precision": 1.0,
+      "facts": 8,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 12,
+          "input_tokens": 82101,
+          "output_tokens": 4475,
+          "cost_usd": 0.010447600000000001,
+          "latency_s": 26.96
+        },
+        "intake": {
+          "calls": 116,
+          "input_tokens": 1015442,
+          "output_tokens": 53135,
+          "cost_usd": 0.1281117,
+          "latency_s": 306.49899999999997
+        },
+        "claims_prep": {
+          "calls": 11,
+          "input_tokens": 144931,
+          "output_tokens": 5663,
+          "cost_usd": 0.0173246,
+          "latency_s": 30.171
+        },
+        "simulator": {
+          "calls": 22,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0120198,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.1679037,
+      "model_failures": 0
+    },
+    {
+      "persona_id": "withdraws_mid_intake",
+      "condition": "cfile",
+      "expected_end": "needs_human",
+      "end_state": "needs_human",
+      "scenario_pass": true,
+      "split": "dev",
+      "critical_errors": [],
+      "completed": true,
+      "error": "",
+      "fields": [
+        {
+          "field": "is_veteran",
+          "expected": true,
+          "got": true,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "filed_before",
+          "expected": false,
+          "got": false,
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC"
+        },
+        {
+          "field": "receiving_va_pay",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "rating_pct",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "tdiu",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "prior_attorney_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "dic_claim",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "earning_over_1600",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "receives_ssa",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "ssa_interest",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "partner_share_consent",
+          "expected": true,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "retired",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "litigation_contact",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "marital_status",
+          "expected": "single",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "spouse_name",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "children_under_18",
+          "expected": false,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "next_of_kin",
+          "expected": "Thomas Nguyen, father, 920-555-0148",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "heard_about",
+          "expected": "a friend",
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "internet_source",
+          "expected": null,
+          "got": null,
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "claim_conditions",
+          "expected": [
+            "lumbar strain"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "other_conditions",
+          "expected": [],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "mos",
+          "expected": [
+            "68w combat medic specialist"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "exposures",
+          "expected": [
+            "burn pits"
+          ],
+          "got": [],
+          "status": "n/a",
+          "source": ""
+        },
+        {
+          "field": "service_periods",
+          "expected": [
+            "('army', 'active', 'honorable', '2011-05', '2016-04')"
+          ],
+          "got": [
+            "('army', 'active', 'honorable', '2011', '2016')"
+          ],
+          "status": "correct",
+          "source": "veteran, chat 17:00 UTC; veteran, chat 17:00 UTC"
+        }
+      ],
+      "field_accuracy": 1.0,
+      "structured_questions": 4,
+      "narrative_answers": 0,
+      "clarifications": 0,
+      "veteran_messages": 3,
+      "cfile_prefilled": 0,
+      "prefill_share": 0.0,
+      "turns_to_signed_poa": null,
+      "fee_expected": null,
+      "fee_got": null,
+      "kb_calls": 0,
+      "kb_sourced": 0,
+      "resumed_after": null,
+      "ask_answer": {},
+      "scripted_sent": true,
+      "untested": false,
+      "handoffs": [
+        "intake"
+      ],
+      "refused": {},
+      "flag_decisions": [],
+      "flag_decision_expected": null,
+      "flag_decision_correct": null,
+      "facenote_line_accuracy": null,
+      "facenote_lines": [
+        0,
+        0
+      ],
+      "facenote_checks": {},
+      "verify_passed": null,
+      "uncertain_lines": 0,
+      "citation_precision": null,
+      "facts": 0,
+      "by_agent": {
+        "orchestrator": {
+          "calls": 7,
+          "input_tokens": 31417,
+          "output_tokens": 1588,
+          "cost_usd": 0.0039356999999999994,
+          "latency_s": 10.005
+        },
+        "intake": {
+          "calls": 17,
+          "input_tokens": 115553,
+          "output_tokens": 6043,
+          "cost_usd": 0.014576800000000001,
+          "latency_s": 42.053000000000004
+        },
+        "simulator": {
+          "calls": 3,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cost_usd": 0.0007006,
+          "latency_s": 0.0
+        }
+      },
+      "cost_usd": 0.0192131,
+      "model_failures": 0
+    }
+  ]
+}

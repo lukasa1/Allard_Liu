@@ -103,7 +103,8 @@ uv run intake support-eval --name support-midpoint --max-cost 1.5
 
 `--max-cost` stops the run if the traced spend passes that many US dollars.
 
-**Where the results are** (`results/` is not in the repo: a run writes it):
+**Where the results are** (the midpoint run's are in the repo, so they can be read without a paid
+run; a new run with the same `--name` overwrites them):
 - **`results/midpoint/report.md`** has the tables:
   - the headline, with field accuracy, critical errors and scenario pass;
   - a section per agent;
