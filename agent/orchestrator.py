@@ -90,6 +90,11 @@ def _move(turn: Turn, args: MoveArgs) -> str:
     if event["type"] == "refused":
         return f"refused: {event['data']['reason']}"
     turn.acted = True
+    if to == 4 and turn.handoff is None:  # a move back needs intake on the case, or nobody works it
+        handed = _handoff(turn, "intake", f"Pass 2 again: {args.reason}")
+        return f"moved: {json.dumps(event['data'])}. " + (
+            "Code handed the case to intake with your reason as its goal. Finish now."
+            if not handed.startswith("refused") else f"Intake handoff {handed}")
     return f"moved: {json.dumps(event['data'])}"
 
 
@@ -109,8 +114,8 @@ def tools(turn: Turn) -> list[ToolSpec]:
         ToolSpec("run_prep", "Hand the case to claims prep at stage 3 (21-22a and ITF filed): pull and read "
                  "the C-file, prefill, write the face note. One handoff per wake.", GoalArgs,
                  lambda a: _handoff(turn, "claims_prep", a.goal)),
-        ToolSpec("move_stage", "Move the case back from stage 5 to stage 4 (pass 2; intake must then ask "
-                 "about the reason), or to needs_human or closed, with a reason. Forward moves happen in "
+        ToolSpec("move_stage", "Move the case back from stage 5 to stage 4 (pass 2: code then hands it to "
+                 "intake with your reason as the goal), or to needs_human or closed, with a reason. Forward moves happen in "
                  "code.", MoveArgs, lambda a: _move(turn, a)),
         ToolSpec("staff_task", "Create a task for a staff member (for example a flag a person should "
                  "decide). Does not change the stage.", TaskArgs, lambda a: _staff_task(turn, a)),

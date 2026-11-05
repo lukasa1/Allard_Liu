@@ -410,6 +410,9 @@ def test_a_mistyped_secure_form_value_is_what_the_simulated_veteran_types():
     values = secure_form_values(p, ["address.line1", "address.city"])
     assert values == {"address.line1": "1178 Maple Avenue", "address.city": "Kenosha"}
     assert p.truth.street == "1187 Maple Avenue" and "1187 Maple Avenue" in p.behaviors[0]
+    used: set[str] = set()  # in a case: the mistake is typed once; a later form has the corrected street
+    assert secure_form_values(p, ["address.line1"], used) == {"address.line1": "1178 Maple Avenue"}
+    assert secure_form_values(p, ["address.line1"], used) == {"address.line1": "1187 Maple Avenue"}
 
 
 def test_scoring_reads_structured_none_and_year_only_answers_as_the_veteran_meant():

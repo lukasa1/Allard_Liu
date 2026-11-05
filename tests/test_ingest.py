@@ -312,3 +312,21 @@ def test_wants_human_not_for_va_or_ssa(text):
 
 def test_a_yes_and_more_is_still_a_request():
     assert wants_human("Yes, I need to talk to someone, this is urgent.")
+
+
+@pytest.mark.parametrize("text", [  # answers to the firm's litigation / Social Security offers
+    "Just the tinnitus. And yes, please have an attorney contact me about the burn pits.",
+    "Yes, I'd be interested. Please have an attorney contact me.",
+    "No, no need to have an attorney contact me about that.",
+    "Nah, no need to have a lawyer call me.",
+    "Yeah, I'd like to talk to someone. I'm not working right now.",
+    "No other conditions. And yes, I'd like to talk to someone too.",
+])
+def test_an_answer_to_the_firms_offer_is_not_a_request(text):
+    assert not wants_human(text), text
+
+
+@pytest.mark.parametrize("text", ["Yes, I got the letter. Can you have my lawyer call me? This is urgent.",
+                                  "Yes. Please call me.", "Sure, can someone call me? I'm confused."])
+def test_a_request_after_a_yes_still_counts(text):
+    assert wants_human(text), text

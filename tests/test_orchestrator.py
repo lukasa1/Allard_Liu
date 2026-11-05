@@ -180,3 +180,34 @@ def test_staff_tasks_are_deduped_and_allowed_after_a_handoff(rt, lm):
     assert [t.text for t in rt.store.get_case(cid).tasks] == ["Call the veteran."]
     traj = lm.prompts("orchestrator", "extract")[0]
     assert "staff task created" in traj and "already open" in traj
+
+
+def test_a_move_back_alone_still_puts_intake_on_the_case(rt, lm):
+    """The orchestrator moves 5 -> 4 and finishes without run_intake: code hands the case to intake
+    with the reason as its goal, so the case never sits at stage 4 with nobody on it."""
+    cid = answered(rt, 5, case_id="c6")
+    lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Noted."))
+    lm.turn("orchestrator", call("move_stage", to="4", reason="new condition: knees"), final())
+    lm.turn("intake", final(reply="Which conditions would you like help with, the knees too?"))
+    rt.message(cid, "I also want to claim my knees.")
+    rt.wait_until_idle()
+    case = rt.store.get_case(cid)
+    assert (case.stage, case.owner) == (4, "intake") and "new condition: knees" in case.goal
+
+
+def test_the_same_list_recorded_again_resolves_the_reopen_on_a_pinned_clock(rt, lm):
+    """On the eval's pinned clock every answer has the same time: a reopened pass 2 still ends when
+    intake records claim_conditions again, even with the same list."""
+    from agent import clock
+
+    with clock.pinned("reopen-test"):
+        cid = answered(rt, 5, case_id="c7")
+        before = rt.store.get_case(cid).answers["claim_conditions"]
+        lm.turn("support", call("flag_orchestrator", kind="new_condition", text="knees"), final(reply="Noted."))
+        lm.turn("orchestrator", call("move_stage", to="4", reason="new condition: knees"), final())
+        lm.turn("intake", call("record_answer", q="claim_conditions", a=", ".join(before.value)),
+                final(reply="Thanks."))  # fmt: skip
+        rt.message(cid, "I also want to claim my knees.")
+        rt.wait_until_idle()
+        case = rt.store.get_case(cid)
+        assert case.reopen is None and "claim_conditions" not in (case.checklist["pass2"] or [])

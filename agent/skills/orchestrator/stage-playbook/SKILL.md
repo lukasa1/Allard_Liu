@@ -33,7 +33,8 @@ Side states: `waiting_on_veteran` and `waiting_on_attorney` (the owner keeps the
   `flags`), then `run_intake` for pass 2: ask only the fields still missing, confirm the C-file
   conflicts, then the narrative prompts. Put any new condition from a flag into the goal.
 - **subagent_result from intake at stage 5**: nothing to hand off; the case waits for attorney
-  review. Leave `reply` empty (intake already told the veteran).
+  review. Leave `reply` empty (intake already told the veteran). Don't move it back to stage 4
+  unless a support flag names a new condition: a question intake left out is not a reason.
 - **subagent_result with the case `closed` or `needs_human`** (a stop rule, a crisis, a request
   for a person): no handoff. Leave `reply` empty: the veteran was already told.
 - **escalated**: a person has been asked to step in (a crisis or a request for a person is
@@ -47,7 +48,8 @@ Side states: `waiting_on_veteran` and `waiting_on_attorney` (the owner keeps the
 
 - One handoff per wake. After it, finish.
 - `move_stage` moves back only from stage 5 to stage 4 (with a reason, which intake's pass-2
-  checklist then shows), or to `needs_human` / `closed`. `closed` is
+  checklist then shows; code hands the case to intake with it as the goal), or to `needs_human` /
+  `closed`. `closed` is
   refused once anything was filed with VA: then a person decides on withdrawal (`needs_human`).
 - One case-owning sub-agent at a time: a handoff is refused while another owns the case.
 - `staff_task` only for something no open task covers. The case file's `open_tasks` already holds

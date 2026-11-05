@@ -2,6 +2,8 @@ id: oth_one_of_two
 summary: An honorable first enlistment and a second period ending other than honorable. Under the firm's
   rule only every period non-honorable stops intake; here intake goes on, code adds a staff
   task naming the OTH period for the attorney (scored), and the case stays eligible.
+behaviors:
+- "You know the character of each discharge for certain; when asked, say it plainly, without \"I think\" or \"not sure\"."
 truth:
   first_name: Luis
   last_name: Ferreira

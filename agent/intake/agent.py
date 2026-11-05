@@ -143,6 +143,8 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
                                    f"{c.on_file!r}. Check with them.") for c in open_)  # fmt: skip
         else:
             case.answers[key] = answer
+            if key == "claim_conditions" and case.reopen is not None:
+                case.reopen = None  # asked again after the move back: the reopen item is resolved
         for c in open_:
             c.resolved_at = answer.at
         checklist.refresh(case)

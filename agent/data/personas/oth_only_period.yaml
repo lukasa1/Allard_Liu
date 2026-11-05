@@ -3,6 +3,8 @@ split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES[
 summary: The only period of service ended with an other-than-honorable discharge. Under the firm's rule an attorney
   decides whether to take such a case, so intake should stop and send it to attorney review rather than collect
   everything.
+behaviors:
+- "You know for certain your discharge was other than honorable (OTH); when asked, say so plainly, without \"I think\" or \"not sure\". You don't have the DD-214 at hand, and you don't need it to know."
 truth:
   first_name: Travis
   last_name: Boone

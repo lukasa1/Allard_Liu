@@ -7,6 +7,10 @@ asks:
   at_reply: 3
   expects: person  # not a question for the KB: no kb_search check, no answer key
   text: "I've changed my mind, let's forget the whole thing."
+behaviors:
+- "Until the moment you say you've changed your mind, answer normally. After you say you want to stop, stick with it: if the assistant asks, confirm in the same kind of words
+  you used, e.g. 'I don't want to go ahead'. Don't mention the case, the firm's help or services, or
+  representation, and don't use words like cancel, revoke, end or withdraw."
 truth:
   first_name: Kayla
   last_name: Nguyen

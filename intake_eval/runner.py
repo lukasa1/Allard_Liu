@@ -69,7 +69,9 @@ SECURE_FIELDS = ("first_name", "middle_initial", "last_name", "ssn", "date_of_bi
                  "address.city", "address.state", "address.zip", "phone", "email")  # fmt: skip
 
 
-def secure_form_values(p: Persona, fields: list[str]) -> dict[str, str]:
+def secure_form_values(p: Persona, fields: list[str], typed_used: set[str] | None = None) -> dict[str, str]:
+    """The values the veteran types into a secure form. `typed_used`: the mistyped fields already typed
+    once in this case; a later form gets the right value (they corrected it in chat)."""
     t = p.truth
     first = t.service_periods[0].branch if t.service_periods else None
     values = {
@@ -80,7 +82,11 @@ def secure_form_values(p: Persona, fields: list[str]) -> dict[str, str]:
         "address.city": t.city or "", "address.state": t.state or "", "address.zip": t.zip or "",
         "phone": t.cell_phone or "", "email": t.email or "", "va_file_number": "", "service_number": "",
     }  # fmt: skip
-    values.update(p.typed)  # what this veteran mistypes (corrects_after_preview)
+    for key, wrong in p.typed.items():  # what this veteran mistypes (corrects_after_preview), once
+        if key in fields and (typed_used is None or key not in typed_used):
+            values[key] = wrong
+            if typed_used is not None:
+                typed_used.add(key)
     return {f: values.get(f, "") for f in fields}
 
 
@@ -113,6 +119,7 @@ class CaseRun:
     error: str = ""  # traceback if the run crashed
     asked_at: int | None = None  # the veteran reply that was the persona's question (`asks`)
     asked_index: int | None = None  # its place in the transcript
+    typed_used: set[str] = field(default_factory=set)  # mistyped secure-form fields already typed once
     prep_message_sent: bool | None = None  # the persona's `during_prep` message was sent; None: it has none
     # intake's allowed record_answer calls once the turn after each veteran reply was over
     records_after_reply: dict[int, int] = field(default_factory=dict)
@@ -273,7 +280,7 @@ def _use_card(run: CaseRun, persona: Persona, card: dict) -> None:
         return
     try:
         if kind == "secure_form":
-            values = secure_form_values(persona, [f["name"] for f in card["fields"]])
+            values = secure_form_values(persona, [f["name"] for f in card["fields"]], run.typed_used)
             errors = documents.submit_secure_form(rt, cid, card["request_id"], values)
             note = f"[veteran fills the secure form: {', '.join(sorted(values))}; errors: {errors or 'none'}]"
         elif kind == "signature_pad":

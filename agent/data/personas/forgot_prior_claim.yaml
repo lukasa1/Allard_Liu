@@ -5,7 +5,8 @@ behaviors:
 - deny_prior_claim_first
 - (This overrides the facts above for what you say first.) You think of your monthly VA disability check as something you have just got since your Navy days; you
   don't connect it with 'filing a claim', so you say no when asked whether you filed. Mention the check or the
-  rating only when asked about VA letters, a decision, a rating or VA payments.
+  rating only when asked about VA letters, a decision, a rating or VA payments. Then say it plainly, since you
+  are sure it is 30%.
 truth:
   first_name: Renee
   last_name: Okafor

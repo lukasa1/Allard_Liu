@@ -1,5 +1,5 @@
 id: new_condition_during_prep
-summary: A clean one-condition case, until the veteran tells support about a new diagnosis while claims prep reads
+summary: A clean case, until the veteran tells support about a new diagnosis while claims prep reads
   the C-file. The orchestrator should reopen intake for it, so pass 2 asks about it.
 behaviors:
 - new_condition_during_prep

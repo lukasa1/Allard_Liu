@@ -176,25 +176,46 @@ _WANTS_HUMAN = re.compile(
 _SSA = re.compile(r"\b(social security|ssa|ssdi|ssi)\b", re.IGNORECASE)
 
 
-# "Yes, I would like to talk with someone": a yes to that question, not a request (the model's
-# to_person reads a real one); the plainer requests ("Can I talk to a person?") still count
-_AFFIRM = re.compile(r"^\s*(yes|yeah|yep|yup|sure|ok(ay)?|absolutely|definitely|of course)\b", re.IGNORECASE)
+# "Yes, I would like to talk with someone": a yes to the firm's offer (its Social Security
+# department, an attorney about litigation), not a request (the model's to_person reads a real one);
+# the plainer requests ("Can I talk to a person?") still count
 # only to "someone" / "your team": "Yes, I need to talk to a real person" still counts
 _LIKE_TO = re.compile(r"i('d| would)? (like|want|need) to (talk|speak) (to|with) (someone|somebody|your team|your staff"
                       r"|a staff member)$", re.IGNORECASE)  # fmt: skip
+
+
+_ANSWER_YES = re.compile(r"^\s*((and|but|so),?\s+)?(yes|yeah|yep|yup|sure|ok(ay)?|absolutely|definitely|of course)\b",
+                         re.IGNORECASE)  # fmt: skip
+# right before the contact phrase: "no need to have an attorney contact me", "please don't have one call me"
+_ANSWER_NO = re.compile(r"\b(no need to|rather not|don'?t|do not|doesn'?t need to|don'?t need to)( please)?\s*$",
+                        re.IGNORECASE)  # fmt: skip
+_CONTACT_FORM = re.compile(rf"(have|can|could) {_WHO} (please )?(call|contact|phone) me$", re.IGNORECASE)
 
 
 def wants_human(text: str) -> bool:
     text = _plain(text)
     if _SSA.search(text):
         return False
-    yes = _AFFIRM.match(text)
 
-    def a_yes(m: re.Match) -> bool:  # "Yes, I'd like to talk with someone (too)." and nothing more
-        return bool(yes and not re.search(r"[.!?]", text[: m.start()]) and _LIKE_TO.match(m.group(0))
-                    and re.fullmatch(r"[\s,]*(too|as well|also|thanks|thank you)?[\s.!,]*", text[m.end():]))
+    def sentence(m: re.Match) -> tuple[str, str, bool]:  # the match's sentence: before, after, a question?
+        start = max((e.end() for e in re.finditer(r"[.!?]", text[: m.start()])), default=0)
+        end = next((m.end() + e.start() for e in re.finditer(r"[.!?]", text[m.end():])), len(text))
+        return text[start:m.start()], text[m.end():end], text[end:end + 1] == "?"
 
-    return any(not a_yes(m) for m in _WANTS_HUMAN.finditer(text))
+    def answer(m: re.Match) -> bool:
+        before, after, question = sentence(m)
+        if _CONTACT_FORM.match(m.group(0)):
+            # "Yes, please have an attorney contact me about it", "No, no need to have one call me",
+            # "Yes. Have an attorney contact me.": answers. "Yes, I got the letter. Can you have my
+            # lawyer call me?" is a request.
+            if _ANSWER_NO.search(before):
+                return True
+            return not question and bool(_ANSWER_YES.match(before) or _ANSWER_YES.match(text))
+        # "Yes, I'd like to talk with someone (too / there).": a yes to the firm's offer
+        return bool(_ANSWER_YES.match(before) and _LIKE_TO.match(m.group(0))
+                    and re.fullmatch(r"[\s,]*(too|as well|also|there|there too|thanks|thank you)?[\s,]*", after))
+
+    return any(not answer(m) for m in _WANTS_HUMAN.finditer(text))
 
 
 # ----------------------------------------------------------------------------- ending representation
@@ -208,7 +229,9 @@ WITHDRAW = re.compile(
     r"|withdraw from (the firm|your firm|representation|your services)"
     r"|(don'?t|do not|no longer) want (you|the firm|your firm|an attorney|a lawyer|anyone) to represent"
     r"|(don'?t|do not|no longer) want (your|the firm'?s|an attorney'?s) (help|services)"
-    r"|fire (you|my (lawyer|attorney))|(find|get) (a )?(new|different|another) (lawyer|attorney))\b",
+    # not "(find|get) a new lawyer": often about another lawyer ("if it means I'd get a different
+    # lawyer"); the model's to_person reads that one
+    r"|fire (you|my (lawyer|attorney)))\b",
     re.IGNORECASE,
 )
 

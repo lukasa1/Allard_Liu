@@ -62,7 +62,8 @@ owner keeps the case), `waiting_on_va`, `needs_human` and `closed`. Code derives
 every tool call and event. Moves inside one owner's stages are automatic; a move to another owner
 only by a handoff; the orchestrator's `move_stage` covers side states and one move back, from stage 5
 to stage 4 (reopening intake for a new condition; earlier stages can't be reopened). That move
-leaves a reopen item that pass 2 must resolve, and `claim_conditions` is asked again. Every
+leaves a reopen item that pass 2 must resolve, and `claim_conditions` is asked again; code hands
+the case to intake with the move's reason as the goal, so a move back never leaves it with nobody. Every
 refused move is logged and its reason goes back to the model.
 
 ### Runtime protocol
