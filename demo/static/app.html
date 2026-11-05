@@ -165,7 +165,7 @@ function showDoc(form) {
   const cfg = await api("/api/config");
   $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${esc(p.summary)}">${esc(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
   if (!cfg.ready) { $("#banner").textContent = cfg.message; $("#banner").style.display = "block"; $("#start").disabled = true; }
-  if (cfg.scripted) {  // D26: no model; the agents follow agent/scripted/demo.py
+  if (cfg.scripted) {  // no model; the agents follow agent/scripted/demo.py
     $("#banner").textContent = "Scripted demo: no model. Press Tab to take the suggested line, Enter to send, and use the cards as they appear. The agents follow a script; everything else is the real code.";
     $("#banner").style.display = "block";
   }

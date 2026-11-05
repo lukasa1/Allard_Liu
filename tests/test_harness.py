@@ -1,4 +1,4 @@
-"""The shared harness (L1, L4, L5) on dspy.ReAct, driven by the scripted fake LM."""
+"""The shared harness on dspy.ReAct, driven by the scripted fake LM."""
 
 import json
 import socket

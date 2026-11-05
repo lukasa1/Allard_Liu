@@ -60,6 +60,8 @@ def test_flags_dob_mismatch_and_bad_discharge():
 def test_helpers():
     assert cond_name("ptsd") == "PTSD" and cond_name("left knee condition") == "Left knee condition"
     assert service_era("2004-06") == "Gulf War" and service_era("1968-01") == "Vietnam Era"
+    assert service_era("1990-06", "1994-06") == "Gulf War"  # entered before 1990-08, served into it
+    assert service_era("1976-01", "1980-01") == "Peacetime (post-Vietnam)" and service_era("1970-01", "1978-01") == "Vietnam Era"
 
 
 def test_ssns_are_stripped_in_every_format_but_dates_dobs_and_zips_stay():
@@ -125,7 +127,7 @@ def test_prior_rep_is_the_newest_form_without_revocation_details():
     revoked = CfileFacts(prior_reps=[facts.prior_reps[2]])
     head = render(revoked, fee_pct=30, itf_date=None, intake_dob=None).lines[0]
     assert (head.text, head.sources) == ("FA 30%; No prior rep", ("case:fee_agreement", "prior_reps.0", "none:poa_form:prior_representative"))
-    # a VSO is never a prior rep (D15), even a current one and the newest
+    # a VSO is never a prior rep, even a current one and the newest
     vso = CfileFacts(prior_reps=[PriorRep(name="Older Firm", kind="attorney", signed="2019-01-01", revoked="2020-01-01"),
                                  PriorRep(name="DAV", kind="vso", signed="2025-01-01")])  # fmt: skip
     assert render(vso, fee_pct=30, itf_date=None, intake_dob=None).lines[0].text == "FA 30%; No prior rep"
@@ -136,3 +138,9 @@ def test_a_veteran_with_no_rating_decision_gets_a_plain_sc_line():
     note = render(truth_facts(get_persona("baseline_clean")), fee_pct=30, itf_date=None, intake_dob=None, firm="Law Firm")
     assert "SC at time of signing Law Firm - 0% (no rating decision in the C-file)" in note.text
     assert "SC (0%)| none" in note.text
+
+
+def test_someone_who_never_served_has_no_c_file():
+    from agent.cfile.synth import build_documents
+
+    assert build_documents(get_persona("not_a_veteran")) == []

@@ -3,7 +3,7 @@
 The simulated veteran answers the agents' chat messages; the runner uses the cards for it the way
 the demo's page does, through the host actions of agent.intake.documents: it fills the secure form
 from the persona's synthetic identity, draws a signature and clicks Sign. A simulated attorney
-countersigns both documents once the case waits on the attorney (D6). Before reading the outbox or
+countersigns both documents once the case waits on the attorney. Before reading the outbox or
 the case, the runner waits until the runtime is idle (§3: no turn queued or running, claims prep's
 background turn included).
 
@@ -111,6 +111,11 @@ class CaseRun:
     stopped_at_cost: bool = False  # --max-cost reached
     model_failures: int = 0  # canned "having trouble" replies + simulator errors
     error: str = ""  # traceback if the run crashed
+    asked_at: int | None = None  # the veteran reply that was the persona's question (`asks`)
+    asked_index: int | None = None  # its place in the transcript
+    prep_message_sent: bool | None = None  # the persona's `during_prep` message was sent; None: it has none
+    # intake's allowed record_answer calls once the turn after each veteran reply was over
+    records_after_reply: dict[int, int] = field(default_factory=dict)
 
     @property
     def case(self) -> CaseFile:
@@ -169,6 +174,8 @@ def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[
     while run.steps < MAX_STEPS:
         run.steps += 1
         rt.wait_until_idle(cid, timeout=idle_timeout_s())
+        if persona.asks:  # for resumed_after: when intake went back to the question it had asked
+            run.records_after_reply.setdefault(run.veteran_replies, _records(run))
         for item in rt.updates(cid, seen):
             seen = item.seq
             if item.kind == "message":
@@ -195,13 +202,14 @@ def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[
             documents.countersign(rt, cid, by=ATTORNEY)
             run.transcript.append({"role": "app", "text": f"[{ATTORNEY} countersigns both documents]"})
             if persona.during_prep:
-                _send_during_prep(run, persona)
+                _send_during_prep(run, persona, sim)
         elif not unread:
             run.stalled = f"stage {case.stage} ({case.side_state or case.owner or 'no owner'}): nothing to answer"
             return
         else:
+            prompt = "\n\n".join(unread)
             try:
-                reply = sim.respond("\n\n".join(unread))
+                reply = sim.respond(prompt)
             except Exception as exc:  # noqa: BLE001 - a refusal, unparseable output, a 429 after retries
                 run.model_failures += 1
                 failures += 1
@@ -209,15 +217,45 @@ def _drive(run: CaseRun, persona: Persona, sim: Veteran, over_budget: Callable[[
                 continue
             unread = []
             run.veteran_replies += 1
-            if persona.asks and run.veteran_replies == int(persona.asks["at_reply"]):
-                # the question is put by the runner, not left to the simulator (pilot 1: it never asked)
-                reply = f"{persona.asks['text'].strip()} {reply}"
-                if hasattr(sim, "said_instead"):  # so the simulated veteran knows it asked
+            if run.asked_at is None and asks_now(persona, run, case, prompt):
+                # the runner puts the question, so every run asks it (a simulator may not), and
+                # sends it alone: the veteran doesn't answer what intake just asked, so intake
+                # has to answer and then go back to its question (scored as resumed_after)
+                reply = persona.asks["text"].strip()
+                run.asked_at = run.veteran_replies
+                if hasattr(sim, "said_instead"):  # so the simulated veteran knows it only asked
                     sim.said_instead(reply)
+            if run.asked_at == run.veteran_replies:
+                run.asked_index = len(run.transcript)
             run.transcript.append({"role": "veteran", "text": reply})
             rt.message(cid, reply)
             _acted(run)
     run.hit_step_limit = True
+
+
+def asks_now(persona: Persona, run: CaseRun, case: CaseFile, prompt: str) -> bool:
+    """Is this veteran reply the one the persona's question replaces? `at_reply`: that reply (1-based);
+    `after: itf_filed`: the first reply to an intake question once the intent to file is filed (pass
+    2 has just begun, and intake has just told the veteran about the ITF); `after: narratives`: the
+    first reply to an intake question once pass 2 is down to the narrative prompts (or one is
+    answered), i.e. while the veteran describes their condition."""
+    asks = persona.asks
+    if not asks:
+        return False
+    if "at_reply" in asks:
+        return run.veteran_replies == int(asks["at_reply"])
+    if asks.get("after") == "itf_filed":
+        return "itf" in case.filings and case.owner == "intake" and "?" in prompt
+    if asks.get("after") == "narratives":
+        left = case.checklist.get("pass2") or []
+        started = any(k.startswith("narrative:") for k in case.answers)
+        down_to = case.stage >= 4 and bool(left) and all(k.startswith("narrative:") for k in left)
+        return case.owner == "intake" and "?" in prompt and (started or down_to)
+    raise ValueError(f"{persona.id}: asks needs at_reply or after: itf_filed | narratives")
+
+
+def _records(run: CaseRun) -> int:
+    return sum(x["kind"] == "tool" and x["tool"] == "record_answer" and x["guard"] == "allowed" for x in run.traces)
 
 
 def _acted(run: CaseRun) -> None:
@@ -256,15 +294,19 @@ def _use_card(run: CaseRun, persona: Persona, card: dict) -> None:
     _acted(run)
 
 
-def _send_during_prep(run: CaseRun, persona: Persona, timeout_s: float = 120.0) -> None:
+def _send_during_prep(run: CaseRun, persona: Persona, sim=None, timeout_s: float = 600.0) -> None:
     """The orchestrator scenario: message the case while claims prep runs (support answers it)."""
     end = time.monotonic() + timeout_s
     while (case := run.case).owner != "claims_prep":
         if case.prep.done or case.parked or time.monotonic() > end:
             run.transcript.append({"role": "app", "text": "[claims prep never ran: scenario message not sent]"})
+            run.prep_message_sent = False
             return
         time.sleep(0.02)
     text = persona.during_prep["message"]
+    if hasattr(sim, "turns"):  # so the simulated veteran knows it already told the firm
+        sim.turns.append({"assistant_message": "(nothing: you send this yourself while the firm reads your VA file)", "reply": text})
     run.transcript.append({"role": "veteran", "text": text})
+    run.prep_message_sent = True
     run.rt.message(run.case_id, text)
     _acted(run)

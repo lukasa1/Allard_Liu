@@ -14,7 +14,7 @@ write a line yourself: you record the facts, and each line carries the facts it 
 |---|---|
 | `FA <fee>%; Prior rep NAME` or `No prior rep` | the fee comes from the case's own fee agreement. Record a `prior_representative` for **every** 21-22 / 21-22a in the C-file, with `revoked` when the form has revocation details |
 | `DOB` | `dob` (DD-214) |
-| `Service Era` | derived from the first `service_period`'s start |
+| `Service Era` | derived from the first `service_period`: the latest period of war it overlaps (code renders it) |
 | one line per period: branch, dates, discharge | `service_period` and `discharge` (DD-214; `period_start` links the two) |
 | `MOS` | `mos` (DD-214 primary specialty) |
 | `SC at time of signing` and the SC list | `combined_rating` and every `rated_condition` from the **most recent** code sheet |

@@ -37,15 +37,15 @@ _YES = re.compile(  # "I did" / "I am" only as a whole answer: "I'm confused" is
     re.IGNORECASE,
 )
 _NONE = re.compile(
-    r"^\s*(no|none|nope|nothing|n/a|no other|that'?s (it|all)|not that i know"
-    # "I don't have any other conditions I'm dealing with" (pilot 1), "I have no others"
+    r"^\s*(no|nah|none|nope|nothing|n/a|no other|that'?s (it|all)|not that i know"
+    # "I don't have any other conditions I'm dealing with", "I have no others"
     r"|i (don'?t|do not) (have|know of) any|i have (no|none)"
     r"|there(?: are|'s| is) (none|nothing|no (other|more|others)\b))"
     r"\b(?!\s+(idea|clue))",
     re.IGNORECASE,
 )
 # A list item that only says "none" (the model's value ["none"]): no item at all
-NONE_ITEM = re.compile(r"^\s*(none( of (the above|those|them))?|none known|no|nothing|n/?a|not applicable|no exposures?|"
+NONE_ITEM = re.compile(r"^\s*(none( of (the above|those|them))?|none known|no|nah|nothing|n/?a|not applicable|no exposures?|"
                        r"no other conditions?)\s*\.?\s*$",
                         re.IGNORECASE)  # fmt: skip
 
@@ -64,16 +64,20 @@ _BRANCHES = {
     "navy": "navy",
 }
 _BRANCH_ALIASES = {"usaf": "air force", "usmc": "marine corps", "uscg": "coast guard", "usn": "navy",
-                   "us army": "army", "u.s. army": "army", "us navy": "navy"}
+                   "us army": "army", "u.s. army": "army", "us navy": "navy",
+                   "naval": "navy", "air": "air force"}  # "Naval Reserve", "Air Guard"
 
 
 def canonical_branch(branch: str | None) -> str | None:
-    """One spelling per branch: "Air_Force", "air-force", "USAF" -> "air force" (pilot 1: the
-    model wrote "air_force", the C-file "air force", and prefill took them for two enlistments)."""
+    """One spelling per branch: "Air_Force", "air-force", "USAF" -> "air force", so the
+    model's "air_force" and the C-file's "air force" are one enlistment, not two."""
     if not branch:
         return branch
-    low = re.sub(r"[\s_\-]+", " ", branch.strip().lower())
+    low = re.sub(r"[\s_\-]+", " ", branch.strip().lower()).strip(" .")
     low = re.sub(r"^(u\.?\s?s\.?|united states)\s+", "", low)  # "U.S. Navy", "US Air Force"
+    # "Navy Reserve", "Army Reserves", "Army Guard": the branch (the component is a field of its own)
+    if low not in _BRANCHES and low != "national guard":  # that one alone doesn't say which branch
+        low = re.sub(r"\s+(national guard|reserves?|guard)$", "", low)
     return _BRANCHES.get(low) or _BRANCH_ALIASES.get(low) or low
 
 
@@ -85,7 +89,7 @@ DISCHARGES = ("honorable", "general", "oth", "bad_conduct", "dishonorable", "unc
 # Discharge phrases (after hyphens and underscores became spaces), most specific first. Each match
 # is blanked out before the next, so "other than honorable" never also reads as "honorable".
 _DISCHARGE_RES = [
-    # A qualifier before "honorable" makes it non-honorable: OTH is the catch-all code (A1 then
+    # A qualifier before "honorable" makes it non-honorable: OTH is the catch-all code (the stop rule then
     # sends it to an attorney, which is a review, not a rejection).
     (r"\b(under )?(other than|less than|not|non|un|wasn'?t|was not|isn'?t|is not) ?honorabl[ey]\b", "oth"),
     (r"\bdis ?honorabl[ey]\b", "dishonorable"),
@@ -97,7 +101,7 @@ _DISCHARGE_RES = [
     (r"\bhonorabl[ey]\b", "honorable"),
 ]
 _NEGATED = re.compile(r"\b(not|never|no|wasn'?t|isn'?t|nor)\s+(an?\s+|a\s+)?$")
-# Stop-rule fields (A1) read free text only when it is plain. A hedge makes an answer unsure; a
+# Stop-rule fields read free text only when it is plain. A hedge makes an answer unsure; a
 # qualifier left over next to a discharge, or discharge words code can't read, need the model.
 HEDGE = re.compile(
     _UNSURE.pattern + r"|\b(i think|i believe|i guess|i suppose|probably|maybe|possibly|perhaps|might|"
@@ -416,7 +420,11 @@ def _norm_period(p: Any, strict: bool) -> Any:
     if comp:
         out["component"] = _phrase_code(_COMPONENTS, comp) or comp
     if isinstance(out.get("branch"), str):
-        out["branch"] = canonical_branch(out["branch"])
+        said = out["branch"]
+        out["branch"] = canonical_branch(said)
+        rest = re.sub(r"[\s_\-]+", " ", said).strip(" .").replace("coast guard", "")  # the Coast Guard is a branch
+        if not out.get("component") and (m := re.search(r"\b(national guard|guard|reserves?)$", rest)):
+            out["component"] = "guard" if "guard" in m.group(1) else "reserve"  # "Navy Reserve"
     dis = out.get("discharge")
     if dis and strict:
         out["discharge"] = strict_discharge(dis)
@@ -429,7 +437,7 @@ def _norm_period(p: Any, strict: bool) -> Any:
 
 def coerce(qtype: str, value: Any, options: tuple[str, ...] = (), strict: bool = False) -> Any:
     """Validate and normalise a value for a field type. Raises ValueError if it doesn't fit.
-    `strict` (a stop-rule field, A1): free text counts only when it is plain (plain_value)."""
+    `strict` (a stop-rule field): free text counts only when it is plain (plain_value)."""
     if isinstance(value, str) and qtype not in ("str", "narrative", "enum"):
         stripped = value.strip()
         if stripped[:1] in "[{" or stripped in ("true", "false", "null") or stripped.isdigit():

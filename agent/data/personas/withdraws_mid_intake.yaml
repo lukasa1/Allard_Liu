@@ -1,0 +1,53 @@
+id: withdraws_mid_intake
+summary: Partway through screening, before anything is signed, the veteran says they want to stop, in words
+  code's withdrawal check misses (a test asserts it), so the message reaches intake. Intake's model must hand
+  the case to a person (to_person); code sends the withdrawal message and the case ends at needs_human
+  (every withdrawal goes to a person, who confirms it before anything changes).
+asks:
+  at_reply: 3
+  expects: person  # not a question for the KB: no kb_search check, no answer key
+  text: "I've changed my mind, let's forget the whole thing."
+truth:
+  first_name: Kayla
+  last_name: Nguyen
+  service_periods:
+  - branch: army
+    component: active
+    start: 2011-05
+    end: 2016-04
+    discharge: honorable
+  exposures:  # served at a PACT Act burn-pit location (Afghanistan)
+  - burn pits
+  litigation_contact: false
+  mos:
+  - 68W Combat Medic Specialist
+  claim_conditions:
+  - lumbar strain
+  street: 2830 Packerland Drive
+  city: Green Bay
+  state: WI
+  zip: '54313'
+  cell_phone: 920-555-0147
+  email: kayla.nguyen@example.com
+  next_of_kin: Thomas Nguyen, father, 920-555-0148
+stories:
+  lumbar strain:
+    h02: My lower back aches all day and goes stiff when I sit too long.
+    h03: Some mornings I can barely get out of bed.
+    h04: In 2013 in Afghanistan, carrying a casualty on a litter down a hill.
+    h05: Every day.
+    h06: Worse since I got out.
+    h07: Kandahar Airfield and forward operating bases in Afghanistan.
+    h08: On patrols as the platoon medic.
+    h09: Heavy aid bag, body armor and rough terrain.
+    h10: Lifting and carrying casualties, plus years of heavy gear.
+    h11: Yes, sick call gave me Motrin and a few days of light duty.
+    h12: I had to leave a nursing assistant job because of the lifting.
+    h13: A couple of days a month.
+    h14: I can't run or lift my nephews anymore.
+    h15: My back was fine before the Army.
+    h16: No.
+expected:
+  decision: withdraw
+identity:
+  dob: '1992-02-18'  # explicit: enlisted at 19 (2011-05)

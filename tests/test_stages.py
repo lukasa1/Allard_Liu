@@ -1,4 +1,4 @@
-"""The stage table and its guard (plan §2): derived in code, every change checked."""
+"""The stage table and its guard: derived in code, every change checked."""
 
 from agent import stages
 from agent.casefile import CaseFile, DocState, Filing, StopRule
@@ -42,7 +42,7 @@ def test_stage_4_only_by_handoff_and_stage_6_never():
     case = _case(stage=3, filings=_filed("21-22a", "itf"))
     assert "run_prep" in stages.check_stage(case, 4, "derive")
     assert stages.check_stage(case, 4, "handoff") is None
-    assert "F7" in stages.check_stage(_case(stage=5), 6, "derive")
+    assert "claims investigation" in stages.check_stage(_case(stage=5), 6, "derive")
 
 
 def test_waiting_states_are_derived():
@@ -77,7 +77,7 @@ def test_the_guard_refuses_illegal_moves_with_reasons():
     assert "only the orchestrator" in stages.check_stage(at_5, 4, "intake", "why")
     assert "holds the case" in stages.check_stage(_case(stage=5, owner="intake"), 4, "orchestrator", "why")
     assert stages.check_stage(at_5, 4, "orchestrator", "new condition") is None
-    # F9: the only move back is to pass 2 (a move to stage 1-3 would strand the case)
+    # the only move back is to pass 2 (a move to stage 1-3 would strand the case)
     assert "only move back is to stage 4" in stages.check_stage(case, 1, "orchestrator", "redo screening")
     assert "only move back is to stage 4" in stages.check_stage(at_5, 2, "orchestrator", "redo")
     assert "filed with VA" in stages.check_side(_case(filings=_filed("21-22a")), "closed", "orchestrator", "no")

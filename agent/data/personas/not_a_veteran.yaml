@@ -5,5 +5,14 @@ truth:
   first_name: Chris
   last_name: Lang
   service_periods: []
+  street: 17 Maple Court
+  city: Waukesha
+  state: WI
+  zip: '53186'
+  cell_phone: 262-555-0108
+  email: chris.lang@example.com
+  next_of_kin: Pat Lang, mother, 262-555-0109
 expected:
   decision: not_veteran
+style: You never served in the military. A friend said the firm helps people with disability benefits, so you are
+  asking whether it can help you. Say plainly that you never served when asked.

@@ -1,10 +1,10 @@
-"""The runtime protocol (plan §3): wakes, message routing, queued turns, delivery.
+"""The runtime protocol: wakes, message routing, queued turns, delivery.
 
   open_case / message / event   the only ways in (the web chat, card actions, staff actions)
-  route (D1)                    the case's owner gets the veteran's messages (intake, including
+  route                    the case's owner gets the veteran's messages (intake, including
                                 while it waits on the attorney); otherwise support. Decided
                                 again when the queued turn runs: the owner may have changed
-  crisis (D3), person (D2)      checked in code on every message, in every state, before any
+  crisis, person      checked in code on every message, in every state, before any
                                 model: the crisis line, or a hand-off to a person, then needs_human
   wakes                         case_opened, subagent_result, support_flag, escalated and staff
                                 events nobody owns wake the orchestrator; nothing else does
@@ -51,7 +51,7 @@ from agent.traces import TraceLog
 
 MAX_CONTINUATIONS = 3  # claims prep turns that end before the stop rule (max_iters, early) are continued
 CHAT_EVENT_TYPES = ("message",)  # never in the orchestrator's memory block (no transcripts)
-# Wakes whose data may quote the veteran (L6); a sub-agent's result is model text written from it.
+# Wakes whose data may quote the veteran; a sub-agent's result is model text written from it.
 QUOTING_WAKES = ("support_flag", "escalated", "subagent_result")
 
 
@@ -78,7 +78,7 @@ class Runtime:
         self._running: dict[str, set[str]] = {}
         self._turns: dict[tuple[str, str], int] = {}
         self._errors: list[tuple[str, BaseException]] = []
-        self._to_person_count: dict[str, int] = {}  # per case: D2/D3 hand-offs to a person so far
+        self._to_person_count: dict[str, int] = {}  # per case: hand-offs to a person by rule so far
         self._say_lock = threading.Lock()  # a reply's hold check and its send vs. a rule's hand-off
 
     # ---------------------------------------------------------------- ways in
@@ -203,15 +203,30 @@ class Runtime:
 
     # ---------------------------------------------------------------- internals
 
-    def _to_person(self, case_id: str, text: str, kind: str, reply: str, urgent: bool = False) -> None:
-        """D2/D3: by rule, no model: reply, a staff task, needs_human, and wake the orchestrator.
-        A turn running meanwhile has its reply held back (`_run`)."""
+    def to_person_from_agent(self, case_id: str, agent: str, kind: str, why: str) -> None:
+        """A request for a person or to end the representation that code's checks missed,
+        caught by intake (agent/crisis.py to_person): the rule's own hand-off and reply."""
+        reply = WITHDRAW_MESSAGE if kind == "withdraw" else HANDOFF_MESSAGE
+        self._to_person(case_id, f"(caught by {agent}) {why}", kind, reply, actor=agent, log=False)
+
+    def crisis_from_agent(self, case_id: str, agent: str, why: str) -> None:
+        """Crisis language code's check missed, caught by intake or support (agent/crisis.py):
+        the rule's own hand-off, logged as caught by that agent. Its turn's reply is held back."""
+        self._to_person(case_id, f"(caught by {agent}) {why}", "crisis", CRISIS_MESSAGE, urgent=True,
+                        actor=agent, log=False)  # fmt: skip
+
+    def _to_person(self, case_id: str, text: str, kind: str, reply: str, urgent: bool = False,
+                   actor: str = "rule", log: bool = True) -> None:  # fmt: skip
+        """By rule, no model: reply, a staff task, needs_human, and wake the orchestrator.
+        A turn running meanwhile has its reply held back (`_run`). `actor`: who caught it (an
+        agent's crisis_to_person or to_person; the message was logged already, so `log` is off)."""
         with self._say_lock:  # no agent reply checked before this count lands after the rule's
             with self._cond:
                 self._to_person_count[case_id] = self._to_person_count.get(case_id, 0) + 1
-            self._log_message(case_id, "veteran", "rule", text)
+            if log:
+                self._log_message(case_id, "veteran", "rule", text)
             self.say(case_id, "rule", reply)
-        event = self.escalate(case_id, kind, actor="rule", urgent=urgent, detail=f"{kind}: {text}")
+        event = self.escalate(case_id, kind, actor=actor, urgent=urgent, detail=f"{kind}: {text}")
         if not self.store.get_case(case_id).parked:
             self.move(case_id, "needs_human", "rule", kind)
         self._wake(case_id, event)
@@ -268,7 +283,7 @@ class Runtime:
                     self._cond.notify_all()
 
     def _reroute(self, case_id: str, job: Job) -> Job:
-        """A1: a message or a card/staff event goes to whoever should get it now, not when it was
+        """A message or a card/staff event goes to whoever should get it now, not when it was
         queued (the owner may have handed back, or taken the case, meanwhile). A message is logged
         here, once, to the agent that answers it."""
         if job.kind not in ("message", "event"):
@@ -330,7 +345,7 @@ class Runtime:
                     kind=job.kind)  # fmt: skip
         try:
             outcome = self.harness.run(spec, turn)
-            if outcome.reply:
+            if outcome.reply and job.agent != "claims_prep":  # claims prep never writes to the veteran
                 self._deliver(case_id, turn.agent, outcome.reply, job.to_person, turn.owner_at_start)
         finally:  # the cards its tools made follow the reply that introduces them (even if it crashed)
             self._post_cards(case_id, turn, job.to_person)
@@ -339,12 +354,12 @@ class Runtime:
             self._after_wake(case_id, turn, outcome)
         elif turn.owner_at_start:
             after = self._after_owner_turn(case_id, spec, turn, outcome, job)
-        for deferred in turn.deferred:  # the turn's own follow-ups run next (D9), in order
+        for deferred in turn.deferred:  # the turn's own follow-ups run next, in order
             deferred.front = True
         return list(reversed(turn.deferred)) + after
 
     def _held(self, case_id: str, agent: str, to_person: int, owner_at_start: bool) -> str | None:
-        """D3: why what a turn says now must not reach the veteran, or None. A turn that started
+        """Why what a turn says now must not reach the veteran, or None. A turn that started
         before a person took over (a crisis, a request for a person), or that lost the case
         meanwhile, is not heard: the rule's message is the last word. Neither is the
         orchestrator on a case a rule parked."""
@@ -360,7 +375,7 @@ class Runtime:
         return None
 
     def _deliver(self, case_id: str, agent: str, reply: str, to_person: int, owner_at_start: bool = False) -> None:
-        """A turn's reply, unless it is held (D3, `_held`)."""
+        """A turn's reply, unless it is held (`_held`)."""
         with self._say_lock:
             why = self._held(case_id, agent, to_person, owner_at_start)
             if why:
@@ -370,9 +385,9 @@ class Runtime:
                 self.say(case_id, agent, reply)
 
     def _post_cards(self, case_id: str, turn: Turn, to_person: int) -> None:
-        """The cards a turn's tools made, after its reply. A repeat (a retried attempt, harness L4,
+        """The cards a turn's tools made, after its reply. A repeat (a retried attempt, harness,
         repeats its tool calls) shows once, where it last came, so the newest card stays the
-        newest. Held by the same rule as the reply (D3), whether the turn replied, said nothing or
+        newest. Held by the same rule as the reply, whether the turn replied, said nothing or
         crashed: the rule's message stays the last word. Held cards are kept in the event."""
         cards = _last_of_each(turn.cards)
         if not cards:
@@ -432,7 +447,7 @@ class Runtime:
                 self.to_staff(case_id, f"{spec.name} turn {outcome.status}: {detail}")
             return []
         if not outcome.reply and outcome.status == "ok" and job.kind in ("message", "event", "nudge"):
-            # The veteran is waiting and the turn sent nothing (D28): one more turn is asked to
+            # The veteran is waiting and the turn sent nothing: one more turn is asked to
             # answer; if that one is empty too, the canned reply goes out, so the chat never stalls.
             if job.kind == "nudge":
                 self._deliver(case_id, spec.name, CANNED_REPLY, job.to_person, turn.owner_at_start)
@@ -482,7 +497,7 @@ def add_task(rt: Runtime, case_id: str, task: Task, actor: str) -> bool:
 
 
 def route(case: CaseFile) -> str:
-    """D1: who answers the veteran's message."""
+    """Who answers the veteran's message."""
     if case.owner == "intake":  # a parked case has no owner (stages.move)
         return "intake"
     return "support"

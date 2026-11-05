@@ -1,4 +1,4 @@
-"""The claims-prep sub-agent (L22-L28) through the real harness, tools, guard, prefill and verify,
+"""The claims-prep sub-agent through the real harness, tools, guard, prefill and verify,
 driven by the scripted fake LM on the personas' synthetic C-files. The full flow (pass 1 -> claims
 prep -> pass 2 -> stage 5) is test_app's demo-flow test; support answering while prep runs is
 test_support_agent's."""
@@ -67,7 +67,7 @@ def test_prep_reads_records_prefills_renders_verifies_and_hands_back_for_pass_2(
     assert "DEADLINE TO FILE AMA APPEAL 03/13/27   <- F7 p. 6, F8 p. 8" in lines
 
     # Prefill: the C-file's values with their pages; the DD-214 wins on discharge; a conflict for pass 2.
-    assert case.answers["mos"] == Answer(value=["0311 Rifleman"], source="C-file p. 1", at=case.answers["mos"].at)
+    assert case.answers["mos"] == Answer(value=["0321 Reconnaissance Man"], source="C-file p. 1", at=case.answers["mos"].at)
     assert case.answers["sc_conditions"].source == "C-file p. 7" and case.answers["rating_pct"].value == 40
     periods = case.answers["service_periods"]
     assert periods.value[0]["discharge"] == "honorable" and periods.source == f"{VETERAN}; discharge: DD-214, C-file p. 1"
@@ -81,7 +81,7 @@ def test_prep_reads_records_prefills_renders_verifies_and_hands_back_for_pass_2(
     # SSNs are stripped where the C-file is read: never in a context, an observation or a trace.
     ssn = get_persona("recent_decision").identity["ssn"]
     assert "[SSN removed]" in lm.prompts("claims_prep", "extract")[0]
-    assert '<untrusted source="intake answers"' in lm.prompts("claims_prep")[0]  # C2-M3: the veteran's answers are data
+    assert '<untrusted source="intake answers"' in lm.prompts("claims_prep")[0]  # the veteran's answers are data
     assert not any(ssn in s.user or ssn in s.system for s in lm.seen)
     assert ssn not in rt.harness.traces.path.read_text()
 
@@ -155,7 +155,7 @@ def test_a_turn_that_stops_early_continues_from_the_recorded_facts(rt, lm):
     assert "D1 dd214 'DD 214 Certificate of Release or Discharge (1)' (p. 1) read" in second
     assert "## Fact table (0 facts)" in second
     assert "F1 dob" in third and "face note: rendered" in third
-    assert '<untrusted source="fact table (C-file values)"' in third  # C2-M3: C-file values are data
+    assert '<untrusted source="fact table (C-file values)"' in third  # C-file values are data
     assert "ended before your stop rule held" in fourth
 
 
@@ -270,7 +270,7 @@ def test_a_nothing_found_line_fails_while_a_document_of_that_type_lacks_the_fact
 
 
 def test_verify_anchors_each_value_to_its_label_and_wants_whole_values():
-    """C-M2: no false passes from a value that is on the page but in the wrong place, or only in part."""
+    """No false passes from a value that is on the page but in the wrong place, or only in part."""
     cf = the_cfile("prior_attorney")
     dd214, decision, poa = cf.doc("D1"), cf.doc("D2"), cf.doc("D5")
     at = {"doc_id": "D1", "page": 1}
@@ -278,7 +278,7 @@ def test_verify_anchors_each_value_to_its_label_and_wants_whole_values():
     def gaps(fact: dict, doc=dd214) -> list[str]:
         return missing(FACT.validate_python({"cite": at, **fact}), doc.page(doc.first_page))
 
-    assert gaps({"kind": "dob", "dob": "1967-12-09"}) == []
+    assert gaps({"kind": "dob", "dob": "1982-12-09"}) == []
     assert gaps({"kind": "dob", "dob": "2004-06-01"}) == ["2004-06-01 as the date of birth"]  # the entry date
     period = {"kind": "service_period", "branch": "army", "start": "2004-06", "end": "2010-05"}
     assert gaps(period) == []
@@ -307,9 +307,10 @@ def test_a_page_outside_a_document_is_refused():
         doc.page(1)
 
 
-def test_a_dd214_discharge_after_filing_fires_the_stop_rule_through_prefill(rt, lm):
+def test_a_dd214_discharge_after_filing_marks_the_period_through_prefill(rt, lm):
     """The veteran said honorable for both periods; the second DD-214 reads OTH. Prefill writes the
-    DD-214's discharge, so the firm's stop rule (A1) runs on it at once: an attorney decides."""
+    DD-214's discharge; only one of two periods is non-honorable, so the case goes on and a staff
+    task names the period for the attorney."""
     periods = [{"branch": "army", "component": "active", "start": "2001-01", "end": "2005-01", "discharge": "honorable"},
                {"branch": "army", "component": "active", "start": "2006-03", "end": "2008-07", "discharge": "honorable"}]
     veteran = {"is_veteran": True, "filed_before": False, "prior_attorney": False, "service_periods": periods,
@@ -321,8 +322,8 @@ def test_a_dd214_discharge_after_filing_fires_the_stop_rule_through_prefill(rt, 
     rt.wait_until_idle()
     case = rt.store.get_case(cid)
     assert case.answers["service_periods"].value[1]["discharge"] == "oth"
-    assert (case.stop.rule, case.side_state) == ("non_honorable_period", "needs_human")
-    assert "non_honorable_period: the case went to needs_human" in lm.prompts("claims_prep", "extract")[0]
+    assert case.stop is None and case.side_state != "needs_human"
+    assert any("2006-03 to 2008-07" in t.text and "attorney reviews this period" in t.text for t in case.tasks)
     assert any("shows a different discharge" in t.text for t in case.tasks)
 
 
@@ -338,13 +339,14 @@ def _check(persona: str, batch: list[dict]):
     return [str(f) for f in check(note, cites, table, the_cfile(persona), {"fee_agreement": True, "itf": True})]
 
 
-@pytest.mark.parametrize("persona", sorted(p.stem for p in __import__("pathlib").Path("agent/data/personas").glob("*.yaml")))
+@pytest.mark.parametrize("persona", sorted(p.stem for p in __import__("pathlib").Path("agent/data/personas").glob("*.yaml")
+                                            if p.stem != "not_a_veteran"))  # never served: no C-file to verify
 def test_the_truth_passes_verify_for_every_persona(persona):
     assert _check(persona, truth_batch(persona)) == []
 
 
 def test_verify_anchors_decision_and_letter_dates_and_matches_a_period_as_one():
-    """C2-M1: swapped dates, and a narrative period mixed or merged across two periods, fail."""
+    """Swapped dates, and a narrative period mixed or merged across two periods, fail."""
     batch = truth_batch("recent_decision")
     for f in batch:
         if f["kind"] == "decision" and f["date"] == "2026-03-09":
@@ -372,7 +374,7 @@ def test_verify_anchors_decision_and_letter_dates_and_matches_a_period_as_one():
 
 
 def test_verify_coverage_catches_omissions():
-    """C2-M2: a dropped rating decision, the old code sheet, a dropped DD-214 or letter fail verify."""
+    """A dropped rating decision, the old code sheet, a dropped DD-214 or letter fail verify."""
     batch = truth_batch("recent_decision")
     no_recent = [f for f in batch if not (f["kind"] == "decision" and f["date"] == "2026-03-09")
                  and not (f["kind"] == "notification_letter" and f["decision_date"] == "2026-03-09")]  # fmt: skip
@@ -394,7 +396,7 @@ def test_verify_coverage_catches_omissions():
 
 
 def test_verify_coverage_wants_each_dd214_discharge_and_mos_and_each_code_sheet_condition():
-    """C3-M1: a dropped OTH discharge, second MOS, appointment form, rated condition or claim form fails verify."""
+    """A dropped OTH discharge, second MOS, appointment form, rated condition or claim form fails verify."""
     for persona in ("oth_only_period", "oth_one_of_two"):
         batch = truth_batch(persona)
         oth = next(f for f in batch if f["kind"] == "discharge" and f["character"] == "oth")["cite"]["doc_id"]
@@ -434,7 +436,7 @@ def test_verify_checks_the_service_component():
     assert missing(period.model_copy(update={"component": "reserve"}), "the Navy Reserve from 2014-01 to 2016-12") == []
 
 def test_c_file_text_is_plain_and_capped_and_a_mos_list_entry_is_whole():
-    """C2-M3 and minor 4: real names pass; markup in names, conditions and forms is refused."""
+    """Real names pass; markup in names, conditions and forms is refused."""
     at = {"doc_id": "D1", "page": 1}
     for name in ("José Núñez", "O'Neil", "O’Neil", "VFW Post #1234"):
         assert FACT.validate_python({"kind": "prior_representative", "name": name, "rep_type": "vso", "cite": at}).name == name
@@ -499,11 +501,13 @@ def test_prefill_takes_the_dd214_month_where_the_veteran_gave_a_year():
     period = case.answers["service_periods"].value[0]
     assert (period["start"], period["end"]) == ("2004-06", "2010-05") and "months: DD-214" in case.answers["service_periods"].source
     assert out["months_from_dd214"] == ["service_periods"]
+    # months alone are no discharge conflict
+    assert not any("different discharge" in t.text for t in case.tasks)
 
 
 def test_prefill_matches_a_period_whatever_the_branch_spelling():
-    """Pilot 1 (dob_swapped): the veteran's "air_force" and the C-file's "air force" were taken for
-    two enlistments, so pass 2 asked about a second period and recorded the same one twice."""
+    """The veteran's "air_force" and the C-file's "air force" are one enlistment, so pass 2 neither
+    asks about a second period nor records the same one twice."""
     from agent.casefile import CaseFile
     from agent.claims_prep import prefill
     from agent.claims_prep.facts import build, load

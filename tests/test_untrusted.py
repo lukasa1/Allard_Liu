@@ -1,4 +1,4 @@
-"""L6: the veteran's words, C-file text and web text enter every context wrapped as untrusted
+"""The veteran's words, C-file text and web text enter every context wrapped as untrusted
 data, and an injection in them changes nothing the guards decide (the guards are code)."""
 
 import json

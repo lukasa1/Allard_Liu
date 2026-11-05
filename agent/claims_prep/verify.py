@@ -1,4 +1,4 @@
-"""`verify` (L24, L27): code checks every face-note line against the C-file pages its facts cite.
+"""`verify`: code checks every face-note line against the C-file pages its facts cite.
 
 A line passes when it has source facts and each one holds:
   path          the fact's cited page shows its key values (`missing`)

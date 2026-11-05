@@ -1,8 +1,7 @@
 # VA claims agent: design
 
-How the system is built: architecture, guards, the mapping to the lead's design and every
-deviation from it (D1–D28), the demo and the evaluation in detail. To install and run it, see the
-[README](../README.md).
+How the system is built: architecture, guards, the demo and the evaluation in detail. To install
+and run it, see the [README](../README.md).
 
 A CS329Z class project: an AI system that helps a law firm (called "the law firm" here) represent
 veterans before VA. An **orchestrator** keeps each case moving and hands it to one sub-agent at a
@@ -13,7 +12,7 @@ time:
 | **Intake** (`agent/intake/`) | Pass 1: screens the veteran, gets VA Form 21-22a and the fee agreement signed, files them after the attorney countersigns. Pass 2: asks only what the C-file didn't settle. | built |
 | **Claims prep** (`agent/claims_prep/`) | Reads the C-file, records typed facts with page citations, prefills intake, writes and verifies the face note. | built |
 | **Customer support** (`agent/support/`) | Answers the veteran while nobody else is talking to them; read-only; flags changes to the orchestrator. | built |
-| **Claims investigation** | 526EZ / 0995 / 0996 / 4142, attorney-approved filing. | not built (after the midpoint) |
+| **Claims investigation** | 526EZ / 0995 / 0996 / 4142, attorney-approved filing. | not built |
 
 Every agent runs on **Claude Haiku 5.5 through OpenRouter** (`openrouter/anthropic/claude-haiku-5.5`).
 VA, filing, eFax and the attorney are simulated. **Synthetic data only**: every veteran, C-file
@@ -23,23 +22,23 @@ and number in the repo is made up, and `config/representative.json` holds placeh
 
 ```bash
 uv sync
-uv run pytest -q                 # about a minute, no key, no network (scripted fake model)
+uv run pytest -q                 # about two minutes, no key, no network (scripted fake model)
 cp .env.example .env             # set OPENROUTER_API_KEY for anything live
 uv run intake serve              # the web demo: http://localhost:8000
-uv run intake serve --scripted   # the same demo with no model: no key, no cost (D26)
+uv run intake serve --scripted   # the same demo with no model: no key, no cost
 uv run intake --help             # serve | simulate | eval | support-eval | personas
 ```
 
 Without `OPENROUTER_API_KEY` the server still starts and the page says to set it; `simulate`,
-`eval` and `support-eval` exit with the same message. There are no offline agents (D7), except
-the scripted demo (D26).
+`eval` and `support-eval` exit with the same message. There are no offline agents: the tests use
+a scripted fake model through the real code, and the scripted demo replays one case.
 
 ## Architecture
 
 ```
 web chat / cards / staff panel ──▶ runtime (agent/runtime.py) ──▶ code checks on every message
                                      │                               (redact, crisis, a person, withdraw)
-                                     ├─ route (D1): intake if it owns the case, else support
+                                     ├─ route (code): intake if it owns the case, else support
                                      ├─ wakes ──▶ orchestrator ── run_intake / run_prep / move_stage / staff_task
                                      └─ queued turns: one worker per case (+ a background worker for claims prep)
    every agent turn = one dspy.ReAct run (agent/harness.py), tools via the guarded registry
@@ -62,7 +61,8 @@ Side states, entered only through the guard: `waiting_on_veteran`, `waiting_on_a
 owner keeps the case), `waiting_on_va`, `needs_human` and `closed`. Code derives the stage after
 every tool call and event. Moves inside one owner's stages are automatic; a move to another owner
 only by a handoff; the orchestrator's `move_stage` covers side states and one move back, from stage 5
-to stage 4 (D11, D20). That move leaves a reopen item that pass 2 must resolve. Every
+to stage 4 (reopening intake for a new condition; earlier stages can't be reopened). That move
+leaves a reopen item that pass 2 must resolve, and `claim_conditions` is asked again. Every
 refused move is logged and its reason goes back to the model.
 
 ### Runtime protocol
@@ -70,25 +70,32 @@ refused move is logged and its reason goes back to the model.
 - **One turn = one `dspy.ReAct` run** per message or event. A turn's `reply` output is the only
   way it talks to the veteran (this is `ask_veteran`); `result` (a `SubagentResult`) is kept only
   when the agent's stop rule holds.
-- **Handoffs are asynchronous** (D9): `run_intake(goal)` / `run_prep(goal)` set the owner and queue
+- **Handoffs are asynchronous**: `run_intake(goal)` / `run_prep(goal)` set the owner and queue
   the sub-agent's first turn; its result later wakes the orchestrator as a `subagent_result`
   event. The orchestrator wakes only on `case_opened`, `subagent_result`, `support_flag`,
-  `escalated` and staff events nobody owns; chat messages never wake it.
-- **One case-owning sub-agent at a time** (A3). Support is read-only and may run while claims prep
+  `escalated` and staff events nobody owns; chat messages never wake it. It may send the veteran a
+  short reply from any wake (not on a case a rule handed to a person), and `staff_task` is allowed
+  after the wake's handoff.
+- **One case-owning sub-agent at a time.** Support is read-only and may run while claims prep
   works in the background; a `support_flag` raised in stage 4 is held until prep returns.
-- **Limits per turn**: orchestrator 6 steps / 90 s, intake 8 / 120 s, support 5 / 60 s, claims prep
+- **Limits per turn**: orchestrator 6 steps / 90 s, intake 8 / 120 s, support 7 / 60 s, claims prep
   40 / 600 s. A chat turn at its limit sends a canned "please resend"; a claims-prep turn that
   stops early is continued up to 3 times from the recorded facts, then goes to a person. A
   malformed model output goes through DSPy's JSON adapter fallback, then one retry of the turn.
+  An owner's turn that ends with no reply while the veteran waits is asked once more to answer
+  (`[nudge]`); a second empty turn sends the canned reply.
+- **Skills in context:** the skills a step needs are put in the agent's context, chosen in code
+  from the case (intake by stage, the orchestrator's stage playbook, claims prep's two); others
+  load on demand with `read_skill`.
 
 ### Agents and their tools
 
 | Agent | Tools (all agents also have `read_skill`) |
 |---|---|
 | Orchestrator | `run_intake`, `run_prep`, `move_stage`, `staff_task` |
-| Intake | `kb_search`, `get_case`, `record_answer`, `fill_pdf`, `request_secure_info`, `update_draft`, `get_signature`, `submit_va`, `efax_ogc` |
+| Intake | `kb_search`, `crisis_to_person`, `to_person`, `get_case`, `record_answer`, `fill_pdf`, `request_secure_info`, `update_draft`, `get_signature`, `submit_va`, `efax_ogc` |
 | Claims prep | `pull_cfile`, `list_docs`, `read_pages`, `search`, `record_facts`, `prefill`, `render`, `verify` |
-| Support | `kb_search`, `get_case`, `log_event`, `flag_orchestrator`, `escalate` |
+| Support | `kb_search`, `crisis_to_person`, `get_case`, `log_event`, `flag_orchestrator`, `escalate` |
 
 Context per turn: the orchestrator sees the case file and the last 10 events (never a transcript
 or the C-file); intake sees its typed checklist of missing fields and its last 12 messages;
@@ -98,15 +105,42 @@ pages it read this turn.
 ### Guards (code, not the model)
 
 - **Every message, every state, before any model:** ID numbers and a typed date of birth are
-  redacted; crisis language sends the Veterans Crisis Line text and an urgent task (D3); a request
-  for a person or to end the representation goes to a person by rule (D2). The rule replies are in
-  `agent/ingest.py`.
-- **The firm's stop rules** run in code (A1, `agent/intake/checklist.stop_rule`): not a veteran
-  and rated 100% go to `closed` before filing and `needs_human` after it; a non-honorable period
-  goes to `needs_human` always, even before filing (an attorney decides; D16). Non-honorable
-  means a period whose discharge is **other than honorable, bad conduct or dishonorable**
-  (`schema.NON_HONORABLE`); general (under honorable conditions) and uncharacterized discharges
-  do not stop the case.
+  redacted; crisis language sends the Veterans Crisis Line text and an urgent task; a request for
+  a person or to end the representation goes to a person by rule (ending it has legal effect, so a
+  person confirms it first). The rule replies are in `agent/ingest.py`; the checks read curly
+  quotes as straight ones ("don’t"). Code routes each message: to intake while it owns the case,
+  otherwise to support.
+- **Backstops for what the checks miss:** crisis language the check misses reaches intake or
+  support, whose prompts tell them to call `crisis_to_person` (`agent/crisis.py`); a request for a
+  person or to end the representation that reaches intake goes through `to_person` (support uses
+  `escalate`). Both run the rule's own hand-off (its reply text from code, a staff task,
+  `needs_human`, the orchestrator woken; a closed case stays closed, with the task) and hold back
+  the turn's own reply. They run even after the turn lost the case (a non-veteran's case just closed).
+- **Held replies:** after a crisis or a person request, the model reply of every turn that was
+  running or queued before it is held back (logged as `reply_held`); the rule's message is the
+  last thing the veteran gets.
+- **The firm's stop rules** run in code (`agent/intake/checklist.stop_rule`): not a veteran and
+  rated 100% go to `closed` before filing and `needs_human` after it. When **every** service
+  period is non-honorable, the case goes to `needs_human` even before filing (an attorney
+  decides); when only some are, intake goes on and a staff task names those periods. Most of these
+  discharges need a VA character-of-discharge determination (38 CFR 3.12), so this is a review,
+  not a rejection. Non-honorable means **other than honorable, bad conduct or dishonorable**
+  (`schema.NON_HONORABLE`); general (under honorable conditions) and uncharacterized are neither.
+  Veteran status, service periods, VA pay, rating or prior representation left unknown in pass 1
+  also go to `needs_human` (`screen_unresolved`).
+- **Stop-rule answers are structured:** for is_veteran, each period's discharge, receiving_va_pay,
+  rating_pct and prior_attorney the model passes the value it understood (a bool, a discharge code,
+  an integer) while the veteran's words are kept as the raw answer; code reads free text for them
+  only when it is plain ("yes", "no", "70%", "honorable", "OTH") and re-asks a hedged answer. A
+  qualified "honorable" ("less than", "not") reads as other than honorable. Service periods can't
+  be empty for a veteran, and an answer hidden by a later answer is dropped from the record.
+- **Answer sources are set by code** (`veteran, chat HH:MM UTC`; prefill writes `C-file p. N`):
+  `record_answer` has no `source` argument, so the model can't mislabel where an answer came from.
+- **Fee:** 30%, or 20% when a private attorney or agent represented the veteran before. In the
+  C-file that is a private attorney's or agent's 21-22a, revoked or not (they represented the
+  veteran before); a VSO (a 21-22) is recorded but never counts.
+- **No legal advice beyond the KB** is enforced by instructions and kb_search's hand-off (the
+  reply is model output a guard can't inspect).
 - **Signing is the veteran's click** in the host; no tool can sign. The SSN goes only through the
   secure form into the encrypted vault, and the model sees masked values. `submit_va` is refused
   until the 21-22a is countersigned, `efax_ogc` until the fee agreement is signed and
@@ -132,7 +166,11 @@ pages it read this turn.
   escalated as `[UNCERTAIN]` (a staff task, closed again once a later verify passes). The stored face note shows each line's pages (`[p. 2, 5]`, or `[firm record]`).
   Prefill is refused until `verify` has passed or every failing line is escalated as uncertain,
   and it writes only facts whose cited page holds them. When the C-file conflicts with an answer,
-  the DD-214 wins on discharge; any other conflict is recorded for pass 2 and a staff task (A2).
+  the DD-214 wins on discharge (with a staff task); any other conflict is recorded for pass 2 to
+  confirm with the veteran and a staff task.
+- **Documents:** a fee agreement with stale terms can't be signed; a secure-form or `update_draft`
+  change re-renders stale drafts, and signing refuses a draft whose vault fingerprint changed; a
+  vault change after signing, or a fee change after the fee agreement is signed, creates a staff task.
 - **Untrusted text** (the veteran's words, C-file pages, search hits, kb answers; claims prep's
   intake answers and fact table; support's flag text, earlier Q&A and deadline tasks) is wrapped
   as data before it enters a context (`ingest.untrusted`); what a tool may do is still decided by
@@ -140,7 +178,8 @@ pages it read this turn.
   capped length (letters in any script, digits and `.,'’&()/#-`; no markup).
 - **SSNs never reach a context or a trace:** the simulated VBMS strips them at ingest, and trace
   lines are scrubbed again before they are written.
-- **Support changes nothing:** it has no tool that moves a stage, files or signs.
+- **Support changes nothing:** it has no tool that moves a stage, files or signs. Its one exception
+  is the crisis backstop (`crisis_to_person`), which hands the case to a person by the rule's own code.
 - **Failures park the case for a person:** a crashed turn, a failed orchestrator or claims-prep turn,
   or claims prep running out of continuations moves the case to `needs_human` with a staff task
   listing any undecided support flags. A failed intake or support turn sends the canned "please
@@ -150,8 +189,9 @@ pages it read this turn.
 
 ### Skills, memory, traces
 
-- **Skills** (`agent/skills/<agent>/<skill>/SKILL.md`): only the index (name and description) is in
-  a prompt; the model loads one with `read_skill`. Orchestrator: stage-playbook, routing, flags.
+- **Skills** (`agent/skills/<agent>/<skill>/SKILL.md`): the index (name and description) and the
+  skills preloaded for the step (see the runtime protocol) are in a prompt; the model loads any other
+  with `read_skill`. Orchestrator: stage-playbook, routing, flags.
   Intake: screen-veteran, poa-and-fees, intent-to-file, close-gaps. Claims prep: face-note-format,
   cite-check. Support: answer-questions, case-status, hand-to-a-person.
 - **Memory store** (`agent/store.py`, SQLite): the `cases` table holds the case file as JSON plus
@@ -164,96 +204,20 @@ pages it read this turn.
   call (case, agent, turn, tokens, cost, the tool's guard decision and result) to `traces.jsonl`.
   Cost uses the price table in `agent/config.py`.
 
-## How it maps to the lead's design
+## Built on
 
-The structure follows the project lead's architecture: an orchestrator with a guarded stage table
-and typed sub-agent results, the sub-agents with their own tools, skills, context and stop rules,
-a shared harness, a tool registry with a guard hook, an event log and traces. The 21-22a tools wrap
-the lead's POA skill (`poa_skill/`). Where we differ:
-
-| # | Deviation | Reason |
-|---|---|---|
-| D1 | Code routes chat messages (the owner, else support), not the orchestrator's model | The routing rule is fixed; code gets it right every time and saves a call per message |
-| D2 | Ending the representation or asking for a person goes to a person by rule, in every state | It has legal effect and needs an attorney |
-| D3 | The crisis check runs in code on every message, in every stage | A crisis can come up mid-intake, not only in support |
-| D6 | A `waiting_on_attorney` side state and one staff action that countersigns both documents | The demo and the eval need a way to simulate the attorney |
-| D7 | No offline agents: tests use a scripted fake LM through the real code | One implementation; the demo and eval are paid |
-| D8 | Haiku 5.5 through OpenRouter; the KB is our own web search on official sites, plus `law.cornell.edu` (`agent/qa.py`) | The lead's document library stays out of the public repo; Cornell LII serves 38 CFR and 38 USC as readable pages |
-| D9 | `run_*` starts the sub-agent; its result arrives later as an event | A chat turn waits for the veteran's next HTTP request |
-| D10 | Claims prep keeps every page read within one turn (no stubbing of old reads) | The synthetic C-files are small |
-| D11 | An orchestrator `move_stage(to, reason)` tool | The design allows moves back and side states but has no tool for them |
-| D12 | An extra intake skill, `close-gaps` | Pass 2 needs written directions |
-| D13 | An orchestrator `staff_task(text)` tool | The flag decision "or a staff task" needs a tool |
-
-Candidate deviations from the build, for the lead to confirm:
-- **D14:** "no legal advice beyond the KB" is enforced by instructions and kb_search's hand-off,
-  not by code: the reply is a model output a guard can't inspect.
-- **D15:** a prior representative is a private attorney or agent on a 21-22a in the C-file without
-  revocation details; a VSO (a 21-22) is recorded but never counts (Max confirmed 2026-11-03, as
-  intake's question already said). Fee: 20% with a prior rep, else 30%.
-- **D16:** a non-honorable period stops to `needs_human` even before filing; the plan (§2) says
-  `closed`. An attorney decides, since most of these discharges need a VA character-of-discharge
-  determination (38 CFR 3.12) rather than a rejection.
-- **D17:** `record_answer` has no `source` argument: code sets the source (`veteran, chat HH:MM
-  UTC`; prefill writes `C-file p. N`), so the model can't mislabel where an answer came from.
-- **D18:** prefill runs once `verify` has passed **or** every failing line is escalated as
-  uncertain (it writes only facts whose cites hold), not only after a clean pass.
-- **D24:** the orchestrator may reply on any wake (the design describes it at a handoff), except on a
-  case a rule handed to a person; `staff_task` is allowed after the wake's handoff.
-- **D25:** `run_intake` at stage 4 after a new-condition flag also reopens `claim_conditions`, so pass
-  2 can't end before the condition is recorded.
-- **D27:** the skills a step needs are put in the agent's context, chosen in code from the case
-  (intake by stage, the orchestrator's stage playbook, claims prep's two). The design loads skills on
-  demand; the first live run spent one model call (about 3 s) per turn re-reading them.
-- **D28:** an owner's turn that ends with no reply while the veteran waits is asked once more to
-  answer (`[nudge]`); a second empty turn sends the canned reply. `record_answer(unknown=true)` needs
-  the veteran's words. The first live run stalled when intake marked an unasked question unknown.
-- **D26:** a scripted demo (`intake serve --scripted`) plays one case with no model: the agents'
-  turns come from `agent/scripted/demo.py`; the runtime, tools, guard, documents and `verify` are the
-  real code. It shows the flow without a key; it says nothing about the agents' quality.
-- **D23:** `verify` also checks coverage (no DD-214, rating decision or letter left out, nor a
-  DD-214's discharge or MOS, nor a claim or appointment form; every service-connected condition on the newest
-  code sheet; the combined rating and rated conditions from the newest rating decision or its
-  letter; no unlinked fact). What it can't see is listed under Citations above. Its
-  items are numbered after the face-note lines and, like a line, can be escalated as uncertain.
-- **D19:** kb_search's answer accuracy is not evaluated yet: the support eval checks that a kb
-  answer cites its source, not that it is right.
-- **D22:** veteran status, service periods, VA pay, rating or prior representation left unknown in pass 1
-  (unknown prior representation sets no fee) stop the case to
-  `needs_human` (`screen_unresolved`). Stop-rule fields (is_veteran, each period's discharge,
-  receiving_va_pay, rating_pct, prior_attorney) take a structured value from the model (a JSON bool,
-  a discharge code, an integer) while the veteran's words are kept as the raw answer; code reads free
-  text for them only when it is plain ("yes", "no", "70%", "honorable", "OTH") and re-asks a
-  hedged answer. A fee agreement with stale terms can't be signed; a vault change after signing
-  creates a staff task. A qualified "honorable" ("less than", "not") reads as other than honorable.
-  A secure-form or `update_draft` change re-renders stale drafts, and signing refuses a draft whose
-  vault fingerprint changed.
-  Service periods can't be empty for a veteran; when the veteran's own words are plain they must
-  match the model's value; a vault change (secure form or `update_draft`) after signing, or a fee
-  change after the fee agreement is signed, creates a staff task; an answer hidden by a later answer
-  is dropped from the record.
-- **D20:** the only move back is from stage 5 to stage 4 (reopening intake for a new condition).
-  Moves back to earlier stages are future work (F9).
-- **D21:** after a crisis or a person request, the model reply of every turn that was running or
-  queued before it is held back (logged as `reply_held`); the rule message is the last thing the
-  veteran gets.
-- Support returns no typed result: its flags and escalations are events.
-- The eval headline counts structured questions settled from chat, not questions asked (the
-  model's wording can't be counted); citation precision uses `verify`'s own page check.
-
-Answers to the lead's open design questions (not deviations): **A1** the firm's stop rules are
-enforced in code; **A2** a C-file conflict: the DD-214 wins on discharge, everything else is asked
-in pass 2 and becomes a staff task; **A3** at most one case-owning sub-agent at a time, with
-read-only support alongside.
+The 21-22a tools wrap the POA skill (`poa_skill/`). The knowledge base is a web search limited to
+official VA and federal sites plus `law.cornell.edu` for 38 CFR and 38 USC (`agent/qa.py`). Support
+returns no typed result: its flags and escalations are events.
 
 ## The demo
 
 `uv run intake serve` (needs the key), then http://localhost:8000:
 
 **One test veteran:** the demo, live or scripted, currently plays one persona, Hector Alvarez
-(`recent_decision`). The other 17 personas run in the eval (`intake simulate`, `intake eval`).
+(`recent_decision`). All 20 personas, Hector included, run in the eval (`intake simulate`, `intake eval`).
 
-**No key:** `uv run intake serve --scripted` (D26) plays the same case with no model. Press **Tab**
+**No key:** `uv run intake serve --scripted` plays the same case with no model. Press **Tab**
 to take the line the input box suggests and **Enter** to send it, submit the secure form (its test
 values are filled in), sign (draw, or choose Type for your name in a script font), and countersign
 as the cards appear. The agents follow the script, so typing something else won't change their
@@ -283,9 +247,9 @@ Start case starts the story over.
 
 ## Evaluation (`intake_eval/`)
 
-Synthetic veterans (`agent/data/personas/`, 18: 12 `dev`, the live pilot's, whose failures the
-code was fixed against, and 6 `heldout`, never tuned against; the report shows them apart) go through **whole cases on the same runtime** the
-demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
+Synthetic veterans (`agent/data/personas/`, 20: 14 `dev`, the ones the system was developed
+against, and 6 `heldout`, not fixed against directly; both are optimistic, and the report shows
+them apart) go through **whole cases on the same runtime** the demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
 secure form, signs, countersigns as the attorney and waits for the runtime to go idle between
 steps (`runner.py`).
 
@@ -299,15 +263,23 @@ steps (`runner.py`).
   pass^k with `--trials`. **Critical errors** (a wrong end state or stop decision, a missed
   service period, prior claim, crisis or DOB mismatch, a mistyped value left on the signed
   21-22a, a wrong fee, unfinished prep, a new condition never sent back to intake, a crashed or
-  stalled run) void the headline.
-- **Customer support** (`support_eval.py`): 81 labeled messages through the real runtime: flags,
-  hand-offs to a person, status answers, no promised dates, cited kb answers, every crisis
-  caught, the case unchanged. `--luke` selects the 50-message subset matching the lead's set.
+  stalled run) are counted beside the headline: it is read only together with zero critical
+  errors and field accuracy held. It averages over completed runs, the personas that stop early
+  included; field accuracy averages over every run. A persona whose scripted message (`asks`)
+  was never sent doesn't pass, and the report counts those messages.
+- **Customer support** (`support_eval.py`): 84 labeled messages through the real runtime (3 crisis
+  messages are worded so code's check misses them, for support's backstop): flags, hand-offs to a
+  person, status answers, no promised dates, cited kb answers, every crisis caught, the case
+  unchanged. `--core` selects the 50-message core set (30 questions, 10 status checks, 5
+  complaints, 5 changes). The promised-date and status checks are keyword heuristics; check
+  flagged replies by hand. kb_search's answers are checked for a cited source, not for accuracy.
+- **Persona question** (`asks_question_mid_intake`): an LLM judge (`intake_eval/judge.py`) grades
+  intake's answer against the persona's answer key.
 
 ```bash
 uv run intake simulate --persona baseline_clean --max-cost 1    # one case, printed
 uv run intake eval --personas baseline_clean --conditions cfile --name smoke --max-cost 1
-uv run intake eval --name full --max-cost 20                    # 18 personas x 3 conditions
+uv run intake eval --name full --max-cost 20                    # 20 personas x 3 conditions
 uv run intake support-eval --max-cost 1
 ```
 
@@ -336,21 +308,15 @@ case send identical prompts; `tests/test_runtime.py` that nothing else reads the
 
 ## Tests
 
-`uv run pytest -q`: the whole suite in about a minute, no key and no network. `agent/scripted/lm.py` scripts
+`uv run pytest -q`: the whole suite in about two minutes, no key and no network. `agent/scripted/lm.py` scripts
 each agent's tool calls through the real harness, registry and guards; `agent/scripted/kb.py` stands
 in for web search. They pin the guards and stage moves, stop rules, citations and `verify`, crisis /
 withdraw / a person by rule, signing and countersign integrity, SSNs never in a context or trace,
 untrusted wrapping, end-to-end flows (runtime, HTTP demo, eval) and the eval's scoring.
 
-## Pending the live key
-
-Nothing has run against the real model yet. Waiting on the key: a smoke test of each agent,
-checking that `reasoning_effort` reaches OpenRouter (L9) and that the model slug and prices are
-right, cost and latency per agent, and the full eval. The README has no eval numbers until then.
-
 ## The POA skill (`poa_skill/`)
 
-The lead's skill for VA Form 21-22a, generalized here to the fee agreement too: a secure form the
+The skill for VA Form 21-22a, generalized here to the fee agreement too: a secure form the
 model never sees (encrypted vault, masked values), the filled PDF and an editable preview, and
 click-to-sign with the exact consent text shown, a stamped signature, and an append-only audit log
 without PII. There is deliberately no signing tool. Its own tests are `tests/test_form.py` and
@@ -361,20 +327,21 @@ covers the 21-22a only and is not used by the agents. Change the firm and attorn
 ## Code map
 
 ```
-agent/        runtime, harness, orchestrator, stages, casefile, store, traces, ingest, kb, qa
-  intake/       agent.py, checklist.py, documents.py, questions.yaml, parsing, rules
+agent/        runtime, harness, orchestrator, stages, casefile, store, traces, ingest, crisis
+              (the model's crisis / person backstops), clock (pinned eval time), personas, kb, qa
+  intake/       agent.py, checklist.py, documents.py, parsing, rules, conditions, schema, questions
+                (data/questions.yaml)
   claims_prep/  agent.py, facts.py (typed facts + cite map), verify.py, prefill.py
   support/      agent.py
-  cfile/        vbms.py (simulated VBMS), synth.py (synthetic C-files), facts.py, facenote.py
+  cfile/        vbms.py (simulated VBMS), synth.py (synthetic C-files), extract.py, facts.py, facenote.py
   skills/       SKILL.md files per agent
   data/personas/  the synthetic veterans
   scripted/     lm.py (scripted fake LM), kb.py (offline FAQ), prep.py (claims prep's correct reading),
                 demo.py (the scripted demo's story)
 poa_skill/    21-22a and fee agreement: vault, documents, PDF fill and signing
 demo/         app.py (FastAPI) and static/app.html
-intake_eval/  simulator, runner, scoring, report, support eval
+intake_eval/  simulator, runner, scoring, evaluate (report), judge (LLM judge), support eval
 tests/        fixtures, tests
 ```
 
-`poa_skill/pdf/` and the signature-pad trimming are adapted from an earlier form engine by the
-project lead.
+`poa_skill/pdf/` and the signature-pad trimming are adapted from an earlier form engine.

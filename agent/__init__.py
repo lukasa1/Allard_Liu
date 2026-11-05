@@ -1,6 +1,6 @@
 """VA claims agent: an orchestrator over one case, with intake, claims-prep and support sub-agents.
 
-agent/runtime.py       the runtime protocol (plan §3): routing, queued turns, the outbox
+agent/runtime.py       the runtime protocol: routing, queued turns, the outbox
 agent/harness.py       the shared ReAct turn every agent runs on
 agent/orchestrator.py  the orchestrator agent: handoffs, flags, guarded stage moves
 agent/stages.py        the stage table, derived from the case file (agent/casefile.py)

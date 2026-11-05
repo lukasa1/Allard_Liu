@@ -1,4 +1,4 @@
-"""The stage table and its guard (plan §2).
+"""The stage table and its guard.
 
   1 screening (intake pass 1)        -> 2 when every screening field is answered or unknown and
                                           no stop rule fired
@@ -8,13 +8,13 @@
                                      -> 5 when claims prep is done and every pass-2 checklist
                                           field is filled or marked unknown
   5 gaps closed: ready for attorney review (the demo's end)
-  6 file review done: not reachable (needs F7)
+  6 file review done: not reachable (needs claims investigation)
 
 Code derives the stage and the waiting state from the case file after every change (`settle`)
 and runs each proposed change through the same guard (`check_stage`, `check_side`) that checks
 the orchestrator's moves and handoffs. Moves inside one owner's stages happen automatically;
 a move to another owner only through a handoff (`check_handoff`). The only move back is from
-stage 5 to stage 4 (F9: other moves back would need rebuilt stages); it leaves a pending reopen
+stage 5 to stage 4 (other moves back would need rebuilt stages); it leaves a pending reopen
 item in pass 2 (`CaseFile.reopen`), so stage 5 waits until intake asks about it. A fired stop rule parks the
 case: `closed` while nothing is filed (or `needs_human` when the rule leaves it to an attorney),
 `needs_human` after filing (a person decides on withdrawal).
@@ -59,7 +59,7 @@ def entry_unmet(case: CaseFile, stage: int) -> str | None:
             return f"stage 4 exit criteria not met: intake fields missing: {', '.join(missing)}"
         return None
     if stage == 6:
-        return "stage 5 exit criteria not met: no file review (not built: F7)"
+        return "stage 5 exit criteria not met: no file review (claims investigation is not built)"
     return f"no stage {stage}"
 
 
@@ -113,7 +113,7 @@ def check_handoff(case: CaseFile, agent: str, running: set[str]) -> str | None:
         return f"the case is {case.side_state}"
     if case.owner:
         return f"{case.owner} owns the case"
-    if busy := running & {"intake", "claims_prep"}:  # A3: one case-owning sub-agent at a time
+    if busy := running & {"intake", "claims_prep"}:  # one case-owning sub-agent at a time
         return f"{', '.join(sorted(busy))} still has a running turn"
     if agent == "intake":
         if case.stage == 1:

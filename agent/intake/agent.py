@@ -1,13 +1,13 @@
-"""The intake sub-agent (L14-L21): pass 1 screens, signs and files; pass 2 closes the gaps.
+"""The intake sub-agent: pass 1 screens, signs and files; pass 2 closes the gaps.
 
 One ReAct turn per veteran message or event (the harness). Working memory lives in the case file,
-so every turn starts from it (L15, L18): the checklist is rebuilt from the answers, and the
+so every turn starts from it: the checklist is rebuilt from the answers, and the
 context shows every known field with its source, the typed list of what is missing, the
 documents and the last 12 messages.
 
-Tools: read_skill (harness), kb_search, get_case, record_answer, fill_pdf, request_secure_info,
+Tools: read_skill (harness), kb_search, crisis_to_person, to_person, get_case, record_answer, fill_pdf, request_secure_info,
 update_draft, get_signature, submit_va, efax_ogc. The reply output is the only channel to the
-veteran. Guards (L17), in code: ID numbers only through the secure form; no tool signs (signing is
+veteran. Guards, in code: ID numbers only through the secure form; no tool signs (signing is
 the veteran's click, countersigning a staff action: agent/intake/documents.py); filing waits for
 the countersign; the fee agreement goes to OGC only once signed and countersigned; the firm's stop
 rules run on every answer (checklist.stop_rule).
@@ -23,10 +23,11 @@ from pydantic import BaseModel, Field
 
 from agent import clock
 from agent.casefile import STAGE_NAMES, Answer, CaseFile, DocState, Filing, Task, now
+from agent.crisis import crisis_tool, to_person_tool
 from agent.harness import AgentSpec, Turn, conversation
 from agent.ingest import redact_chat, untrusted
 from agent.intake import checklist
-from agent.intake.conditions import is_vague_condition
+from agent.intake.conditions import SYNONYMS, is_vague_condition
 from agent.intake.documents import (
     OGC_TASK,
     fee_change_task,
@@ -65,6 +66,10 @@ periods with a discharge code), with the veteran's own words in `a`. If the vete
 think", "probably"), ask again before you record it.
 - Ask one or two questions per message, in plain warm words. Never ask for a Social Security \
 number, date of birth, VA file number or service number in chat: request_secure_info opens a secure form.
+- If the veteran shows thoughts of suicide or of hurting themselves, in any words, call \
+crisis_to_person at once and finish (code usually stops these before you see them; this is the backstop).
+- If the veteran asks for a person, or wants to stop working with the firm, in any words: to_person, \
+and finish.
 - Answer general questions only from kb_search. Never give legal advice, predict a rating or an \
 outcome, or promise a date. If kb_search has no answer, say a person on the team will follow up.
 - You cannot sign anything. get_signature only shows the veteran a Sign card; call it only after \
@@ -100,8 +105,9 @@ class RecordArgs(BaseModel):
                        "end, discharge}: start and end as the veteran said them, YYYY-MM or just YYYY "
                        "when they gave only the year (never a month they didn't say); discharge one of "
                        "honorable, general, oth, bad_conduct, dishonorable, uncharacterized, or null. "
-                       "claim_conditions / other_conditions a list of VA-style names (\"tinnitus\", "
-                       "\"sleep apnea\"). Optional for other fields.")
+                       "claim_conditions / other_conditions a list of VA-style names: the firm's standard "
+                       f"name when one fits ({', '.join(SYNONYMS)}), otherwise the VA-style name. "
+                       "Optional for other fields.")
     unknown: bool = Field(False, description="true when the veteran said they don't know or decline to say "
                           "(their words in `a`); never for a question you haven't asked")
 
@@ -155,7 +161,7 @@ def record_answer(turn: Turn, args: RecordArgs) -> dict:
         out["still_missing"] = {"count": len(left), "next": left[:6]}
     if key in ("claim_conditions", "other_conditions") and value and not args.unknown:
         vague = [c for c in value if is_vague_condition(c)]
-        if vague:  # "back, ears, and sleep" (pilot 1): ask, don't guess which condition is meant
+        if vague:  # "back, ears, and sleep": ask, don't guess which condition is meant
             out["check"] = (f"{vague} may not be condition names. Ask the veteran what they mean (e.g. "
                             "ringing in the ears, or trouble hearing?) and record the list again with "
                             "VA-style names.")  # fmt: skip
@@ -294,7 +300,7 @@ def _letters(n: int = 10) -> str:
 
 
 def submit_va(turn: Turn, args: SubmitArgs) -> dict:
-    """Simulated filing with VA (L21): a fake confirmation number; the ITF date for the ITF."""
+    """Simulated filing with VA: a fake confirmation number; the ITF date for the ITF."""
     data = {}
     if args.form == "itf":
         today = clock.today()
@@ -403,7 +409,7 @@ def fee_line(case: CaseFile) -> str:
 
 
 def context(turn: Turn) -> str:
-    case = turn.rt.patch(turn.case_id, checklist.refresh, actor="intake")  # rebuilt every turn (L18)
+    case = turn.rt.patch(turn.case_id, checklist.refresh, actor="intake")  # rebuilt every turn
     part, status = _part(case), _svc(turn).status()
     known = [f"- {k}: {'UNKNOWN' if a.unknown else json.dumps(a.value)} ({a.source})" for k, a in case.answers.items()]
     tasks = [f"- {t.text} (due {t.due})" for t in case.tasks if not t.done_at]
@@ -437,6 +443,8 @@ def context(turn: Turn) -> str:
 def tools(turn: Turn) -> list[ToolSpec]:
     return [
         kb_tool(turn),
+        crisis_tool(turn),
+        to_person_tool(turn),
         ToolSpec("get_case", "Reload the case file and the documents' status (masked).", NoArgs,
                  lambda a: get_case(turn)),
         ToolSpec("record_answer", "Save one answer the moment the veteran gives it (code parses it, "
@@ -462,7 +470,7 @@ def tools(turn: Turn) -> list[ToolSpec]:
 
 
 def preload(case: CaseFile) -> tuple[str, ...]:
-    """D27: the skills this step needs."""
+    """The skills this step needs."""
     if case.stage >= 4:
         return ("close-gaps",)
     if case.stage == 1:

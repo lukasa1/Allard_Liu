@@ -1,4 +1,4 @@
-"""The memory store (L7): SQLite, one connection per call so any thread may use it.
+"""The memory store: SQLite, one connection per call so any thread may use it.
 
   cases   the case file as JSON, plus flat columns (stage, owner, side_state) for queries
   events  append-only; THE event log of the case (messages, handoffs, results, stage moves)

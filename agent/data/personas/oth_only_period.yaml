@@ -1,10 +1,47 @@
 id: oth_only_period
-split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
-summary: The only period of service ended with an other-than-honorable discharge. The firm withdraws such cases, so intake should stop and send it to an attorney rather than collect everything.
+split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+summary: The only period of service ended with an other-than-honorable discharge. Under the firm's rule an attorney
+  decides whether to take such a case, so intake should stop and send it to attorney review rather than collect
+  everything.
 truth:
   first_name: Travis
   last_name: Boone
   service_periods:
-    - {branch: marine corps, component: active, start: "2009-08", end: "2011-03", discharge: oth}
+  - branch: marine corps
+    component: active
+    start: 2009-08
+    end: 2011-03
+    discharge: oth
+  street: 2201 Oak Park Avenue
+  city: Jacksonville
+  state: NC
+  zip: '28546'
+  cell_phone: 910-555-0150
+  email: travis.boone@example.com
+  next_of_kin: Linda Boone, mother, 910-555-0151
+  exposures:  # served at a PACT Act burn-pit location (Afghanistan)
+  - burn pits
+  litigation_contact: false
+  mos:
+  - 3531 Motor Vehicle Operator
+stories:
+  tinnitus:
+    h02: High-pitched ringing in my left ear, all the time.
+    h03: It makes it hard to sleep and to concentrate.
+    h04: In 2010 in Afghanistan, after an IED went off near our vehicle.
+    h05: Every day.
+    h06: About the same since I got out.
+    h07: Helmand Province, Afghanistan.
+    h08: Driving trucks on resupply runs.
+    h09: Engine noise, gunfire and blasts.
+    h10: An IED blast about fifty meters from my truck in 2010.
+    h11: No, I didn't go to medical for it.
+    h12: I work construction and the ringing gets worse with the noise.
+    h13: No missed work.
+    h14: I keep a fan on at night to sleep.
+    h15: No ear problems before the Marines.
+    h16: No.
 expected:
   decision: attorney_review
+identity:
+  dob: '1990-04-22'  # explicit: the id-hashed DOB made the enlistment age implausible

@@ -1,9 +1,20 @@
 id: asks_question_mid_intake
-summary: Same as baseline_clean, but partway through intake the veteran asks a general question (what an intent to file is) and answers the pending question in the same message. The question is put by the eval runner (asks), so every run asks it.
+summary: Same as baseline_clean, but when pass 2 begins (intake has just filed the intent to file and
+  told the veteran about it, and asks its first pass-2 question) the veteran asks what the intent to
+  file does instead of answering. The runner sends the question alone at that reply, so every run asks
+  it; intake must answer it from the KB, then go back to its question (resumed_after), and the LLM
+  judge grades the answer against answer_key.
 truth: {}
 asks:
-  at_reply: 3
-  text: "Quick question first: what is an intent to file?"
+  after: itf_filed  # the first reply to an intake question once the ITF is filed (runner.asks_now)
+  text: "Before I answer, what does that intent to file you just filed actually do for me?"
+  answer_key:  # what a correct answer states (VA Form 21-0966; 38 CFR 3.155(b))
+  - It tells VA that the veteran plans to file a claim.
+  - It holds the effective date (the date back pay is counted from) as the date VA received the intent to file.
+  - The veteran has one year from then to file the completed claim to keep that date.
 expected:
   decision: eligible
   fee_pct: 30
+identity:  # the same veteran as baseline_clean
+  dob: '1972-11-20'
+  ssn: 367-82-1498

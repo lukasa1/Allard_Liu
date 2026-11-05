@@ -1,4 +1,4 @@
-"""A GENERIC, SYNTHETIC attorney fee agreement plus conditions of costs (L20).
+"""A GENERIC, SYNTHETIC attorney fee agreement plus conditions of costs.
 
 Written for this demo from 38 CFR 14.636 and plain contingency-fee terms. It uses no real firm's
 wording or names: the firm and attorney come from config/representative.json (placeholders).

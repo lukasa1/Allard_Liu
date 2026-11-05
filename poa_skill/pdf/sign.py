@@ -4,7 +4,7 @@ Signature overlay. /Sig AcroForm fields can't be "filled" as text: we draw the c
 This is a VISUAL signature plus an ESIGN/UETA adoption audit record (see documents.py), not a
 cryptographic signature. Adjacent date fields are ordinary text fields (filled in fill.py).
 
-Ported from the Shire claims-prep platform's form engine.
+Adapted from an earlier form engine.
 """
 
 import base64

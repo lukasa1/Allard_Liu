@@ -1,11 +1,11 @@
-"""The web demo (L33) on the runtime (agent/runtime.py): the veteran's chat and cards, the
+"""The web demo on the runtime (agent/runtime.py): the veteran's chat and cards, the
 attorney's countersign, and the case panel.
 
 Run:  uv run intake serve        then open http://localhost:8000
 (or:  uv run uvicorn demo.app:app --port 8000)
 
-It needs OPENROUTER_API_KEY (D7). Without the key the page still loads and says to set it; every
-case endpoint answers 503 with the same message. `intake serve --scripted` (D26) needs no key:
+It needs OPENROUTER_API_KEY. Without the key the page still loads and says to set it; every
+case endpoint answers 503 with the same message. `intake serve --scripted` needs no key:
 it plays one scripted case (agent/scripted/demo.py) on the same runtime with no model.
 
 The demo plays one synthetic test veteran, live or scripted: Hector Alvarez (recent_decision; its
@@ -58,7 +58,7 @@ def _live_runtime() -> Runtime:
 
 
 def scripted() -> bool:
-    """`intake serve --scripted` (D26): one story played with no model (agent/scripted/demo.py)."""
+    """`intake serve --scripted`: one story played with no model (agent/scripted/demo.py)."""
     return os.environ.get("DEMO_SCRIPTED") == "1"
 
 
@@ -165,7 +165,7 @@ def suggest(case_id: str, rt: Live):
     """The input box's suggestion (Tab takes it). Live: the eval's simulated veteran (the case's
     persona, intake_eval/simulator.py) writes the next reply from the chat so far, so it follows
     whatever really happened. Scripted: the story's line for the agent's last reply, or none
-    once the chat left the script. Like the eval's runner (plan §3), it waits for idle: 409
+    once the chat left the script. Like the eval's runner, it waits for idle: 409
     while any turn is queued or running (claims prep in the background included)."""
     from intake_eval.simulator import DSPySimulator, load_chat
 
@@ -278,7 +278,7 @@ def sign(case_id: str, form: str, body: SignClick, request: Request, rt: Live):
 
 @app.post("/api/cases/{case_id}/countersign")
 def countersign(case_id: str, rt: Live):
-    """The attorney countersigns both documents in one action (D6)."""
+    """The attorney countersigns both documents in one action."""
     if _case(rt, case_id).side_state != "waiting_on_attorney":
         raise HTTPException(409, "Nothing is waiting for the attorney's countersignature.")
     try:
@@ -305,7 +305,7 @@ def pdf(case_id: str, form: str, rt: Live):
 
 @app.get("/api/cases/{case_id}")
 def panel(case_id: str, rt: Live):
-    """Everything the case panel and the staff panel show (plan §1, step 8)."""
+    """Everything the case panel and the staff panel show."""
     case = _case(rt, case_id)
     svc = documents.service(rt, case_id)
     events = rt.store.events(case_id, exclude=("message",))

@@ -1,4 +1,4 @@
-"""The scripted demo (`uv run intake serve --scripted`, D26): one whole case played with no model.
+"""The scripted demo (`uv run intake serve --scripted`): one whole case played with no model.
 
 The real runtime, tools, guard, stage table, documents, claims prep's verify and the case panel
 run as usual; only the model is replaced by agent/scripted/lm.py, loaded with this story when a

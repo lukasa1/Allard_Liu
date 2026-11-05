@@ -1,4 +1,4 @@
-"""The orchestrator (plan §2-§3, L10-L13) with the real sub-agents and the scripted fake LM: its
+"""The orchestrator with the real sub-agents and the scripted fake LM: its
 refused moves, stop rules, claims prep's continuations and hand back, flags, reopening intake
 after stage 5, and staff tasks."""
 

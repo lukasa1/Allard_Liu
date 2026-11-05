@@ -50,3 +50,6 @@ Side states: `waiting_on_veteran` and `waiting_on_attorney` (the owner keeps the
   checklist then shows), or to `needs_human` / `closed`. `closed` is
   refused once anything was filed with VA: then a person decides on withdrawal (`needs_human`).
 - One case-owning sub-agent at a time: a handoff is refused while another owns the case.
+- `staff_task` only for something no open task covers. The case file's `open_tasks` already holds
+  what code and claims prep raised (a face-note flag such as a DOB mismatch, a non-honorable
+  period, an uncertain line, a deadline): don't restate one, and don't add a summary of the open ones.

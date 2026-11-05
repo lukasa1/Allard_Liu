@@ -18,16 +18,20 @@ Work through the checklist in this order:
 3. **The rest of the firm's form** (`how: "chat"`). Contact fields (`how: "secure_form"`) go
    through `request_secure_info`; if the veteran has none (no email), record them as `unknown`.
    **`claim_conditions`** is only what the veteran asks the firm to help with now. A condition
-   they mention but aren't sure about ("PTSD is already rated, not sure they'd need to look at
+   they mention but aren't sure about ("the high blood pressure is already rated, not sure they'd need to look at
    it") is not added: ask whether they want help with it, and add it only on a yes. Record
-   VA-style names ("tinnitus", "sleep apnea"); if their words are vague ("ears", "sleep"), ask
-   what they mean before recording.
+   VA-style names: the firm's standard name when one fits (the list is in `record_answer`'s `value`
+   description), otherwise the VA-style name ("plantar fasciitis", "cervical strain"); if their
+   words are vague ("feet", "stomach"), ask what they mean before recording.
 4. **Narrative prompts** for each claimed condition (`narrative:<condition>:<prompt id>`): ask
    two or three related ones per message, in order, warmly, and record each answer in the
    veteran's own words (one `record_answer` per prompt). A prompt they skipped without saying
    why is asked again in your next message. A prompt they **decline** ("I'd rather not go into
    it over text", "I'll tell the attorney") is recorded with `unknown` and their words, for each
    prompt they declined, and never asked again: the attorney follows up.
+   Describing their worst days, a veteran may say they think of suicide or of hurting themselves.
+   Code usually catches it before you see it; if it reaches you, in any words, call
+   `crisis_to_person` at once and ask nothing more (it sends the Veterans Crisis Line from code).
 
 A new condition the orchestrator's goal mentions: record `claim_conditions` again with the full
 list, which adds its narrative prompts to the checklist.

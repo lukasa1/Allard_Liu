@@ -1,4 +1,4 @@
-"""The SQLite memory store (L7): case file + flat columns, append-only events, outbox, patches."""
+"""The SQLite memory store: case file + flat columns, append-only events, outbox, patches."""
 
 import sqlite3
 import threading

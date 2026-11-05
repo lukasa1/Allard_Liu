@@ -1,4 +1,4 @@
-"""Intake's memory in code (L15, L16, L18, A1): the typed checklist, answer parsing, stop rules.
+"""Intake's memory in code: the typed checklist, answer parsing, stop rules.
 
 The checklist is rebuilt from the case file's answers on every turn and after every answer:
 
@@ -22,7 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from agent.casefile import CaseFile, StopRule
+from agent.casefile import CaseFile, StopRule, Task
 from agent.intake import rules
 from agent.intake.parsing import (
     DISCHARGE_WORDS,
@@ -48,13 +48,13 @@ VAULT_FIELD = {
 }  # fmt: skip
 
 
-# Stop-rule fields (A1, D22): the model passes the structured value it understood (`value`), and
+# Stop-rule fields: the model passes the structured value it understood (`value`), and
 # the veteran's words stay the raw answer. Free text alone counts only when it is plain ("yes",
 # "no", "70%", "honorable", "OTH"); a hedge ("I think", "probably") is unsure: ask again.
 STRICT = {"is_veteran", "service_periods", "other_service_periods", "receiving_va_pay", "rating_pct", "prior_attorney"}
 _HINT = {"bool": "true or false", "int": "an integer 0-100",
          "service_periods": f"a list of periods, each discharge one of {', '.join(DISCHARGES)} or null"}  # fmt: skip
-# Screening fields the firm's stop rules (A1) and the fee can't do without: unknown in pass 1 sends
+# Screening fields the firm's stop rules and the fee can't do without: unknown in pass 1 sends
 # the case to a person.
 UNRESOLVED = {"is_veteran": "whether the person served", "service_periods": "the service periods",
               "receiving_va_pay": "whether they get VA disability pay", "rating_pct": "their VA rating",
@@ -128,7 +128,7 @@ def _questions(case: CaseFile, part: str) -> list[ChecklistItem]:
 
 def _discharges(case: CaseFile) -> list[ChecklistItem]:
     """A service period on file without a character of discharge keeps its question open: the
-    firm's stop rule (A1) must be decidable before anything is signed."""
+    firm's stop rule must be decidable before anything is signed."""
     items = []
     for qid in ("service_periods", "other_service_periods"):
         ans = case.answers.get(qid)
@@ -184,16 +184,51 @@ def missing(case: CaseFile, part: str) -> list[ChecklistItem]:
     return _questions(case, "pass2") + _discharges(case) + _conflicts(case) + _reopened(case) + _narratives(case)
 
 
-def stop_rule(rec: IntakeRecord) -> StopRule | None:
-    """The firm's stop rules (A1), in code: the model never makes these calls."""
+def stop_rule(rec: IntakeRecord, service_known: bool = True) -> StopRule | None:
+    """The firm's stop rules, in code: the model never makes these calls. `service_known`:
+    both service questions are answered, so "every period is non-honorable" can be decided."""
     if rec.is_veteran is False:
         return StopRule(rule="not_veteran", reason=rules.RULES["not_veteran"].text)
     if rec.rating_pct == 100:
         return StopRule(rule="rated_100", reason=rules.RULES["rated_100"].text)
-    if any(p.discharge in NON_HONORABLE for p in rec.service_periods):
+    periods = rec.service_periods
+    if service_known and periods and all(p.discharge in NON_HONORABLE for p in periods):
         return StopRule(rule="non_honorable_period", reason=rules.RULES["non_honorable_period"].text,
                         to="needs_human")  # fmt: skip
     return None
+
+
+NON_HONORABLE_TASK = "an attorney reviews this period (VA decides the character of discharge, 38 CFR 3.12)"
+
+
+def mark_non_honorable(case: CaseFile, rec: IntakeRecord) -> None:
+    """When only some periods are non-honorable, the case goes on and a staff task names each such
+    period for the attorney (VA decides the character of discharge per period, 38 CFR 3.12)."""
+    periods = rec.service_periods
+    if not periods or all(p.discharge in NON_HONORABLE for p in periods):
+        return
+    for p in periods:
+        if p.discharge in NON_HONORABLE:
+            text = (f"Service period {p.start} to {p.end} ({p.branch}) ended {p.discharge}: "
+                    f"{NON_HONORABLE_TASK}; intake goes on for the other period(s).")  # fmt: skip
+            # one task per period: the same period with its months filled in later (prefill) is not new
+            if not any(_same_period_task(t.text, p) for t in case.tasks):
+                case.tasks.append(Task(kind="staff", text=text))
+
+
+_PERIOD_TASK = re.compile(r"^Service period (\S+) to (\S+) \(([^)]*)\) ended (\S+?):")
+
+
+def _same_period_task(text: str, p: Any) -> bool:
+    """`text` is this period's task: the same start and end years, branch and discharge (the months may differ)."""
+    from agent.intake.parsing import canonical_branch
+
+    m = _PERIOD_TASK.match(text)
+    if not m or NON_HONORABLE_TASK not in text:
+        return False
+    start, end, branch, discharge = m.groups()
+    return (start[:4], end[:4], canonical_branch(branch), discharge) == (
+        str(p.start)[:4], str(p.end)[:4], canonical_branch(str(p.branch)), str(p.discharge))
 
 
 def refresh(case: CaseFile) -> None:
@@ -202,7 +237,13 @@ def refresh(case: CaseFile) -> None:
     if case.stage >= 4:
         case.checklist["pass2"] = [i.id for i in missing(case, "pass2")]
     if case.stop is None:
-        case.stop = stop_rule(record(case)) or _unresolved(case)
+        rec = record(case)
+        # without the probes (an eval condition) nobody asks about other periods: decide on the first
+        others = "other_service_periods" in case.answers or case.eval_condition == "ask_no_probes"
+        known = "service_periods" in case.answers and others
+        case.stop = stop_rule(rec, known) or _unresolved(case)
+        if case.stop is None:
+            mark_non_honorable(case, rec)
 
 
 def _unresolved(case: CaseFile) -> StopRule | None:
@@ -234,7 +275,7 @@ def question_type(key: str) -> tuple[str, tuple[str, ...]]:
 
 
 def parse(key: str, text: str, value: Any = None, known_periods: list | None = None) -> Any:
-    """Parse an answer in code (L16): simple fields (yes/no, dates, branch, discharge, lists) are
+    """Parse an answer in code: simple fields (yes/no, dates, branch, discharge, lists) are
     read by parsing.coerce; free text is kept as given. `value` is the structured value the model
     understood (used instead of `text` when given). Raises ValueError when it can't be read;
     StrictError for a stop-rule field (STRICT) whose answer is hedged or not plain.
@@ -263,7 +304,7 @@ def _strict(key: str, qtype: str, text: str, value: Any, known: list) -> Any:
         return False  # "A VSO from the DAV": a VSO doesn't count (the question says so)
     try:
         out = coerce(qtype, text if value is None else value, (), strict=True)
-        if qtype == "service_periods_append":  # never the same enlistment twice (pilot 1)
+        if qtype == "service_periods_append":  # never the same enlistment twice
             restated = [p for p in out if _restated(p, known)]
             if not [p for p in out if not _restated(p, known)]:  # nothing new: a discharge here is the first one's
                 _first_period_discharge(text, restated, known)
@@ -288,7 +329,7 @@ def _strict(key: str, qtype: str, text: str, value: Any, known: list) -> Any:
 
 def _no_invented_months(text: str, periods: list, on_file: list) -> list:
     """A month the veteran didn't say isn't recorded: "2001 to 2005" stays 2001-2005 even if the
-    model's value says 2001-01 to 2005-12 (pilot 1). The DD-214 fills the months later. A month
+    model's value says 2001-01 to 2005-12. The DD-214 fills the months later. A month
     already on file (given in an earlier message) is kept."""
     from agent.cfile.facts import same_period
     from agent.intake.parsing import canonical_branch
@@ -303,9 +344,24 @@ def _no_invented_months(text: str, periods: list, on_file: list) -> list:
             kept = any(getattr(k, end) == got for k in (ServicePeriod.model_validate(x) for x in on_file)
                        if _restated(p, [k]) or (canonical_branch(k.branch) == canonical_branch(p.branch)
                                                 and (k.component or "active") == (p.component or "active")))  # fmt: skip
+            if not said and got and len(got) > 4 and _year_alone(text, got[:4]):
+                told = got[:4]  # "2004 to 2008, honorable": no branch word, so read the years alone
             if told and got and len(told) == 4 and got.startswith(f"{told}-") and not kept:
                 setattr(p, end, told)
     return periods
+
+
+_MONTH_WORD = (r"\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sept?(ember)?|oct(ober)?"
+               r"|nov(ember)?|dec(ember)?)\b\.?")
+
+
+def _year_alone(text: str, year: str) -> bool:
+    """`year` is in `text` and no month is said with it ("2004", not "March 2004" or "3/2004")."""
+    low = text.lower()
+    if not re.search(rf"(?<!\d){year}(?!\d)", low):
+        return False
+    return not re.search(rf"({_MONTH_WORD}\s*,?\s*(of\s+)?{year}|\b\d{{1,2}}\s*[/.-]\s*(\d{{1,2}}\s*[/.-]\s*)?{year}"
+                         rf"|{year}\s*[/-]\s*\d{{1,2}}\b)", low)
 
 
 def _restated(period: Any, known: list) -> bool:

@@ -129,6 +129,51 @@ def test_crisis_language_on_a_case_routed_to_support_never_reaches_the_model(rt,
     assert rt.store.get_case(cid).side_state == "needs_human"
 
 
+@pytest.mark.parametrize("owner", ["intake", "support"])
+def test_crisis_language_codes_check_misses_is_caught_by_the_agent(rt, lm, owner):
+    """A wording code's check misses reaches the model; crisis_to_person does the rule's hand-off
+    (the Crisis Line from code, an urgent task, needs_human) and the turn's own reply is held."""
+    text = "Some nights I sit in the garage with my pistol and think about it."
+    if owner == "intake":
+        cid = opened(rt, lm)
+    else:
+        cid = rt.store.create_case(CaseFile(case_id="c5", stage=5, prep=PREP_DONE, filings=FILED)).case_id
+    lm.turn(owner, call("crisis_to_person", reason="sits in the garage with a pistol thinking about it"),
+            final(reply="Thank you. Next: how does it affect your work?"))  # fmt: skip
+    lm.turn("orchestrator", final())  # the escalated wake
+    if owner == "intake":
+        lm.turn("orchestrator", final())  # intake's result (it ended on a parked case)
+    rt.message(cid, text)
+    rt.wait_until_idle()
+    assert messages(rt, cid)[-1] == ("rule", CRISIS_MESSAGE)  # the turn's next question was held
+    assert any(e.data.get("text", "").startswith("Thank you. Next") for e in events(rt, cid, "reply_held"))
+    case = rt.store.get_case(cid)
+    assert case.side_state == "needs_human" and [t.kind for t in case.tasks][:1] == ["urgent"]
+    esc = [e for e in events(rt, cid, "escalated") if e.data["reason"] == "crisis"]
+    assert [e.actor for e in esc] == [owner]
+
+
+@pytest.mark.parametrize(("kind", "reply"), [("withdraw", WITHDRAW_MESSAGE), ("wants_human", HANDOFF_MESSAGE)])
+def test_a_request_codes_check_misses_is_handed_over_by_intake(rt, lm, kind, reply):
+    """"I've changed my mind, forget the whole thing" misses wants_withdraw; intake's to_person
+    does the rule's hand-off (its reply from code, a staff task, needs_human) and its own reply is held."""
+    from agent.ingest import wants_human, wants_withdraw
+
+    text = {"withdraw": "I've changed my mind, let's forget the whole thing.",
+            "wants_human": "Honestly I'd feel better hearing a human voice about this."}[kind]
+    assert not wants_withdraw(text) and not wants_human(text)  # else code catches it and this tests nothing
+    cid = opened(rt, lm)
+    lm.turn("intake", call("to_person", kind=kind, reason=text), final(reply="Okay. Next: which branch?"))
+    lm.turn("orchestrator", final())  # the escalated wake
+    lm.turn("orchestrator", final())  # intake's result (it ended on a parked case)
+    rt.message(cid, text)
+    rt.wait_until_idle()
+    assert messages(rt, cid)[-1] == ("rule", reply)
+    case = rt.store.get_case(cid)
+    assert case.side_state == "needs_human" and case.tasks[0].kind == "staff"
+    assert [(e.actor, e.data["reason"]) for e in events(rt, cid, "escalated")] == [("intake", kind)]
+
+
 def test_a_message_queued_before_a_crisis_gets_no_model_reply(rt, lm):
     cid = opened(rt, lm)
     gate = threading.Event()
@@ -257,7 +302,7 @@ def test_a_repeated_failure_on_a_parked_case_leaves_one_staff_task(rt):
 
 
 def test_an_owner_turn_with_no_reply_is_nudged_once_then_canned(rt, lm):
-    """D28 (live run 1 stalled): the veteran is waiting and intake sent nothing."""
+    """The veteran is waiting and intake sent nothing: the run must not stall."""
     cid = opened(rt, lm)
     lm.turn("intake", final(reply=""))
     lm.turn("intake", final(reply="Sorry, which branch were you in?"))
@@ -321,7 +366,7 @@ def test_nothing_reads_the_wall_clock_or_random_ids_past_agent_clock():
 
 def test_a_reply_held_by_a_crisis_holds_the_turns_cards_too(rt, lm):
     """The rule's crisis message stays the last word: a secure-form card the interrupted turn made
-    is not shown after it (D3)."""
+    is not shown after it."""
     from conftest import VETERAN
     from intake_fixtures import SCREEN_STEPS
 
@@ -375,3 +420,21 @@ def test_a_silent_failed_or_crashed_turn_after_a_crisis_holds_its_cards(rt, lm, 
     out = rt.updates(cid)
     assert CRISIS_MESSAGE in [o.payload.get("text") for o in out] and not [o for o in out if o.kind == "card"]
     assert [[c["type"] for c in e.data["cards"]] for e in events(rt, cid, "cards_held")] == [["secure_form"]]
+
+
+def test_crisis_backstop_works_after_the_turn_lost_the_case(rt, lm):
+    """A non-veteran's case closes on the stop rule mid-turn; intake's crisis_to_person in the same
+    turn still sends the Crisis Line and opens an urgent task (the lost-ownership guard lets it)."""
+    from agent.ingest import detect_crisis
+
+    text = "No, I never served, it was my dad. Some nights I sit in the garage with his pistol and think about it."
+    assert not detect_crisis(text)
+    cid = opened(rt, lm)
+    lm.turn("intake", call("record_answer", q="is_veteran", a="No, I never served", value=False),
+            call("crisis_to_person", reason="sits in the garage with a pistol thinking about it"),
+            final(reply="I'm sorry, we can only help veterans."))  # fmt: skip
+    lm.turn("orchestrator", final())
+    rt.message(cid, text)
+    rt.wait_until_idle()
+    assert messages(rt, cid)[-1] == ("rule", CRISIS_MESSAGE)  # intake's own reply is held back
+    assert any(t.kind == "urgent" for t in rt.store.get_case(cid).tasks)

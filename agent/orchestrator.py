@@ -1,16 +1,16 @@
-"""The orchestrator agent (L10-L13): owns the case end to end, answers no questions itself.
+"""The orchestrator agent: owns the case end to end, answers no questions itself.
 
 It wakes on case_opened, subagent_result, support_flag, escalated and staff events nobody owns
 (agent/runtime.py). Each wake rebuilds its context from scratch: the skill index, the memory
 block (the case file and the last 10 events verbatim, never a transcript or the C-file) and the
 waking event. Text from outside the firm in it (answers, flags, tasks, the face note, event data)
-is inside <untrusted> blocks (L6). It makes at most one handoff per wake; the sub-agent's first turn runs after the
-wake ends (D9).
+is inside <untrusted> blocks. It makes at most one handoff per wake; the sub-agent's first turn runs after the
+wake ends.
 
 Tools: read_skill (from the harness), run_intake(goal), run_prep(goal), move_stage(to, reason)
-for the move back to stage 4, needs_human and closed (D11), and staff_task(text) for a flag that goes to a
-person (L12), also allowed after the wake's handoff. Its `reply` is the short update to the veteran
-at a handoff (code sends a reply from any wake, except on a case a rule handed to a person, D3).
+for the move back to stage 4, needs_human and closed, and staff_task(text) for a flag that goes to a
+person, also allowed after the wake's handoff. Its `reply` is the short update to the veteran
+at a handoff (code sends a reply from any wake, except on a case a rule handed to a person).
 """
 
 from __future__ import annotations

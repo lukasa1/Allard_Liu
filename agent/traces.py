@@ -1,4 +1,4 @@
-"""Trace log (L5): one JSON line per model call and per tool call, written by DSPy callbacks.
+"""Trace log: one JSON line per model call and per tool call, written by DSPy callbacks.
 
 Each line carries the case, agent and turn (from a context variable the harness sets around a
 turn), the latency, the token counts and cost (from config.PRICES), and for tools the arguments,

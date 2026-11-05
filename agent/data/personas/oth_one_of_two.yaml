@@ -1,10 +1,45 @@
 id: oth_one_of_two
-summary: An honorable first enlistment and a second period ending other than honorable. Under the firm's stop rule (any non-honorable period, plan A1) intake stops and an attorney decides.
+summary: An honorable first enlistment and a second period ending other than honorable. Under the firm's
+  rule only every period non-honorable stops intake; here intake goes on, code adds a staff
+  task naming the OTH period for the attorney (scored), and the case stays eligible.
 truth:
   first_name: Luis
   last_name: Ferreira
   service_periods:
-    - {branch: army, component: active, start: "2001-01", end: "2005-01", discharge: honorable}
-    - {branch: army, component: active, start: "2006-03", end: "2008-07", discharge: oth}
+  - branch: army
+    component: active
+    start: 2001-01
+    end: 2005-01
+    discharge: honorable
+  - branch: army
+    component: active
+    start: 2006-03
+    end: 2008-07
+    discharge: oth
+  street: 640 South 5th Street
+  city: Milwaukee
+  state: WI
+  zip: '53204'
+  cell_phone: 414-555-0127
+  email: luis.ferreira@example.com
+  next_of_kin: Ana Ferreira, sister, 414-555-0128
+stories:
+  tinnitus:  # set in the honorable period (2001-2005): the default story's 2007 IED falls in the OTH one
+    h02: A constant high-pitched ringing in both ears.
+    h03: On bad days it's so loud I can't concentrate or fall asleep.
+    h04: It started in 2003, during the invasion of Iraq, when an RPG hit the truck ahead of mine.
+    h05: Every day.
+    h06: It never went away, and it's gotten a little worse.
+    h07: Southern Iraq, on the road north from Kuwait, and then Camp Anaconda.
+    h08: Driving a truck in supply convoys.
+    h09: Engine noise, gunfire and explosions, usually without good hearing protection.
+    h10: The RPG blast in 2003, plus years of truck and weapons noise.
+    h11: No, I never reported it. Everyone's ears rang.
+    h12: I drive for a moving company now and it's hard to hear the crew over the ringing.
+    h13: I've left early a few times when it gets really bad.
+    h14: I avoid loud restaurants and I sleep with a fan on.
+    h15: Before the Army I had no hearing problems at all.
+    h16: No.
 expected:
-  decision: attorney_review
+  decision: eligible
+  fee_pct: 30

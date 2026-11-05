@@ -1,6 +1,6 @@
-"""The shared agent loop (L1): one harness, set up once per agent, on dspy.ReAct.
+"""The shared agent loop: one harness, set up once per agent, on dspy.ReAct.
 
-One turn = one ReAct run for one incoming message or event (plan §3). Each agent supplies an
+One turn = one ReAct run for one incoming message or event. Each agent supplies an
 `AgentSpec`: its instructions (the skill index is appended here), its tools, a context builder
 that rebuilds working memory from the case file every turn, a stop rule, and its limits.
 
@@ -9,7 +9,7 @@ Every turn's signature has the same outputs:
           It is the only way a turn talks to the veteran, so it can't send two messages.
   result  sub-agents only: a SubagentResult, kept only when the agent's stop rule holds.
 
-Parse and route (L4): a tool error, bad arguments or a guard refusal come back to the model as
+Parse and route: a tool error, bad arguments or a guard refusal come back to the model as
 an observation. A malformed model output goes through DSPy's ChatAdapter -> JSONAdapter fallback;
 if the run still fails, the turn is retried once, then ends as `failed` (the caller sends the
 canned reply or moves the case to needs_human). There is no fallback to another policy.
@@ -57,7 +57,7 @@ class AgentSpec:
     # On hitting max_iters or the timeout: a canned reply (chat agents), a continuation turn
     # (claims prep), or needs_human (the orchestrator).
     on_limit: Literal["canned", "continue", "needs_human"] = "canned"
-    # D27: the skills this turn needs, chosen in code from the case; their directions go in the
+    # the skills this turn needs, chosen in code from the case; their directions go in the
     # context, so the model doesn't spend a call (about 3 s) reading them. read_skill loads others.
     preload: Callable[[CaseFile], tuple[str, ...]] | None = None
 
@@ -96,7 +96,7 @@ class TurnOutcome:
 
 
 def conversation(turn: Turn, n: int) -> str:
-    """L3: the last `n` messages of this agent's own conversation, verbatim, from the event log."""
+    """The last `n` messages of this agent's own conversation, verbatim, from the event log."""
     events = [e for e in turn.rt.store.events(turn.case_id, types=("message",))
               if turn.agent in (e.data.get("from"), e.data.get("to"))][-n:]  # fmt: skip
     if not events:
@@ -105,12 +105,12 @@ def conversation(turn: Turn, n: int) -> str:
 
 
 def incoming(turn: Turn) -> str:
-    """What the turn answers, as the model sees it: the veteran's message wrapped as untrusted (L6)."""
+    """What the turn answers, as the model sees it: the veteran's message wrapped as untrusted."""
     return untrusted("veteran message", turn.incoming) if turn.kind == "message" else turn.incoming
 
 
 def context(spec: AgentSpec, turn: Turn) -> str:
-    """The agent's context, with the directions of the skills this step needs (D27)."""
+    """The agent's context, with the directions of the skills this step needs."""
     text = spec.context(turn)
     names = spec.preload(turn.case) if spec.preload else ()
     skills = load_skills(spec.name)
@@ -164,7 +164,9 @@ class Harness:
                 raise TurnTimeout
 
         def guard(name: str, args: BaseModel) -> str | None:
-            if name == "read_skill":
+            # the crisis and person backstops act on a case the turn no longer owns, too (a
+            # non-veteran's case just closed, a person took it): a missed crisis is never refused
+            if name in ("read_skill", "crisis_to_person", "to_person"):
                 return None
             if turn.owner_at_start and turn.case.owner != spec.name:
                 return f"you no longer own the case ({turn.case.side_state or 'handed back'}); finish now"
@@ -194,15 +196,14 @@ class Harness:
         for attempt in (1, 2):
             try:
                 # A copy per turn: its history holds only this turn's calls (the trace reads it). The
-                # retry gets its own rollout_id, so DSPy's cache can't hand back the failed output
-                # (live run 3: both attempts of one turn returned the same garbled text).
+                # retry gets its own rollout_id, so DSPy's cache can't hand back the failed output.
                 lm = self.lm.copy() if attempt == 1 else self.lm.copy(rollout_id=attempt)
                 with dspy.context(lm=lm, callbacks=[self.callback], adapter=dspy.ChatAdapter()):
                     pred = react(context=context(spec, turn), incoming=incoming(turn))
                 break
             except TurnTimeout:
                 return self._limit(spec, "timeout")
-            except Exception as err:  # noqa: BLE001 - a failed run is retried once (L4)
+            except Exception as err:  # noqa: BLE001 - a failed run is retried once
                 self.traces.write("turn_error", attempt=attempt, error=f"{type(err).__name__}: {err}")
         if pred is None:
             self.traces.write("turn_failed", detail="model output unusable after one retry")

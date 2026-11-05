@@ -1,4 +1,4 @@
-"""`prefill` (L28, A2): write the intake answers the C-file settles, and record where it disagrees.
+"""`prefill`: write the intake answers the C-file settles, and record where it disagrees.
 
 For each question the C-file can answer, the value is built in code from the recorded facts (in
 the shapes `parsing.coerce` gives intake's own answers), with the source "C-file p. N" from the
@@ -115,7 +115,7 @@ def _periods(case: CaseFile, cfile: list[dict], source: str) -> list[str]:
                 ans = case.answers[key]
                 case.answers[key] = ans.model_copy(update={"source": f"{ans.source}; months: DD-214, {source}"})
                 out.append("months_from_dd214")
-    if out:
+    if "discharge_from_dd214" in out:  # months alone ("2007 to 2015") are no conflict
         _task(case, f"The DD-214 ({source}) shows a different discharge than the veteran gave; the record now follows the DD-214.")
     new = [c.model_dump() for c in c_periods if not any(same_period(c, p) for p in on_file)]
     if new:

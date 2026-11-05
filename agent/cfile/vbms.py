@@ -1,4 +1,4 @@
-"""The simulated VBMS (L22, L24, L26): a case's synthetic C-file as typed documents whose pages
+"""The simulated VBMS: a case's synthetic C-file as typed documents whose pages
 carry one global page number.
 
 `pull` builds the persona's synthetic C-file (agent/cfile/synth.py) and, once the firm's own

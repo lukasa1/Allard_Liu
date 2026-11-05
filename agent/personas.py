@@ -13,6 +13,9 @@ Every persona is made up; none is based on a real client. A persona file
   poa       the veteran's answers to the 21-22a's Item 20 and Item 22
   during_prep  the orchestrator scenario (eval): a message the veteran sends while claims prep
             runs ({message, condition}); support should flag the new condition
+  believes  truth fields the veteran remembers differently from the records (e.g. a discharge the
+            DD-214 shows otherwise): what the simulated veteran plays, and the key when the C-file
+            isn't read (the ask / ask_no_probes conditions)
 
 The same personas are the test veterans you can pick in the demo.
 """
@@ -59,7 +62,8 @@ DEFAULT_TRUTH: dict[str, Any] = {
     "partner_share_consent": True,
     "mos": ["88M Motor Transport Operator"],
     "retired": False,
-    "exposures": [],
+    "exposures": ["burn pits"],  # DEFAULT_STORY is set at Camp Taji, Iraq (a PACT Act location)
+    "litigation_contact": False,
     "claim_conditions": ["tinnitus"],
     "other_conditions": [],
     "marital_status": "single",
@@ -99,11 +103,19 @@ class Persona:
     expected: dict[str, Any] = field(default_factory=dict)  # decision, fee_pct, flag_decision
     identity: dict[str, str] = field(default_factory=dict)  # dob, ssn, middle_initial
     typed: dict[str, str] = field(default_factory=dict)  # secure-form field -> the wrong value the veteran types
-    asks: dict[str, Any] = field(default_factory=dict)  # at_reply (1-based), text: a question put before that reply
-    split: str = "dev"  # dev: used while building (the pilot's 12); heldout: never tuned against
+    asks: dict[str, Any] = field(default_factory=dict)  # at_reply (1-based) or after: itf_filed; text: sent instead of that reply; answer_key; expects: kb | person
+    split: str = "dev"  # dev: the system was developed against it; heldout: not fixed against directly
     cfile: dict[str, Any] = field(default_factory=dict)
     poa: dict[str, bool] = field(default_factory=dict)
     during_prep: dict[str, str] = field(default_factory=dict)  # message, condition
+    believes: dict[str, Any] = field(default_factory=dict)  # truth fields as the veteran remembers them
+
+    @property
+    def believed_truth(self) -> IntakeRecord:
+        """The record as the veteran remembers it (the truth unless `believes` overrides a field)."""
+        if not self.believes:
+            return self.truth
+        return IntakeRecord.model_validate({**self.truth.model_dump(), **self.believes})
 
     @property
     def expected_decision(self) -> str:
@@ -127,7 +139,9 @@ def _default_identity(pid: str) -> dict[str, str]:
 def load_persona(path: Path) -> Persona:
     data = yaml.safe_load(path.read_text())
     truth = copy.deepcopy(DEFAULT_TRUTH)
-    truth.update(data.get("truth", {}))
+    if (data.get("truth") or {}).get("is_veteran") is False:  # never served: no default service facts
+        truth.update(mos=[], exposures=[], litigation_contact=None, claim_conditions=[], other_conditions=[], retired=False)  # else the
+    truth.update(data.get("truth", {}))  # default Army MOS and Iraq story would make the simulator say it served
     stories = data.get("stories") or {}
     for condition in truth.get("claim_conditions", []):
         stories.setdefault(condition, DEFAULT_STORY if condition == "tinnitus" else {})
@@ -153,6 +167,7 @@ def load_persona(path: Path) -> Persona:
             **(data.get("poa") or {}),
         },
         during_prep=dict(data.get("during_prep") or {}),
+        believes=dict(data.get("believes") or {}),
     )
 
 

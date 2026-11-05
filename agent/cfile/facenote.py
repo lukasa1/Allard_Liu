@@ -78,22 +78,25 @@ def _plus_year(iso: str) -> str:
         return (d + timedelta(days=365)).isoformat()
 
 
-def service_era(start: str | None) -> str:
+def service_era(start: str | None, end: str | None = None) -> str:
+    """The latest period of war the service overlaps (38 CFR 3.2: Vietnam era from 1961-02-28 in
+    country, 1964-08-05 otherwise, through 1975-05-07; Gulf War from 1990-08-02), by month:
+    June 1990 to 1994 is Gulf War service."""
     if not start:
         return "(unknown)"
-    ym = start[:7]
-    if ym >= "1990-08":
+    first, last = start[:7], (end or start)[:7]
+    if last >= "1990-08":
         return "Gulf War"
-    if ym >= "1975-05":
-        return "Peacetime (post-Vietnam)"
-    if ym >= "1961-11":
+    if first <= "1975-05" and last >= "1961-02":
         return "Vietnam Era"
+    if first > "1975-05":
+        return "Peacetime (post-Vietnam)"
     return "Pre-Vietnam"
 
 
 @dataclass(frozen=True)
 class Line:
-    """One face-note line and the fact paths it came from (L24). `sources` is None for a pure
+    """One face-note line and the fact paths it came from. `sources` is None for a pure
     separator. A path names a CfileFacts field ("dob", "decisions.0", "decisions.0.notified"); a
     derived line (service era, an appeal deadline) lists the facts it was derived from. Two other
     kinds of source: "case:<field>" (the firm's own records: the fee agreement, the ITF) and
@@ -144,7 +147,7 @@ def render(
         return (f"decisions.{i}",) + ((f"decisions.{i}.notified",) if facts.decisions[i].notified else ())
 
     # A prior rep is a private attorney or agent (a VSO doesn't count: the firm's rule, as intake's
-    # question says, D15) on an appointment form without revocation details (the firm's SOP).
+    # question says) on an appointment form without revocation details (the firm's SOP).
     # Newest by signed date; on a tie (or no dates) the last in document order.
     active = [(i, r) for i, r in enumerate(facts.prior_reps) if not r.revoked and r.kind in ("attorney", "agent")]
     if active:
@@ -165,8 +168,8 @@ def render(
         how = " (the day and month look swapped)" if swapped else ""
         flags.append(f"DOB mismatch: the intake / 21-22a date of birth differs from the DD-214{how}. File a corrected 21-22a.")
     periods = facts.service_periods
-    first = periods[0].start if periods else None
-    lines.append(Line(f"Service Era: {service_era(first)}", ("service_periods.0",) if periods else ("none:dd214:service_period",)))
+    first = periods[0] if periods else None
+    lines.append(Line(f"Service Era: {service_era(first.start, first.end) if first else service_era(None)}", ("service_periods.0",) if periods else ("none:dd214:service_period",)))
     for i, sp in enumerate(periods):
         discharge = DISCHARGE_LABEL.get(sp.discharge or "", "Discharge unknown")
         comp = "" if sp.component in (None, "active") else f" {sp.component.title()}"

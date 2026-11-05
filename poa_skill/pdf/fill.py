@@ -3,7 +3,7 @@ AcroForm text/checkbox/radio filling via pypdf. All pypdf coupling lives here an
 Keys in `values` are fully-qualified PDF field names (what PdfReader.get_fields() returns);
 checkbox/radio values are the literal export token (e.g. "/1").
 
-Ported from the Shire claims-prep platform's form engine.
+Adapted from an earlier form engine.
 """
 
 from io import BytesIO

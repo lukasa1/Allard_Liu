@@ -24,14 +24,14 @@ from agent.config import REPO_ROOT
 from agent.personas import Persona
 from agent.runtime import Runtime
 from intake_eval.runner import CaseRun, Veteran, run_case
-from intake_eval.scoring import Score, crashed_score, score_run
+from intake_eval.scoring import Score, asked_answer, crashed_score, score_run
 
 RESULTS_DIR = REPO_ROOT / "results"
 SPLITS = ("dev", "heldout")  # agent/personas.py Persona.split
-# Model calls per case, estimated before the first live smoke test (an eligible case: two intake
-# passes, one claims-prep turn, four orchestrator wakes). The smoke test's report has the real counts.
+# Model calls per case, a rough estimate (an eligible case: two intake passes, one claims-prep turn,
+# four orchestrator wakes). A run's report has the real counts.
 EST_CALLS = {"orchestrator": 12, "intake": 190, "claims_prep": 20, "support": 2, "kb_search": 1, "simulator": 45}
-AGENTS = ("orchestrator", "intake", "claims_prep", "support", "simulator")
+AGENTS = ("orchestrator", "intake", "claims_prep", "support", "simulator", "judge")
 
 
 def estimated_calls(runs: int) -> str:
@@ -52,10 +52,44 @@ def _avg(xs: list[float | None]) -> float | None:
     return mean(xs) if xs else None
 
 
+def judge_answer(score: Score, run: CaseRun, persona: Persona, judge: Callable[[str, str, list[str]], dict]) -> None:
+    """The judge's verdict on intake's answer to the persona's question, and its cost."""
+    v = judge(persona.asks["text"].strip(), asked_answer(run), list(persona.asks["answer_key"]))
+    score.ask_answer = v
+    score.by_agent["judge"] = {"calls": 1, "input_tokens": 0, "output_tokens": 0,
+                               "cost_usd": v.get("cost_usd", 0.0), "latency_s": 0.0}  # fmt: skip
+    score.cost_usd += v.get("cost_usd", 0.0)
+
+
+def _score_and_render(persona: Persona, condition: str, run: CaseRun,
+                      judge: Callable[[str, str, list[str]], dict] | None) -> tuple[Score, str]:  # fmt: skip
+    """A finished run's score and transcript. A failing judge or transcript writer never turns a
+    finished run into a crash: the judge's error is recorded as its verdict, the score kept."""
+    try:
+        score = score_run(persona, run)
+    except Exception as exc:  # noqa: BLE001 - a scorer bug: recorded as such, the run's cost still counted
+        score = crashed_score(persona, condition, exc)
+        score.critical_errors = [f"scoring failed: {type(exc).__name__}"]
+        score.cost_usd = run.cost()
+        return score, f"# {persona.id} ({condition})\n\nScoring failed:\n\n```\n{traceback.format_exc()}```\n"
+    if judge and persona.asks.get("answer_key") and run.asked_index is not None:
+        try:
+            judge_answer(score, run, persona, judge)
+        except Exception as exc:  # noqa: BLE001 - e.g. an unparseable verdict, a rate limit
+            score.ask_answer = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        text = render_transcript(persona, run, score)
+    except Exception:  # noqa: BLE001
+        text = f"# {persona.id} ({condition})\n\nTranscript failed:\n\n```\n{traceback.format_exc()}```\n"
+    return score, text
+
+
 def run_eval(personas: list[Persona], conditions: list[str], make_rt: Callable[[Path], Runtime],
              make_sim: Callable[[Persona], Veteran], run_name: str | None = None, trials: int = 1,
-             max_cost: float | None = None) -> tuple[Path, list[Score]]:  # fmt: skip
-    """`make_rt(data_dir)`: a runtime per case. `max_cost`: stop once the traced cost passes it."""
+             max_cost: float | None = None, judge: Callable[[str, str, list[str]], dict] | None = None,
+             ) -> tuple[Path, list[Score]]:  # fmt: skip
+    """`make_rt(data_dir)`: a runtime per case. `max_cost`: stop once the traced cost passes it.
+    `judge(question, answer, key)`: grades intake's answer to a persona's question (`asks.answer_key`)."""
     run_name = run_name or f"{datetime.now():%Y%m%d-%H%M%S}"
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", run_name) or ".." in run_name:
         # a folder name under results/, never a path: a rerun clears the case folders under it
@@ -71,20 +105,21 @@ def run_eval(personas: list[Persona], conditions: list[str], make_rt: Callable[[
                 if stopped:
                     break
                 name = f"{persona.id}-t{trial + 1}" if trials > 1 else persona.id
+                data_dir = out / "runs" / condition / name
                 try:
-                    data_dir = out / "runs" / condition / name
                     # a rerun under the same name starts clean: the case id is the same each run
                     # (agent/clock.py), and an old case file, vault or documents must not carry over
                     shutil.rmtree(data_dir, ignore_errors=True)
                     run = run_case(persona, condition, lambda d=data_dir: make_rt(d), make_sim(persona),
                                    max_cost=max_cost, spent=spent)  # fmt: skip
-                    score = score_run(persona, run)
-                    spent += run.cost()
-                    stopped = run.stopped_at_cost
-                    text = render_transcript(persona, run, score)
                 except Exception as exc:  # noqa: BLE001 - e.g. the runtime couldn't be built: score it, go on
                     score = crashed_score(persona, condition, exc)
                     text = f"# {persona.id} ({condition})\n\nRun crashed:\n\n```\n{traceback.format_exc()}```\n"
+                else:
+                    spent += run.cost()
+                    stopped = run.stopped_at_cost
+                    score, text = _score_and_render(persona, condition, run, judge)
+                    spent += score.by_agent.get("judge", {}).get("cost_usd", 0.0)
                 scores.append(score)
                 (out / "transcripts" / condition / f"{name}.md").write_text(text)
                 print(f"  {condition:<14} {name:<28} {score.end_state:<16}{'OK ' if score.scenario_pass else 'XX '}"
@@ -150,6 +185,14 @@ def aggregate(scores: list[Score]) -> dict[str, Any]:
         "turns_to_signed_poa": _avg([float(s.turns_to_signed_poa) for s in done if s.turns_to_signed_poa is not None]),
         "kb_calls": sum(s.kb_calls for s in scores),
         "kb_sourced": sum(s.kb_sourced for s in scores),
+        "resumed_after": _avg([float(s.resumed_after) for s in scores if s.resumed_after is not None]),
+        "scripted_sent": f"{sum(bool(s.scripted_sent) for s in scores)}/{sum(s.scripted_sent is not None for s in scores)}",
+        "asked": sum(bool(s.ask_answer) or s.resumed_after is not None for s in scores),
+        # graded answers only; a judge error (a parse failure, a rate limit) is no verdict
+        "ask_answer_ok": f"{sum(bool(s.ask_answer.get('ok')) for s in scores)}/"
+                         f"{sum(bool(s.ask_answer) and 'error' not in s.ask_answer for s in scores)}"
+                         + (f" ({n} judge errors)" if (n := sum('error' in s.ask_answer for s in scores)) else ""),
+        "untested": sum(s.untested for s in scores),
         "flag_decisions_correct": f"{sum(bool(s.flag_decision_correct) for s in labelled)}/{len(labelled)}",
         "refused": refused,
         "facenote_line_accuracy": _avg([s.facenote_line_accuracy for s in prep]),
@@ -173,12 +216,13 @@ def headline_line(cond: str, a: dict[str, Any]) -> str:
 
 NOTES = {
     "split": (
-        "`dev`: the 12 personas the live pilot ran, whose failures the code was then fixed against, so "
-        "these numbers are optimistic. `heldout`: personas never tuned against (baseline_clean was in "
-        "the earliest smoke runs, and some share a mechanism with a dev persona)."
+        "`dev`: the 14 personas the system was developed against, so these numbers are optimistic. "
+        "`heldout`: the 6 personas not fixed against directly; they are optimistic too, since earlier "
+        "runs of them informed later changes, baseline_clean is the same veteran as dev's "
+        "asks_question_mid_intake, and reserve_not_in_records shares two_service_periods' mechanism."
     ),
     "conditions": (
-        "Conditions (L32): `ask_no_probes` = intake without the verification probes and without C-file "
+        "Conditions: `ask_no_probes` = intake without the verification probes and without C-file "
         "prefill; `ask` = with the probes, no prefill; `cfile` = probes, prefill from the C-file and a "
         "confirmation of each conflict (the default, and what the demo runs)."
     ),
@@ -188,8 +232,10 @@ NOTES = {
         "field accuracy held, so they share the row."
     ),
     "intake": (
-        "KB: kb_search calls and those with a sourced answer (intake's KB questions carry no labels; "
-        "support_eval scores answer accuracy)."
+        "KB: kb_search calls and those with a sourced answer. Persona question (asks_question_mid_intake, "
+        "sent alone, answering nothing): `resumed after` = veteran replies until intake recorded an "
+        "answer again (1 = it answered and asked its question again at once); `answer ok` = the LLM "
+        "judge (intake_eval/judge.py) found every point of the persona's answer key and nothing wrong."
     ),
     "orchestrator": (
         "Scenario pass: the run completed and the case ended where the persona's expected decision says. "
@@ -202,7 +248,7 @@ NOTES = {
         "Citation precision: facts whose cited page shows their values."
     ),
     "cost": (
-        "From the traces (L5; prices in agent/config.py). Calls and cost are means per case; latency is "
+        "From the traces (prices in agent/config.py). Calls and cost are means per case; latency is "
         "per model call. The simulated veteran is counted separately; kb_search's model call is counted "
         "to the agent that searched."
     ),
@@ -227,6 +273,12 @@ def render_report(run_name: str, conditions: list[str], scores: list[Score], tri
     lines += ["", NOTES["conditions"], *_section("Headline: structured questions settled in chat", NOTES["headline"])]
     by_split = {(c, sp): aggregate(sub) for c in conditions for sp in SPLITS
                 if (sub := [s for s in scores if s.condition == c and s.split == sp])}  # fmt: skip
+    lines += _table(["Condition", "Structured questions", "n", "Runs w/ critical errors", "Field acc.",
+                     "Prefilled (share)", "Clarifications", "Turns to signed 21-22a", "pass^k"],
+                    [[c, f"**{_num(a['structured_questions'])}**", f"{a['completed_runs']}/{a['runs']}",
+                      f"{a['runs_with_critical_errors']} of {a['runs']}", _pct(a["field_accuracy"]), _pct(a["prefill_share"]),
+                      _num(a["clarifications"]), _num(a["turns_to_signed_poa"]), _pct(a["pass_hat_k"])]
+                     for c, a in agg.items()])  # fmt: skip
     if len({sp for _, sp in by_split}) > 1:
         lines += _section("By split", NOTES["split"])
         lines += _table(["Condition", "Split", "Runs", "Scenario pass", "Runs w/ critical errors", "Field acc.",
@@ -234,15 +286,12 @@ def render_report(run_name: str, conditions: list[str], scores: list[Score], tri
                         [[c, sp, a["runs"], _pct(a["scenario_pass_rate"]), f"{a['runs_with_critical_errors']} of {a['runs']}",
                           _pct(a["field_accuracy"]), _num(a["structured_questions"]), _pct(a["facenote_line_accuracy"]),
                           f"${_num(a['cost_mean'], 4)}"] for (c, sp), a in by_split.items()])  # fmt: skip
-    lines += _table(["Condition", "Structured questions", "n", "Runs w/ critical errors", "Field acc.",
-                     "Prefilled (share)", "Clarifications", "Turns to signed 21-22a", "pass^k"],
-                    [[c, f"**{_num(a['structured_questions'])}**", f"{a['completed_runs']}/{a['runs']}",
-                      f"{a['runs_with_critical_errors']} of {a['runs']}", _pct(a["field_accuracy"]), _pct(a["prefill_share"]),
-                      _num(a["clarifications"]), _num(a["turns_to_signed_poa"]), _pct(a["pass_hat_k"])]
-                     for c, a in agg.items()])  # fmt: skip
     lines += _section("Intake", NOTES["intake"])
-    lines += _table(["Condition", "Narrative answers", "Veteran messages", "KB calls / sourced", "Model failures"],
+    lines += _table(["Condition", "Narrative answers", "Veteran messages", "KB calls / sourced",
+                     "Question: resumed after / answer ok", "Scripted messages sent", "Model failures"],
                     [[c, _num(a["narrative_answers"]), _num(a["veteran_messages"]), f"{a['kb_calls']} / {a['kb_sourced']}",
+                      f"{_num(a['resumed_after'])} / {a['ask_answer_ok']}" if a["asked"] else "–",
+                      f"{a['scripted_sent']}" + (f" ({a['untested']} untested)" if a["untested"] else ""),
                       a["model_failures"]] for c, a in agg.items()])  # fmt: skip
     lines += _section("Orchestrator", NOTES["orchestrator"])
     lines += _table(["Condition", "Scenario pass", "Flag decisions correct", "Refused (per agent)"],

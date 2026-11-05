@@ -1,15 +1,39 @@
 id: reserve_not_in_records
-split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
-summary: Active Navy service, then three years in the Navy Reserve (a Reserve period with no activation). Mentions only the first period unless asked, so only the verification probe or the C-file catches the second DD-214.
-behaviors: [omit_second_period]
+split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+summary: Active Navy service, then three years in the Navy Reserve. Mentions only the first period unless asked; the
+  C-file holds a DD-214 for each period, so only the verification probe or the C-file prefill catches the second
+  one.
+behaviors:
+- omit_second_period
+- Your Navy Reserve years (2014-2016) included a mobilization to Naval Medical Center San Diego (that is why
+  there is a DD-214 for them); you stayed stateside and never deployed then.
 truth:
   first_name: Priya
   last_name: Nair
   service_periods:
-    - {branch: navy, component: active, start: "2008-07", end: "2012-07", discharge: honorable}
-    - {branch: navy, component: reserve, start: "2014-01", end: "2016-12", discharge: honorable}
-  mos: [Hospital Corpsman]
-  claim_conditions: [migraines]
+  - branch: navy
+    component: active
+    start: 2008-07
+    end: 2012-07
+    discharge: honorable
+  - branch: navy
+    component: reserve
+    start: 2014-01
+    end: 2016-12
+    discharge: honorable
+  exposures: []  # none she knows of (sea service and a stateside mobilization)
+  litigation_contact: null  # not asked: no exposures
+  mos:
+  - Hospital Corpsman
+  claim_conditions:
+  - migraines
+  street: 1200 Lakeshore Drive
+  city: Sheboygan
+  state: WI
+  zip: '53081'
+  cell_phone: 920-555-0135
+  email: priya.nair@example.com
+  next_of_kin: Anil Nair, father, 920-555-0136
 stories:
   migraines:
     h02: Throbbing headaches behind my right eye, with nausea and light sensitivity.
@@ -22,11 +46,13 @@ stories:
     h09: Constant noise, bright lights at night, long shifts.
     h10: I hit my head when I fell on the flight deck in 2010.
     h11: Yes, I was seen in sick bay.
-    h12: I lose about four workdays a month.
-    h13: Yes, I've had to leave shifts early.
+    h12: I have to leave shifts early, and I can't work under the bright lights when one starts.
+    h13: I lose about four workdays a month.
     h14: I cancel plans with my family a lot.
     h15: I never had headaches before the Navy.
     h16: No.
 expected:
   decision: eligible
   fee_pct: 30
+identity:
+  dob: '1986-12-23'  # explicit: the id-hashed DOB made the enlistment age implausible

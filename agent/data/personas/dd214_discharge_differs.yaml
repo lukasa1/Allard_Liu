@@ -1,0 +1,63 @@
+id: dd214_discharge_differs
+split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+summary: The veteran says their discharge was honorable, but the DD-214 in the C-file says general (under
+  honorable conditions). The DD-214 wins on discharge - prefill records general and a staff task
+  notes the difference (scored in the cfile condition). General is not a stop rule, so the case stays eligible
+  and reaches stage 5 (ready for attorney review).
+behaviors:
+- If asked how you heard about the firm, say you found it on the internet; say where only when asked where.
+- "You remember your discharge as honorable and say so when asked; you have never looked closely at your
+  DD-214. If the assistant tells you the DD-214 shows
+  a different discharge, say you didn't know that and it may well be right."
+truth:
+  first_name: Darnell
+  last_name: Price
+  service_periods:
+  - branch: army
+    component: active
+    start: 2006-02
+    end: 2012-01
+    discharge: general
+  exposures:  # served at a PACT Act burn-pit location (Afghanistan)
+  - burn pits
+  litigation_contact: false
+  mos:
+  - 11B Infantryman
+  claim_conditions:
+  - bilateral knee condition
+  street: 1820 North 34th Street
+  city: Milwaukee
+  state: WI
+  zip: '53208'
+  cell_phone: 414-555-0174
+  email: darnell.price@example.com
+  next_of_kin: Keisha Price, sister, 414-555-0175
+  heard_about: internet
+  internet_source: a Facebook group for veterans
+stories:
+  bilateral knee condition:
+    h02: Both knees ache and grind, and the right one locks up sometimes.
+    h03: Stairs are hard, and I can't kneel at all.
+    h04: It built up over years of foot patrols and ruck marches in service.
+    h05: Every day.
+    h06: It has gotten worse since I got out.
+    h07: Kandahar Province, Afghanistan, and Fort Campbell, Kentucky.
+    h08: On foot patrols and in training.
+    h09: Heavy rucks, body armor, rough ground and jumping off vehicles.
+    h10: No single injury - years of carrying a lot of weight.
+    h11: Yes, I went to sick call a few times and was given Motrin and a knee sleeve.
+    h12: I had to leave a warehouse job because of the standing; now I work a desk job at a call center.
+    h13: I miss a day or two a month when they swell.
+    h14: I can't play basketball or walk long distances anymore.
+    h15: My knees were fine before the Army.
+    h16: No.
+believes:  # what Darnell says; the key without the C-file (ask, ask_no_probes)
+  service_periods:
+  - branch: army
+    component: active
+    start: 2006-02
+    end: 2012-01
+    discharge: honorable
+expected:
+  decision: eligible
+  fee_pct: 30

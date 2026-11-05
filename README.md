@@ -20,7 +20,7 @@ You need Python 3.12+ and [uv](https://docs.astral.sh/uv/getting-started/install
 git clone https://github.com/lukasa1/Allard_Liu.git
 cd Allard_Liu
 uv sync                 # creates .venv and installs everything from uv.lock
-uv run pytest -q        # optional check: ~450 tests, about 2 minutes, no key and no network
+uv run pytest -q        # optional check: ~520 tests, about 2 minutes, no key and no network
 ```
 
 ## 2. Set the API key (only for live runs)
@@ -91,26 +91,28 @@ the live system. An LLM plays each veteran from a hidden answer key, the app cli
 the final case file is scored against the key.
 
 ```bash
-uv run intake personas                    # list the 18 personas
+uv run intake personas                    # list the 20 personas
 uv run intake eval --conditions cfile --name midpoint --max-cost 6
-uv run intake support-eval --max-cost 1.5
+uv run intake support-eval --name support-midpoint --max-cost 1.5
 ```
 
 | Command | What it does | Cost / time |
 |---|---|---|
-| `intake eval …` | All 18 personas, condition `cfile` (the full system: verification questions, plus answers prefilled from the C-file) | about $3–4, 1.5–2 h |
-| `intake support-eval …` | 81 labelled messages to the customer-support agent | about $0.5–1, 10 min |
+| `intake eval …` | All 20 personas, condition `cfile` (the full system: verification questions, plus answers prefilled from the C-file) | about $3–4, 1.5–2 h |
+| `intake support-eval …` | 84 labelled messages to the customer-support agent (`--core`: the 50-message core set) | about $0.5–1, 10 min |
 
 `--max-cost` stops the run if the traced spend passes that many US dollars.
 
-**Where the results are:**
-- **`results/midpoint/report.md`** has the tables quoted in the report:
+**Where the results are** (`results/` is not in the repo: a run writes it):
+- **`results/midpoint/report.md`** has the tables:
   - the headline, with field accuracy, critical errors and scenario pass;
   - a section per agent;
-  - **By split**: `dev` = the 12 personas the code was developed against, `heldout` = 6 that weren't;
+  - **By split**: `dev` = the 14 personas the system was developed against, `heldout` = 6 not fixed
+    against directly (both are optimistic);
   - every case's critical errors and field mismatches.
 - `results/midpoint/summary.json` holds the same numbers as data.
 - `results/midpoint/transcripts/` holds every conversation.
+- `results/support-midpoint/summary.json` and `misses.txt` hold the support numbers and the misses.
 
 **Smaller runs:**
 
@@ -141,7 +143,7 @@ uv run intake eval --name ablation --max-cost 20                # all 3 conditio
 
 ```
 agent/           the system: runtime, orchestrator, intake/, claims_prep/, support/, skills/, tools
-  data/personas/ the 18 synthetic veterans of the eval
+  data/personas/ the 20 synthetic veterans of the eval
   scripted/      the scripted demo and the fake model the tests use
 demo/            the web demo (FastAPI app + one HTML page)
 intake_eval/     the evaluation: simulated veteran, runner, scoring, report

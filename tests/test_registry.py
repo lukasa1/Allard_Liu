@@ -1,4 +1,4 @@
-"""The tool registry (L2): validate, guard, run; every outcome is an observation."""
+"""The tool registry: validate, guard, run; every outcome is an observation."""
 
 from pydantic import BaseModel, Field
 

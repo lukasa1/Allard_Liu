@@ -1,7 +1,7 @@
 """Shared, blank-safe transforms binding canonical values to split PDF fields. Every helper
 returns empty strings on None/blank input so a missing value just leaves the PDF field blank.
 
-Ported from the Shire claims-prep platform's form engine."""
+Adapted from an earlier form engine."""
 
 import logging
 

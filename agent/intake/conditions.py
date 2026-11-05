@@ -46,12 +46,17 @@ SYNONYMS: dict[str, list[str]] = {
         "back pain",
         "lower back",
         "lumbar strain",
+        "lumbosacral strain",
+        "lumbar spine",
         "back",
     ],
     "cervical strain": ["neck pain", "cervical strain", "neck"],
     "right knee condition": ["right knee"],
     "left knee condition": ["left knee"],
-    "bilateral knee condition": ["both knees", "bilateral knees", "knees"],
+    "bilateral knee condition": ["both knees", "both of my knees", "bilateral knees", "bilateral knee",
+                                 "right and left knees", "right and left knee", "left and right knees",
+                                 "left and right knee", "right knee and left knee", "left knee and right knee",
+                                 "knees"],
     "right shoulder condition": ["right shoulder"],
     "left shoulder condition": ["left shoulder"],
     "erectile dysfunction": ["erectile dysfunction", "ed"],
@@ -69,7 +74,7 @@ _PHRASES: list[tuple[str, str]] = sorted(
 _FILLER = re.compile(r"^(my|the|a|an|some|really|bad|chronic)\s+", re.IGNORECASE)
 
 
-# Words that name a body part or a function, not a condition: "back, ears, and sleep" (pilot 1).
+# Words that name a body part or a function, not a condition: "back, ears, and sleep".
 # (One in the table, like "back", is already read as its condition.)
 VAGUE = frozenset({"ears", "ear", "eyes", "eye", "sleep", "sleeping", "breathing", "head", "stomach", "gut",
                    "chest", "heart", "lungs", "skin", "feet", "foot", "legs", "leg", "arms", "arm", "hands",

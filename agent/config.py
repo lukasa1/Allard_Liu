@@ -2,9 +2,8 @@
 
   DSPY_MODEL        model for every agent (default openrouter/anthropic/claude-haiku-5.5)
   DSPY_SIM_MODEL    model for the simulated veteran in the eval (default: DSPY_MODEL)
-  REASONING_EFFORT  low | medium | high | none (default low; L9). Passed to LiteLLM as
-                    `reasoning_effort`; whether OpenRouter honours it for this slug is checked in
-                    the first live smoke test.
+  REASONING_EFFORT  low | medium | high | none (default low). Passed to LiteLLM as
+                    `reasoning_effort` (OpenRouter may ignore it for some slugs).
   DSPY_CACHE        "0" disables DSPy's response cache (use for repeated trials / pass^k)
   QA_MODEL          OpenRouter model for kb_search (default anthropic/claude-haiku-5.5)
   QA_SEARCH_DOMAINS comma-separated domains web search is restricted to
@@ -55,8 +54,8 @@ def make_lm(role: str = "agent"):
         kwargs["reasoning_effort"] = effort
     # temperature stays unset: reasoning models on OpenRouter reject sampling parameters.
     timeout = float(os.environ.get("LM_TIMEOUT_S", "120"))
-    # A ReAct step is a few hundred tokens; the cap stops a runaway output (live run 2: one call ran
-    # to 16,000 tokens and 54 s).
+    # A ReAct step is a few hundred tokens; the cap stops a runaway output (one call can
+    # otherwise run to 16,000 tokens and close to a minute).
     return dspy.LM(model, max_tokens=4000, cache=cache, timeout=timeout, **kwargs)
 
 

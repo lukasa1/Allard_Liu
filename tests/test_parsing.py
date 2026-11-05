@@ -124,6 +124,20 @@ def test_a_vso_is_not_a_prior_attorney():
     assert checklist.parse("prior_attorney", "A VSO from the DAV") is False
     assert checklist.parse("prior_attorney", "Yes, a VSO from the DAV helped") is False
     assert checklist.parse("prior_attorney", "Yes, a lawyer and then the DAV", True) is True
+    # the model's yes stands: a firm named without a lawyer word is something code can't see
+    assert checklist.parse("prior_attorney", "The DAV did my first claim, then Jan Dils took my appeal", True) is True
+
+
+def test_a_reserve_or_guard_branch_is_its_branch():
+    from agent.intake.parsing import canonical_branch
+
+    assert [canonical_branch(b) for b in ("Navy Reserve", "Army Reserves", "Army Guard", "Air National Guard")] == [
+        "navy", "army", "army", "air force"]
+    assert canonical_branch("National Guard") == "national guard"  # which branch is unknown
+    from agent.intake.parsing import _norm_period
+
+    assert _norm_period({"branch": "Navy Reserve"}, False) == {"branch": "navy", "component": "reserve"}
+    assert _norm_period({"branch": "Coast Guard"}, False) == {"branch": "coast guard"}  # a branch, not the Guard
 
 
 # ------------------------------------------------------------------------------ discharges
@@ -245,7 +259,7 @@ def test_no_other_period_may_name_the_first_discharge():
 
 @pytest.mark.parametrize("a", ["No, but Navy too, OTH", "No, I also did Navy 2010 to 2014"])
 def test_an_empty_other_period_list_is_refused_when_the_veteran_names_one(a):
-    """A1 can't be skipped by value=[] when the veteran's words mention another period."""
+    """The stop rule can't be skipped by value=[] when the veteran's words mention another period."""
     with pytest.raises(checklist.StrictError):
         checklist.parse("other_service_periods", a, [])
 
@@ -358,7 +372,7 @@ def test_a_negated_but_clause_names_nothing(a, want):
     assert parse_list(a) == want
 
 
-# ------------------------------------------------------------------------------ pilot 1
+# ------------------------------------------------------------------------------ real-world answers
 
 
 def test_branch_spellings_are_one_branch():
@@ -392,10 +406,17 @@ def test_a_month_the_veteran_never_said_is_not_recorded():
     said = [{"branch": "army", "component": "active", "start": "2004-06", "end": "2010-05", "discharge": "honorable"}]
     assert checklist.parse("service_periods", "Army active duty, June 2004 to May 2010, honorable.", said) == said
     assert checklist.parse("service_periods", "Army, 2004 to 2010, honorable")[0]["start"] == "2004"  # no "2004-01"
+    # no branch word in this answer (it was given earlier): the years alone still aren't months
+    got = checklist.parse("service_periods", "2001 to 2005, honorable.", invented)
+    assert (got[0]["start"], got[0]["end"]) == ("2001", "2005")
+    assert checklist.parse("service_periods", "6/2004 to 5/2010, honorable.", said) == said
+    assert checklist.parse("service_periods", "June of 2004 to May of 2010, honorable.", said) == said
+    got = checklist.parse("service_periods", "maybe 2001 to 2005, honorable.", invented)  # "maybe" is no month
+    assert (got[0]["start"], got[0]["end"]) == ("2001", "2005")
 
 
 @pytest.mark.parametrize("text", ["I don't have any other conditions I'm dealing with that I know of.",
-                                  "I have no others.", "There are none.", "Nope."])
+                                  "I have no others.", "There are none.", "Nope.", "nah"])
 def test_more_ways_of_saying_none(text):
     from agent.intake import checklist
 

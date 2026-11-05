@@ -1,7 +1,7 @@
 """The firm's intake rules, as plain deterministic code.
 
 These decisions must be identical every time and explainable: who to stop with and the fee
-percentage. agent/intake/checklist.stop_rule applies them (A1). Each rule is labelled with its basis:
+percentage. agent/intake/checklist.stop_rule applies them. Each rule is labelled with its basis:
 
   law          follows from VA law (38 USC / 38 CFR)
   firm_policy  the firm's own choice (as described to the team by the firm)
@@ -36,16 +36,19 @@ RULES: dict[str, Rule] = {
         Rule(
             "non_honorable_period",
             "firm_policy",
-            "Any service period other than honorable, bad conduct or dishonorable: an attorney "
-            "decides whether the firm takes the case (plan A1). Legally most of these need a VA "
-            "character-of-discharge determination (38 CFR 3.12), so this is a review, not a rejection.",
+            "Every service period ended other than honorable (OTH), with a bad conduct discharge or "
+            "with a dishonorable discharge: an attorney decides whether the firm takes the case. When "
+            "only some periods did, intake goes on and a staff task names those periods for the "
+            "attorney. General (under honorable conditions) and uncharacterized "
+            "discharges are neither. Legally most of these need a VA character-of-discharge "
+            "determination (38 CFR 3.12), so this is a review, not a rejection.",
         ),
         Rule(
             "screen_unresolved",
             "firm_policy",
             "The veteran couldn't say whether they served, their service periods, their VA pay or "
             "rating, or whether a lawyer helped before: the stop rules above or the fee can't be "
-            "decided, so a person on the team follows up (plan A1).",
+            "decided, so a person on the team follows up.",
         ),
         Rule(
             "fee_pct",
@@ -66,6 +69,6 @@ RULES: dict[str, Rule] = {
 
 def fee_pct(record: IntakeRecord) -> int:
     """The fee % offered to a new client: 20% if a private attorney or agent represented them
-    before (a VSO doesn't count), else 30% (the firm's rule, confirmed 2026-11-03, plan Q1)."""
+    before (a VSO doesn't count), else 30% (the firm's rule)."""
     return 20 if record.prior_attorney else 30
 

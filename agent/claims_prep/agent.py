@@ -1,4 +1,4 @@
-"""The claims-prep sub-agent (L22-L28): the C-file -> cited facts -> prefill -> the face note.
+"""The claims-prep sub-agent: the C-file -> cited facts -> prefill -> the face note.
 
 It runs on the runtime's background worker, so the chat stays live (support answers meanwhile).
 One ReAct turn per handoff or continuation; up to 40 steps a turn. A turn that ends before the
@@ -8,9 +8,9 @@ rebuilt from the case file: the fact table with its cites and the pages already 
 Tools: read_skill (harness), pull_cfile, list_docs, read_pages, search, record_facts, prefill,
 render, verify. The C-file comes from the simulated VBMS (agent/cfile/vbms.py) with SSNs already
 stripped (subjects too); page text, search snippets and the document index are wrapped as
-untrusted data (L6).
+untrusted data.
 
-Guard (L27), in code: the C-file is read-only and nothing is filed (no tool can do either);
+Guard, in code: the C-file is read-only and nothing is filed (no tool can do either);
 pull_cfile comes first; a fact may cite only a page that was read; render needs facts, verify a
 render of the current facts, and prefill a passed verify (it writes only facts whose cites hold).
 `verify` is code: no face-note line passes without a cite that holds, no C-file DD-214, rating
@@ -115,7 +115,7 @@ def pull_cfile(turn: Turn) -> dict:
 
 
 def _index(docs) -> str:
-    """The document list; a subject is eFolder text, so the list comes wrapped as untrusted (L6)."""
+    """The document list; a subject is eFolder text, so the list comes wrapped as untrusted."""
     return untrusted("C-file index", "\n".join(json.dumps(d.summary()) for d in docs))
 
 
@@ -278,7 +278,7 @@ def plain(line: str) -> str:
 
 
 def cited(sources: list[str] | None, cites: dict[str, factlib.Fact]) -> str:
-    """The stored line's citation (L24: "p. N"): "  [p. 2, 5]", "  [firm record]", "  [none in the C-file]"."""
+    """The stored line's citation ("p. N"): "  [p. 2, 5]", "  [firm record]", "  [none in the C-file]"."""
     if sources is None:
         return ""
     pages = sorted({cites[s].cite.page for s in sources if not s.startswith(("case:", "none:"))})

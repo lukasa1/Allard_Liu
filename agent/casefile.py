@@ -1,9 +1,9 @@
-"""The case file: one veteran's case as every agent sees it (L7).
+"""The case file: one veteran's case as every agent sees it.
 
 The case file is the shared memory. It holds what the stage table is derived from (answers and
 the checklist, documents, filings, claims prep's output, a fired stop rule) and the stage, owner
 and side state themselves. It holds no event log: the store's `events` table is the log, and
-each agent's recent conversation is read from it (L3). The SSN is never here.
+each agent's recent conversation is read from it. The SSN is never here.
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ from agent import clock
 from agent.ingest import untrusted
 
 Agent = Literal["orchestrator", "intake", "claims_prep", "support"]
-Owner = Literal["intake", "claims_prep"]  # the case-owning sub-agents (A3: one at a time)
+Owner = Literal["intake", "claims_prep"]  # the case-owning sub-agents (one at a time)
 SideState = Literal["waiting_on_veteran", "waiting_on_attorney", "waiting_on_va", "needs_human", "closed"]
 PARKED = ("needs_human", "closed")
-# The eval's conditions (L32). The demo always runs `cfile`.
+# The eval's conditions. The demo always runs `cfile`.
 #   ask_no_probes  intake skips its verification probes (a second service period, an old claim),
 #                  and claims prep's prefill writes nothing (every question is asked in chat)
 #   ask            the probes are asked; prefill still writes nothing
@@ -53,7 +53,7 @@ class Answer(BaseModel):
 
 
 class Conflict(BaseModel):
-    """The C-file disagrees with an answer on file (A2). Claims prep's prefill records it; pass 2
+    """The C-file disagrees with an answer on file. Claims prep's prefill records it; pass 2
     asks the veteran, and the veteran's new answer to `question` resolves it."""
 
     question: str  # the question id in questions.yaml
@@ -107,7 +107,7 @@ class Task(BaseModel):
 
 
 class Flag(BaseModel):
-    """Something support heard that would change the case; the orchestrator decides (L12)."""
+    """Something support heard that would change the case; the orchestrator decides."""
 
     kind: str
     text: str
@@ -144,7 +144,7 @@ class Reopen(BaseModel):
 
 
 class SubagentResult(BaseModel):
-    """What a sub-agent hands back (L13). The orchestrator reads only these, never transcripts."""
+    """What a sub-agent hands back. The orchestrator reads only these, never transcripts."""
 
     agent: str = ""  # set by the harness
     finished: str = Field(description="what finished, in one line")
@@ -157,7 +157,7 @@ class CaseFile(BaseModel):
     case_id: str
     created_at: str = Field(default_factory=now)
     persona_id: str | None = None  # demo/eval only: which synthetic veteran the simulators serve
-    eval_condition: EvalCondition = "cfile"  # eval only (L32); never shown to a model
+    eval_condition: EvalCondition = "cfile"  # eval only; never shown to a model
 
     stage: int = 1
     owner: Owner | None = None
@@ -196,10 +196,10 @@ class CaseFile(BaseModel):
         return self.side_state in PARKED
 
     def memory(self) -> dict[str, Any]:
-        """The case-file part of a memory block (L10): what the case is, not how agents talk.
+        """The case-file part of a memory block: what the case is, not how agents talk.
 
         Text from outside the firm (the veteran's answers, C-file values, the face note, flags,
-        tasks, conflicts, the reopen reason and answer) is one `untrusted` block (L6), under the key "untrusted"; the raw text
+        tasks, conflicts, the reopen reason and answer) is one `untrusted` block, under the key "untrusted"; the raw text
         an answer was parsed from is left out (no transcripts)."""
         data = self.model_dump(mode="json", include={"case_id", "stage", "owner", "side_state", "side_reason",
                                                      "goal", "awaiting_veteran", "stop", "documents", "filings"})  # fmt: skip

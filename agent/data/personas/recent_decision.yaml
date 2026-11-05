@@ -1,21 +1,44 @@
 id: recent_decision
-summary: Rated 30% from an old decision (2021), then a 2026 decision granted one condition and denied another. The face note needs the recent decision on a numbered line with its appeal deadline, and the old one under OLD CLAIMS.
+summary: Rated 30% from an old decision (2021), then a 2026 decision granted one condition and denied another. The
+  face note needs the recent decision on a numbered line with its appeal deadline, and the old one under OLD CLAIMS.
+behaviors:
+- Your burn pit exposure was on a 2004 deployment to Al Asad, Iraq. Camp Lejeune's water problem was
+  long before your time there, so you don't count it.
 truth:
   first_name: Hector
   last_name: Alvarez
   service_periods:
-    - {branch: marine corps, component: active, start: "2002-06", end: "2010-06", discharge: honorable}
+  - branch: marine corps
+    component: active
+    start: 2002-06
+    end: 2010-06
+    discharge: honorable
   filed_before: true
   receiving_va_pay: true
   rating_pct: 40
   tdiu: false
   sc_conditions:
-    - {name: ptsd, rating_pct: 30}
-    - {name: tinnitus, rating_pct: 10}
-  claim_conditions: [left knee condition]
-  mos: [0311 Rifleman]
-  exposures: [burn pits]
+  - name: ptsd
+    rating_pct: 30
+  - name: tinnitus
+    rating_pct: 10
+  claim_conditions:
+  - left knee condition
+  mos:
+  - 0321 Reconnaissance Man
+  exposures:
+  - burn pits
   litigation_contact: false
+  street: 2210 West Forest Home Avenue
+  city: Milwaukee
+  state: WI
+  zip: '53215'
+  cell_phone: 414-555-0168
+  email: hector.alvarez@example.com
+  next_of_kin: Maria Alvarez, wife, 414-555-0143
+  marital_status: married
+  spouse_name: Maria Alvarez
+  children_under_18: true
 stories:
   left knee condition:
     h02: My left knee aches, swells and sometimes gives out on stairs.
@@ -35,8 +58,26 @@ stories:
     h16: VA denied it once and I think they got it wrong.
 cfile:
   decisions:
-    - {decision_date: "2021-04-12", notified: "2021-04-16", form: "526EZ", filed: "2020-09-01", issues: [{condition: ptsd, outcome: granted, pct: 30}]}
-    - {decision_date: "2026-03-09", notified: "2026-03-13", form: "526EZ", filed: "2025-10-20", issues: [{condition: tinnitus, outcome: granted, pct: 10}, {condition: left knee condition, outcome: denied}]}
+  - decision_date: '2021-04-12'
+    notified: '2021-04-16'
+    form: 526EZ
+    filed: '2020-09-01'
+    issues:
+    - condition: ptsd
+      outcome: granted
+      pct: 30
+  - decision_date: '2026-03-09'
+    notified: '2026-03-13'
+    form: 526EZ
+    filed: '2025-10-20'
+    issues:
+    - condition: tinnitus
+      outcome: granted
+      pct: 10
+    - condition: left knee condition
+      outcome: denied
 expected:
   decision: eligible
   fee_pct: 30
+identity:
+  dob: '1983-03-26'  # explicit: the id-hashed DOB made the enlistment age implausible

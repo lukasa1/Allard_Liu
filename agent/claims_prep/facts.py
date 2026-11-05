@@ -1,4 +1,4 @@
-"""Claims prep's fact schema (L23, Luke's DEC): typed facts, each with a page citation.
+"""Claims prep's fact schema: typed facts, each with a page citation.
 
 `record_facts` takes a batch of these items. Values are normalized as they arrive (dates to ISO,
 service dates to YYYY-MM, condition names through `normalize_condition`, branches and form ids

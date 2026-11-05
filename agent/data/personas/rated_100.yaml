@@ -1,5 +1,5 @@
 id: rated_100
-split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
+split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
 summary: Already rated 100%. The firm signs veterans rated below 100%, so intake should stop.
 truth:
   first_name: Gloria
@@ -8,5 +8,19 @@ truth:
   receiving_va_pay: true
   rating_pct: 100
   tdiu: false
+  street: 55 River Road
+  city: La Crosse
+  state: WI
+  zip: '54601'
+  cell_phone: 608-555-0187
+  email: gloria.pham@example.com
+  next_of_kin: Minh Pham, husband, 608-555-0188
+  marital_status: married
+  spouse_name: Minh Pham
+  sc_conditions:
+  - name: ptsd
+    rating_pct: 100
 expected:
   decision: rated_100
+identity:
+  dob: '1981-08-14'  # explicit: the id-hashed DOB made the enlistment age implausible

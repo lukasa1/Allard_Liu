@@ -1,22 +1,57 @@
 id: family_ssa_exposure
-split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
-summary: Married with kids, not working, interested in Social Security help, and exposed to burn pits. Exercises the family, referral and exposure branches.
+split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+summary: Married with kids, not working, interested in Social Security help, and exposed to burn pits. Exercises
+  the family, referral and exposure branches.
+behaviors:
+- If asked how you heard about the firm, say you found it on the internet; say where only when asked where.
 truth:
   first_name: Angela
   last_name: Brooks
   service_periods:
-    - {branch: air force, component: active, start: "2005-09", end: "2013-08", discharge: honorable}
+  - branch: air force
+    component: active
+    start: 2005-09
+    end: 2013-08
+    discharge: honorable
   earning_over_1600: false
   receives_ssa: false
   ssa_interest: true
-  exposures: [burn pits]
+  exposures:
+  - burn pits
   litigation_contact: true
   marital_status: married
   spouse_name: Derek Brooks
   children_under_18: true
   heard_about: internet
-  internet_source: Google search
-  mos: [Security Forces]
+  internet_source: Google
+  mos:
+  - Security Forces
+  street: 702 Birch Street
+  city: Eau Claire
+  state: WI
+  zip: '54701'
+  cell_phone: 715-555-0123
+  email: angela.brooks@example.com
+  next_of_kin: Derek Brooks, husband, 715-555-0166
+stories:
+  tinnitus:
+    h02: Ringing in both ears that never stops.
+    h03: It wakes me up and gives me headaches by the evening.
+    h04: It started at Balad Air Base in 2007, during mortar attacks.
+    h05: Every day.
+    h06: It's gotten worse over the years.
+    h07: Balad Air Base, Iraq.
+    h08: On base, guarding the perimeter and the flightline.
+    h09: Jets taking off all night, generators, mortar and rocket attacks.
+    h10: A mortar round that hit about a hundred meters from my post in 2007.
+    h11: Yes, I mentioned it at a hearing test before I separated.
+    h12: I'm not working right now; I stay home with the kids.
+    h13: Not working, so no missed days.
+    h14: Noisy places like my kids' games are hard, and I sleep with a fan on.
+    h15: My hearing was fine before I joined.
+    h16: No.
 expected:
   decision: eligible
   fee_pct: 30
+identity:
+  dob: '1985-02-07'  # explicit: the id-hashed DOB made her 29 at an Air Force enlistment (limit then 27)

@@ -1,4 +1,4 @@
-"""Score one case run per agent (L32), from the case file, the event log and the traces.
+"""Score one case run per agent, from the case file, the event log and the traces.
 
 Intake
   fields          the intake record (checklist.record) against the persona's answer key, field by
@@ -11,8 +11,11 @@ Intake
   clarifications  record_answer calls on a question beyond its first (from the traces)
   prefill_share   the share of structured answers whose source is the C-file
   turns_to_signed_poa  veteran actions (chat messages and card uses) until the 21-22a was signed
-  kb              kb_search calls, and those that returned a sourced answer. Intake's questions to
-                  the KB have no labels, so there is no answer accuracy here (support_eval has it).
+  kb              kb_search calls, and those that returned a sourced answer
+  persona question  asks_question_mid_intake's question (sent alone after the ITF is filed): a
+                  kb_search after it (else a critical error), resumed_after (veteran replies until
+                  intake recorded an answer again), and ask_answer (the LLM judge, intake_eval/judge.py,
+                  set by the eval run against the persona's answer_key)
 Orchestrator
   scenario_pass   the run completed and the case ended where the persona's expected decision says
   refused         refused tool calls and moves per agent (`refused` events; code's own derivation
@@ -25,7 +28,7 @@ Claims prep
   facenote_checks per fact group: DOB, service periods, MOS, ratings, decisions, prior reps
   verify_passed, citation_precision  facts whose cited page shows their key values (verify's
                   own page check), over all recorded facts
-Cost and latency per agent from the traces (L5, config.PRICES), plus the simulated veteran.
+Cost and latency per agent from the traces (config.PRICES), plus the simulated veteran.
 
 A critical error changes what the firm does next: a wrong end state or stop decision, a missed
 service period, a missed prior claim, a wrong fee, a missed crisis escalation, a missed DOB
@@ -37,6 +40,7 @@ or a run that crashed, stalled, gave up or hit the limit.
 
 from __future__ import annotations
 
+import ast
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -49,11 +53,13 @@ from agent.claims_prep import facts as factlib
 from agent.claims_prep.agent import cfile, plain, render_note
 from agent.claims_prep.verify import mentions
 from agent.claims_prep.verify import missing as cite_missing
+from agent.ingest import CRISIS_MESSAGE, WITHDRAW_MESSAGE
 from agent.intake import checklist
 from agent.intake.conditions import normalize_condition
 from agent.intake.documents import service
 from agent.intake.parsing import NONE_ITEM, canonical_branch
 from agent.intake.questions import is_visible
+from agent.intake.schema import NON_HONORABLE
 from agent.personas import Persona
 from intake_eval.runner import CaseRun
 from poa_skill.service import load_representative
@@ -67,7 +73,7 @@ SCALAR_FIELDS = [
 SET_FIELDS = ["claim_conditions", "other_conditions", "mos", "exposures"]
 # expected decision -> where the case must end, and the stop rule that must fire
 EXPECTED_END = {"eligible": "attorney_review", "not_veteran": "closed", "rated_100": "closed",
-                "attorney_review": "needs_human", "escalated": "needs_human"}  # fmt: skip
+                "attorney_review": "needs_human", "escalated": "needs_human", "withdraw": "needs_human"}  # fmt: skip
 EXPECTED_STOP = {"not_veteran": "not_veteran", "rated_100": "rated_100", "attorney_review": "non_honorable_period"}
 
 
@@ -105,6 +111,11 @@ class Score:
     fee_got: int | None = None
     kb_calls: int = 0
     kb_sourced: int = 0
+    resumed_after: int | None = None  # veteran replies after the persona's question until intake recorded an answer again
+    ask_answer: dict[str, Any] = field(default_factory=dict)  # the judge's verdict on intake's answer to it
+    # the persona's scripted messages (`asks`, `during_prep`) were all sent; None: it has none
+    scripted_sent: bool | None = None
+    untested: bool = False  # a scripted message never came, on a case that wasn't parked: no verdict
     # orchestrator
     handoffs: list[str] = field(default_factory=list)
     refused: dict[str, int] = field(default_factory=dict)
@@ -162,21 +173,110 @@ def _same(expected: Any, actual: Any) -> bool:
     of the key's words ("Maria Reyes, mother, 262-555-0177" vs "my mom, Maria Reyes. Her number is
     262-555-0177."). A structured answer ({name, relationship, phone}) is read as its values.
     Anything else must match exactly."""
+    if isinstance(expected, str) and isinstance(actual, str) and actual.lstrip().startswith("{"):
+        try:  # a structured answer stored as its text: "{'name': 'Maria Reyes', ...}"
+            actual = ast.literal_eval(actual.strip())
+        except (ValueError, SyntaxError):
+            pass
     if isinstance(expected, str) and isinstance(actual, dict):
         actual = ", ".join(str(v) for v in actual.values() if v)
     if isinstance(expected, str) and isinstance(actual, str):
         if _norm(expected) == _norm(actual):
             return True
+        phones = lambda t: {d[-10:] for d in re.findall(r"\d{10,11}", re.sub(r"[-. ()+]", "", t))}
+        if phones(expected) and not phones(expected) <= phones(actual):
+            return False  # a next of kin with a wrong or missing phone number
         key = _words(expected)
         return bool(key) and len(key & _words(actual)) * 3 >= len(key) * 2
     return expected == actual
 
 
+_NONE_SAID = re.compile(r"^\s*(none|no|nothing|not that i know of|none that i know of)\b", re.IGNORECASE)
+
+
 def _as_set(values: list[Any], name: str) -> set[str]:
-    values = [v for v in values if not NONE_ITEM.match(str(v))]  # ["none"] is no item
+    values = [v for v in values if not NONE_ITEM.match(str(v)) and not _NONE_SAID.match(str(v))]  # ["none"] is no item
     if name in ("claim_conditions", "other_conditions"):
         return {normalize_condition(str(v)) for v in values}
     return {" ".join(str(v).lower().split()) for v in values}
+
+
+# An MOS / rating code: Army style (88M, 11B, 92Y) or a Marine four-digit code (0321, 3531), not a year.
+_MOS_CODE = re.compile(r"\b(?:\d{2}[a-z]\d?|(?!19|20)\d{4})\b", re.IGNORECASE)
+# "no burn pits", "not agent orange": a negation right before a word of the item
+_NEGATED = re.compile(r"\b(?:no|not|never|without)\s+(?:any\s+)?([a-z]+)")
+# Exposures the firm's question names, in the words veterans use (canonical -> phrases)
+EXPOSURES = {
+    "burn pits": ["burn pit", "burn pits", "burning pit", "open burn", "airborne hazard", "airborne hazards"],
+    "gulf war hazards": ["gulf war", "oil well fire", "oil well fires", "oil fire", "oil fires", "persian gulf",
+                         "desert storm"],
+    "agent orange": ["agent orange", "herbicide", "herbicides"],
+    "camp lejeune water": ["camp lejeune", "lejeune"],
+    "radiation": ["radiation", "ionizing", "nuclear"],
+}
+# Words that add nothing to an MOS answer: the branch, "my job was"
+_MOS_FILLER = {"navy", "army", "air", "force", "marine", "marines", "corps", "coast", "guard", "space", "was", "job",
+               "mos", "rating", "afsc", "in", "as", "i", "worked", "served", "reserve", "reserves", "active", "duty",
+               "national", "both", "specialist", "then", "later"}
+# Job words too generic to name an MOS alone ("operator" for "88M Motor Transport Operator")
+_GENERIC_TITLE = {"operator", "specialist", "system", "systems", "force", "forces", "man", "mate", "technician",
+                  "mechanic", "officer", "clerk", "member", "worker", "assistant", "repairer", "maintainer", "marine"}
+
+
+_PHONETIC = re.compile(r"\b(\d{2}) ?(alpha|bravo|charlie|delta|echo|foxtrot|golf|hotel|india|juliet|kilo|lima|mike"
+                       r"|november|oscar|papa|quebec|romeo|sierra|tango|uniform|victor|whiskey|xray|yankee|zulu)\b")
+
+
+def _exposure(text: str) -> str | None:
+    t = text.lower()
+    hits = [c for c, phrases in EXPOSURES.items() if any(re.search(rf"\b{re.escape(p)}\b", t) for p in phrases)]
+    return hits[0] if len(hits) == 1 else None  # two in one item is not one exposure
+
+
+def _item_same(name: str, expected: str, actual: str) -> bool:
+    """One MOS or exposure, in the veteran's words; never with the item negated ("no burn pits").
+    Exposures: the same exposure the firm's question names ("oil well fires" is Gulf War hazards).
+    MOS: the same code ("88M" for "88M Motor Transport Operator"; different codes never match);
+    without a code, the title in the veteran's words - two thirds of its words (stems of 5+
+    letters), or only words of the title that include its specific one ("corpsman" for "Hospital
+    Corpsman"; not "operator", "specialist" or "forces")."""
+    if expected == actual:
+        return True
+    fold = lambda t: {w.rstrip("s") if len(w) > 3 else w for w in _words(t)}
+    stem = lambda k, h: k == h or (min(len(k), len(h)) >= 5 and (k.startswith(h) or h.startswith(k)))
+    negated = {w.rstrip("s") for w in _NEGATED.findall(actual.lower())}
+    if any(stem(k, n) for k in fold(expected) for n in negated):
+        return False
+    if name == "exposures":
+        want = _exposure(expected) or " ".join(expected.lower().split())
+        return want == (_exposure(actual) or " ".join(actual.lower().split()))
+    actual = _PHONETIC.sub(lambda m: m.group(1) + m.group(2)[0], actual.lower())  # "88 mike" -> "88m"
+    want, have_codes = {c.lower() for c in _MOS_CODE.findall(expected)}, {c.lower() for c in _MOS_CODE.findall(actual)}
+    if want and have_codes:
+        return bool(want & have_codes)
+    expected, actual = _MOS_CODE.sub(" ", expected), _MOS_CODE.sub(" ", actual)
+    # years, unparsed codes ("2w1x1", "hm3") and two-letter ratings ("ad") are not words of the title
+    key, have = fold(expected), {h for h in fold(actual) if not any(c.isdigit() for c in h) and len(h) > 2}
+    if not (key and have):
+        return False
+    said = {k for k in key if any(stem(k, h) for h in have)}
+    extra = {h for h in have if not any(stem(k, h) for k in key)} - _MOS_FILLER
+    if len(said) * 3 >= len(key) * 2 and not extra:
+        return True
+    title = [w for w in re.findall(r"[a-z]+", expected.lower()) if len(w) > 1]
+    specific = [w for w in title if len(w) >= 5 and w not in _GENERIC_TITLE]
+    head = specific[-1] if specific else ""
+    return bool(head) and not extra and any(stem(head.rstrip("s"), h) for h in have)
+
+
+def _items_match(name: str, expected: set[str], actual: set[str]) -> bool:
+    """Free-text lists (mos, exposures): one to one, each key item said in the veteran's words."""
+    if expected == actual:
+        return True
+    if len(expected) != len(actual):
+        return False
+    exp = sorted(expected)
+    return any(all(_item_same(name, e, a) for e, a in zip(exp, perm, strict=True)) for perm in permutations(sorted(actual)))
 
 
 def _period(p: Any) -> str:
@@ -220,8 +320,10 @@ def _source(case: CaseFile, name: str) -> str:
     return "; ".join(case.answers[i].source for i in ids)
 
 
-def score_fields(persona: Persona, case: CaseFile) -> list[FieldResult]:
-    truth, got = persona.truth, checklist.record(case)
+def score_fields(persona: Persona, case: CaseFile, condition: str | None = None) -> list[FieldResult]:
+    # Without the C-file (ask, ask_no_probes) the key is what the veteran can tell: their own memory.
+    truth = persona.truth if (condition or case.eval_condition) == "cfile" else persona.believed_truth
+    got = checklist.record(case)
     out: list[FieldResult] = []
     for name in SCALAR_FIELDS:
         expected, actual = getattr(truth, name), getattr(got, name)
@@ -230,12 +332,18 @@ def score_fields(persona: Persona, case: CaseFile) -> list[FieldResult]:
             continue
         if expected is None and actual is None:
             continue
+        if name == "rating_pct" and expected is None and actual == 0:  # "I don't have a rating": 0% is no rating
+            out.append(FieldResult(name, expected, actual, "correct", _source(case, name)))
+            continue
         status = ("extra" if expected is None else "missing" if actual is None
                   else "correct" if _same(expected, actual) else "wrong")  # fmt: skip
         out.append(FieldResult(name, expected, actual, status, _source(case, name)))
     for name in SET_FIELDS:
         exp, act = _as_set(getattr(truth, name), name), _as_set(getattr(got, name), name)
-        status = "n/a" if not _due(case, persona, name) else "correct" if exp == act else "missing" if not act else "wrong"
+        if name == "other_conditions":  # an already-rated condition, named again, is not a wrong "other" one
+            act -= {normalize_condition(c.name) for c in truth.sc_conditions} - exp  # (a claimed one still is)
+        same = _items_match(name, exp, act) if name in ("mos", "exposures") else exp == act
+        status = "n/a" if not _due(case, persona, name) else "correct" if same else "missing" if not act else "wrong"
         out.append(FieldResult(name, sorted(exp), sorted(act), status, _source(case, name)))
     if _due(case, persona, "service_periods") and persona.expected_decision != "not_veteran":
         exp, act = sorted(map(_period, truth.service_periods)), sorted(map(_period, got.service_periods))
@@ -243,6 +351,39 @@ def score_fields(persona: Persona, case: CaseFile) -> list[FieldResult]:
                   else "correct" if _periods_match(truth.service_periods, got.service_periods) else "wrong")  # fmt: skip
         out.append(FieldResult("service_periods", exp, act, status, _source(case, "service_periods")))
     return out
+
+
+def looked_up_after_question(run: CaseRun, persona: Persona) -> bool:
+    """A kb_search after the persona's question (one earlier in the case doesn't answer it)."""
+    text = persona.asks["text"].strip()
+    events = run.events
+    q = next((e.seq for e in events if e.type == "message" and e.data.get("from") == "veteran"
+              and e.data.get("text") == text), None)  # fmt: skip
+    return q is not None and any(e.type == "kb_search" and e.seq > q for e in events)
+
+
+def resumed_after(run: CaseRun) -> int | None:
+    """After the persona's question (sent alone, answering nothing), how many veteran replies until
+    intake recorded an answer again: 1 = it answered and asked its question again in the same
+    message; more = it answered and waited, or drifted; None = no question, or never."""
+    if run.asked_at is None or run.asked_at not in run.records_after_reply:
+        return None
+    base = run.records_after_reply[run.asked_at]
+    later = sorted(k for k in run.records_after_reply if k > run.asked_at)
+    return next((k - run.asked_at for k in later if run.records_after_reply[k] > base), None)
+
+
+def asked_answer(run: CaseRun) -> str:
+    """What the agents said between the persona's question and the veteran's next reply."""
+    if run.asked_index is None:
+        return ""
+    out = []
+    for t in run.transcript[run.asked_index + 1:]:
+        if t["role"] == "veteran":
+            break
+        if t["role"] == "agent":
+            out.append(t["text"])
+    return "\n\n".join(out)
 
 
 def question_metrics(run: CaseRun, case: CaseFile) -> dict[str, Any]:
@@ -265,6 +406,7 @@ def question_metrics(run: CaseRun, case: CaseFile) -> dict[str, Any]:
         "turns_to_signed_poa": run.turns_to_signed_poa,
         "kb_calls": len(kb),
         "kb_sourced": sum(bool(e.data.get("answered") and e.data.get("sources")) for e in kb),
+        "resumed_after": resumed_after(run),
     }
 
 
@@ -357,15 +499,30 @@ def critical_errors(s: Score, run: CaseRun, persona: Persona, case: CaseFile) ->
         out.append(f"stopped after repeated model failures ({run.model_failures})")
     if run.stalled:
         out.append(f"stalled at {run.stalled}")
-    if s.end_state != s.expected_end and not run.stopped_at_cost:
+    # untested: no verdict on what the scenario tests (its end, stop, crisis, withdrawal, question
+    # or flag); the record itself is still checked
+    scenario = not s.untested
+    if scenario and s.end_state != s.expected_end and not run.stopped_at_cost:
         out.append(f"case ended in {s.end_state}, expected {s.expected_end}")
     want_stop, got_stop = EXPECTED_STOP.get(persona.expected_decision), case.stop.rule if case.stop else None
-    if got_stop != want_stop and (want_stop is None or s.completed):
+    if scenario and got_stop != want_stop and (want_stop is None or s.completed):
         out.append(f"stop rule: expected {want_stop or 'none'}, got {got_stop or 'none'}")
-    if persona.expected_decision == "escalated" and not any(
-        e.type == "escalated" and e.actor == "rule" and e.data.get("reason") == "crisis" for e in run.events
+    unsent = persona.asks and run.asked_at is None and persona.expected_decision in ("escalated", "withdraw")
+    if not scenario:
+        pass
+    elif unsent:  # the case was parked before the crisis or withdrawal was said
+        out.append("parked before the scripted message was sent")
+    # caught by code's check (actor "rule") or by intake's / support's crisis_to_person backstop
+    elif persona.expected_decision == "escalated" and not any(
+        e.type == "escalated" and e.actor in ("rule", "intake", "support") and e.data.get("reason") == "crisis"
+        for e in run.events
     ):
         out.append("missed a crisis escalation")
+    elif persona.expected_decision == "escalated" and not any(
+        e.type == "message" and e.data.get("from") == "rule" and CRISIS_MESSAGE in e.data.get("text", "")
+        for e in run.events
+    ):
+        out.append("crisis caught, but the Veterans Crisis Line message was never sent")
     periods = next((f for f in s.fields if f.field == "service_periods"), None)
     if periods and periods.status == "missing":
         out.append(f"service periods: expected {len(periods.expected)}, collected {len(periods.got)}")
@@ -380,18 +537,43 @@ def critical_errors(s: Score, run: CaseRun, persona: Persona, case: CaseFile) ->
         out.append("face note: wrong decision lines (appeal deadlines at risk)")
     if persona.identity.get("dob_typed") and case.prep.face_note and not any("DOB mismatch" in t.text for t in case.tasks):
         out.append("missed the DOB mismatch between intake and the DD-214")
+    if run.condition == "cfile" and case.prep.face_note and _discharge_differs(persona) and not any(
+        "different discharge" in t.text for t in case.tasks
+    ):  # prefill takes the DD-214's discharge and must tell staff it differs from the veteran's
+        out.append("missed the DD-214's different discharge (no staff task)")
+    if _some_non_honorable(persona) and case.stage >= 2 and not any(checklist.NON_HONORABLE_TASK in t.text for t in case.tasks):
+        out.append("missed the non-honorable period (no staff task for the attorney)")
     if persona.typed:  # a value the veteran mistyped and corrected in chat must not be on the signed 21-22a
         svc = service(run.rt, case.case_id)
         poa = svc.live("21-22a")
         left = [k for k, v in persona.typed.items() if _dotted(svc.vault.veteran(), k) == v]
         if poa and poa.status != "draft" and left:
             out.append(f"signed the 21-22a with the uncorrected {', '.join(left)}")
-    asked = persona.asks and run.veteran_replies >= int(persona.asks["at_reply"])
-    if asked and s.kb_calls == 0:  # the veteran's question wasn't looked up (D14: no answer beyond the KB)
+    if scenario and persona.expected_decision == "withdraw" and not unsent:  # code's check, or intake's to_person backstop
+        if not any(e.type == "escalated" and e.actor in ("rule", "intake", "support") and e.data.get("reason") == "withdraw"
+                   for e in run.events):  # fmt: skip
+            out.append("missed a withdrawal (never handed to a person)")
+        elif not any(e.type == "message" and e.data.get("from") == "rule" and e.data.get("text") == WITHDRAW_MESSAGE
+                     for e in run.events):  # fmt: skip
+            out.append("withdrawal handed over, but the withdrawal message was never sent")
+    if run.asked_at is not None and persona.asks.get("expects", "kb") == "kb" and not looked_up_after_question(run, persona):
+        # the veteran's question wasn't looked up (intake answers general questions only from the KB)
         out.append("the veteran's question was never looked up (no kb_search)")
-    if s.flag_decision_correct is False:
+    if scenario and s.flag_decision_correct is False:
         out.append(f"flag decision: expected {s.flag_decision_expected}, got {s.flag_decisions or 'no flag'}")
     return out
+
+
+def _some_non_honorable(persona: Persona) -> bool:
+    """Some, not all, of the veteran's periods are non-honorable (the case goes on with a staff task)."""
+    d = [p.discharge in NON_HONORABLE for p in persona.truth.service_periods]
+    return any(d) and not all(d)
+
+
+def _discharge_differs(persona: Persona) -> bool:
+    """The veteran remembers a different discharge than the DD-214 has (`believes`)."""
+    said = [p.discharge for p in persona.believed_truth.service_periods]
+    return said != [p.discharge for p in persona.truth.service_periods]
 
 
 def _dotted(d: dict, name: str) -> Any:
@@ -412,7 +594,7 @@ def score_run(persona: Persona, run: CaseRun) -> Score:
         scenario_pass=False,
         completed=run.completed,
         error=run.error.strip().splitlines()[-1].split(":")[0] if run.error else "",
-        fields=score_fields(persona, case),
+        fields=score_fields(persona, case, run.condition),
         fee_expected=persona.expected.get("fee_pct"),
         fee_got=fee_doc.terms.get("fee_pct") if fee_doc else None,
         model_failures=run.model_failures,
@@ -423,7 +605,14 @@ def score_run(persona: Persona, run: CaseRun) -> Score:
     )
     scored = [f for f in s.fields if f.status != "n/a"]
     s.field_accuracy = sum(f.status == "correct" for f in scored) / len(scored) if scored else None
-    s.scenario_pass = run.completed and s.end_state == s.expected_end
+    sent = ([run.asked_at is not None] if persona.asks else []) + (
+        [bool(run.prep_message_sent)] if persona.during_prep else [])
+    s.scripted_sent = all(sent) if sent else None
+    # the moment a scripted message waits for never came, and nothing parked the case first (a case
+    # parked before it is the system's doing, scored as usual): the scenario wasn't tested
+    s.untested = s.scripted_sent is False and run.completed and not case.parked
+    # a scripted message never sent: the scenario wasn't tested, so it doesn't pass
+    s.scenario_pass = run.completed and s.end_state == s.expected_end and s.scripted_sent is not False
     s.critical_errors = critical_errors(s, run, persona, case)
     return s
 

@@ -1,10 +1,24 @@
 id: new_condition_during_prep
-summary: A clean one-condition case, until the veteran tells support about a new diagnosis while claims prep reads the C-file. The orchestrator should reopen intake for it, so pass 2 asks about it (L12).
-behaviors: [new_condition_during_prep]
+summary: A clean one-condition case, until the veteran tells support about a new diagnosis while claims prep reads
+  the C-file. The orchestrator should reopen intake for it, so pass 2 asks about it.
+behaviors:
+- new_condition_during_prep
+- The condition diagnosed last week is your sleep apnea.
 truth:
   first_name: Luis
   last_name: Ortega
-  claim_conditions: [tinnitus, sleep apnea]
+  claim_conditions:
+  - tinnitus
+  - sleep apnea
+  street: 910 Willow Lane
+  city: Janesville
+  state: WI
+  zip: '53545'
+  cell_phone: 608-555-0145
+  email: luis.ortega@example.com
+  next_of_kin: Carmen Ortega, wife, 608-555-0171
+  marital_status: married
+  spouse_name: Carmen Ortega
 stories:
   sleep apnea:
     h02: I stop breathing at night and wake up gasping. My doctor confirmed it with a sleep study.
@@ -23,7 +37,7 @@ stories:
     h15: I used to wake up rested.
     h16: No.
 during_prep:
-  message: "Quick update: my doctor diagnosed me with sleep apnea last week. Can we add that to my claim?"
+  message: 'Quick update: my doctor diagnosed me with sleep apnea last week. Can we add that to my claim?'
   condition: sleep apnea
 expected:
   decision: eligible

@@ -1,20 +1,44 @@
 id: forgot_prior_claim
-summary: Filed a VA claim years ago and is rated 30%, but first says they never filed. Only a direct question about VA letters brings it out.
-behaviors: [deny_prior_claim_first]
+summary: Filed a VA claim years ago and is rated 30%, but first says they never filed. Only a direct question about
+  VA letters brings it out.
+behaviors:
+- deny_prior_claim_first
+- (This overrides the facts above for what you say first.) You think of your monthly VA disability check as something you have just got since your Navy days; you
+  don't connect it with 'filing a claim', so you say no when asked whether you filed. Mention the check or the
+  rating only when asked about VA letters, a decision, a rating or VA payments.
 truth:
   first_name: Renee
   last_name: Okafor
   service_periods:
-    - {branch: navy, component: active, start: "1998-03", end: "2006-02", discharge: honorable}
+  - branch: navy
+    component: active
+    start: 1998-03
+    end: 2006-02
+    discharge: honorable
   filed_before: true
   receiving_va_pay: true
   rating_pct: 30
   tdiu: false
   sc_conditions:
-    - {name: lumbar strain, rating_pct: 20}
-    - {name: tinnitus, rating_pct: 10}
-  claim_conditions: [sleep apnea]
-  mos: [Aviation Machinist's Mate]
+  - name: lumbar strain
+    rating_pct: 20
+  - name: tinnitus
+    rating_pct: 10
+  claim_conditions:
+  - sleep apnea
+  exposures: []  # none she knows of (sea service; 38 CFR 3.317 Persian Gulf waters left aside)
+  litigation_contact: null  # not asked: no exposures
+  mos:
+  - Aviation Machinist's Mate
+  street: 45 Harbor View Drive
+  city: Norfolk
+  state: VA
+  zip: '23503'
+  cell_phone: 757-555-0112
+  email: renee.okafor@example.com
+  next_of_kin: Daniel Okafor, husband, 757-555-0139
+  marital_status: married
+  spouse_name: Daniel Okafor
 stories:
   sleep apnea:
     h02: I snore loudly, stop breathing at night and wake up exhausted.

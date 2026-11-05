@@ -6,6 +6,7 @@ __pycache__/
 # Runtime data: encrypted vault, filled PDFs, vault key, audit log. Never commit.
 .data/
 .scratch/
+.DS_Store
 
 # Local secrets (API keys). Never commit; copy .env.example instead.
 .env

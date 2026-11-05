@@ -6,7 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.ingest import HIDDEN, Ingested, detect_crisis, ingest, redact_chat, wants_human
+from agent.ingest import (
+    HIDDEN,
+    Ingested,
+    detect_crisis,
+    ingest,
+    redact_chat,
+    wants_human,
+    wants_withdraw,
+)
 from agent.qa import WebSearchQA
 
 # ------------------------------------------------------------------------------ crisis
@@ -232,3 +240,75 @@ def test_a_cached_web_search_answer_round_trips_through_dspys_disk_cache(tmp_pat
         client.create = lambda **kw: pytest.fail("searched again")
         again = WebSearchQA(client=client, model="m")("What is an intent to file?")
     assert (again.text, again.sources, again.usage) == (first.text, first.sources, {})
+
+
+# ------------------------------------------------------------------------------ ending representation
+WITHDRAWS = [
+    "Please cancel my case.",
+    "I want to revoke the power of attorney.",
+    "I don't want you to represent me anymore.",
+    "Can you cancel my agreement?",
+    "I'm not happy, cancel my contract.",
+    "I no longer want your services.",
+    "I decided to cancel my agreement",
+    "Please cancel my case, I had to move",
+    "I want to revoke the POA I gave you",
+    "The DAV said they'd do it for free, so please cancel my agreement.",
+    "I'm going with the DAV instead, please revoke the POA.",
+    "Could you please just cancel my agreement?",
+    "How do I fire you?",
+    "Please revoke it!",
+    "Cancel it.",
+    "I want to stop working with you.",
+]
+NOT_WITHDRAWS = [  # questions about how it works, and negations
+    "Can I revoke the 21-22a later?",
+    "Is it possible to revoke the POA later?",
+    "what if I want to cancel the agreement?",
+    "How would I end the representation if needed?",
+    "is there a fee to cancel the contract?",
+    "I don't want to cancel my agreement",
+    "Please don't stop my case",
+    "will the VA stop my case?",
+    "Should I find a new lawyer?",
+    "I want to withdraw my old claim at VA for my back.",
+    "My back is so bad at work, I need to quit.",
+    "My job at the warehouse is killing my knees. I want to quit.",
+    "My exam is Friday. Please cancel it.",
+    # another or a past representative (the firm asks about prior representation)
+    "Yes, Alan Smith was my attorney. I need to revoke the POA with him so you can take over.",
+    "Yes, a private attorney, Alan Smith, back in 2019. I decided to get a new lawyer.",
+    "I had to fire my lawyer.",
+    "I'd like to revoke the POA with DAV.",
+    "I want to cancel the contract with my old attorney.",
+    "I need to revoke my POA with the county veterans service office first",
+    "I want to revoke the POA I gave my brother",
+    "Cancel it?",
+    "The VA threatened to drop my case if I missed the exam.",
+    "I won't cancel my contract.",
+    "I'm not going to cancel my agreement.",
+]
+
+
+@pytest.mark.parametrize("text", WITHDRAWS)
+def test_wants_withdraw(text):
+    assert wants_withdraw(text), text
+
+
+@pytest.mark.parametrize("text", NOT_WITHDRAWS)
+def test_not_wants_withdraw(text):
+    assert not wants_withdraw(text), text
+
+
+@pytest.mark.parametrize("text", ["I would like to talk to someone at the VA about my claim",
+                                  "Yes, I'd like to talk to someone about Social Security",
+                                  "Yes, I'd like to talk to someone about my Social Security options.",
+                                  "Sure, I would like to speak with someone regarding Social Security.",
+                                  "Robert Lee. Call me Bob.", "My name is Robert, call me Rob.",
+                                  "Yes, I would like to talk with someone.", "Sure, I want to talk to someone"])
+def test_wants_human_not_for_va_or_ssa(text):
+    assert not wants_human(text), text
+
+
+def test_a_yes_and_more_is_still_a_request():
+    assert wants_human("Yes, I need to talk to someone, this is urgent.")

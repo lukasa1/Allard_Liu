@@ -1,5 +1,5 @@
 """The web demo (demo/app.py) through its HTTP API, on the runtime with the scripted fake LM:
-the whole demo flow as a presenter clicks it, the outbox polling, and the no-key page (D7)."""
+the whole demo flow as a presenter clicks it, the outbox polling, and the no-key page."""
 
 import io
 import threading
@@ -103,7 +103,7 @@ def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
     assert (p["stage"], p["owner"], p["side_state"], p["can_countersign"]) == (2, "intake", "waiting_on_attorney", True)
     assert {f: x["status"] for f, x in p["documents"].items()} == {"21-22a": "signed", "fee_agreement": "signed"}
 
-    # The attorney countersigns both (D6) -> intake files -> claims prep in the background.
+    # The attorney countersigns both -> intake files -> claims prep in the background.
     gate = threading.Event()
     pass1 = {"finished": "pass 1: 21-22a and ITF filed, fee agreement faxed"}
     lm.turn("intake", call("submit_va", form="21-22a"), call("submit_va", form="itf"),
@@ -122,7 +122,7 @@ def test_the_demo_flow_through_the_http_api(client, rt, lm, signature_uri):
     assert [(f["form"], f["confirmation"][:3]) for f in filed] == [("21-22a", "VA-"), ("itf", "VA-"), ("fee_agreement", "FAX")]
     assert client.post(f"/api/cases/{cid}/countersign").status_code == 409  # only in waiting_on_attorney
 
-    # While claims prep runs, support answers the chat (D1), and polling delivers it.
+    # While claims prep runs, support answers the chat, and polling delivers it.
     lm.turn("support", call("log_event", kind="status", text="Asked for status; told the file is being read."),
             final(reply="Our team is reading your VA file now."))  # fmt: skip
     client.post(f"/api/cases/{cid}/messages", json={"text": "What's happening with my case?"}).raise_for_status()
@@ -229,7 +229,7 @@ def test_autoplay_waits_while_an_agent_is_mid_turn(client, rt, lm, monkeypatch):
 
 
 def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_path, signature_uri):
-    """`intake serve --scripted` (D26): no key, no model; Tab takes the suggestion, Enter sends it, and the
+    """`intake serve --scripted`: no key, no model; Tab takes the suggestion, Enter sends it, and the
     cards, as the page does."""
     from agent.scripted import demo
     from demo import app as app_module

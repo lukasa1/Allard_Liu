@@ -1,7 +1,11 @@
 id: corrects_after_preview
-summary: Mistypes their street number in the secure form (1178 instead of 1187). On seeing the 21-22a preview they say it's wrong and give the right address in chat. Intake must correct the draft (update_draft), show the new version, and only then ask for the signature.
+summary: Mistypes their street number in the secure form (1178 instead of 1187). On seeing the 21-22a preview they
+  say it's wrong and give the right address in chat. Intake must correct the draft (update_draft), show the new
+  version, and only then ask for the signature.
 behaviors:
-  - "When the assistant shows you your VA Form 21-22a and asks whether it looks right, say no: the street address on it is wrong, you mistyped it, it should be 1187 Maple Avenue (not 1178). Once the assistant says it fixed it and shows you the form again, say it looks right now."
+- 'When the assistant shows you your VA Form 21-22a and asks whether it looks right, say no: the street address
+  on it is wrong, you mistyped it, it should be 1187 Maple Avenue (not 1178). Once the assistant says it fixed it
+  and shows you the form again, say it looks right now.'
 typed:
   address.line1: 1178 Maple Avenue
 truth:
@@ -10,10 +14,35 @@ truth:
   street: 1187 Maple Avenue
   city: Kenosha
   state: WI
-  zip: "53140"
+  zip: '53140'
   service_periods:
-    - {branch: army, component: active, start: "2003-01", end: "2009-12", discharge: honorable}
-  mos: [92Y Unit Supply Specialist]
+  - branch: army
+    component: active
+    start: 2003-01
+    end: 2009-12
+    discharge: honorable
+  mos:
+  - 92Y Unit Supply Specialist
+  cell_phone: 262-555-0193
+  email: denise.whitfield@example.com
+  next_of_kin: Robert Whitfield, brother, 262-555-0158
+stories:
+  tinnitus:  # the default story, reworded for a 92Y supply specialist on supply convoys
+    h02: A constant high-pitched ringing in both ears.
+    h03: On bad days it's so loud I can't concentrate or fall asleep.
+    h04: It started during service, after a supply convoy I was on hit an IED near Baghdad in 2007.
+    h05: Every day.
+    h06: It never went away after I got out, and it's gotten a little worse.
+    h07: Camp Taji, Iraq.
+    h08: Riding in supply trucks on convoys through a combat zone, and working the supply yard.
+    h09: Engine noise, generators, gunfire and explosions, usually without good hearing protection.
+    h10: The IED blast in 2007, plus years of convoy and supply-yard noise.
+    h11: No. Everyone had ringing ears and I didn't want to be pulled off missions.
+    h12: I run inventory at a warehouse now and it's hard to hear people over the ringing.
+    h13: I've left early a few times when it gets really bad, maybe once a month.
+    h14: I avoid restaurants and parties, and I sleep with a fan on to drown it out.
+    h15: Before the Army I had no hearing problems at all.
+    h16: No, I think that covers it.
 expected:
   decision: eligible
   fee_pct: 30

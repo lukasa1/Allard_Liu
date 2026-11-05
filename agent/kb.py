@@ -1,4 +1,4 @@
-"""kb_search (L31): the knowledge base as a registry tool, shared by intake and support.
+"""kb_search: the knowledge base as a registry tool, shared by intake and support.
 
 The engine is the web-search QA of agent/qa.py (official domains only, answers cite their
 sources, model Haiku 5.5). The runtime holds the engine (`rt.kb`), so tests inject an offline
@@ -31,7 +31,7 @@ class KbArgs(BaseModel):
 def kb_search(turn: Turn, args: KbArgs) -> dict:
     question, _ = redact_chat(args.question)
     result = turn.rt.kb(question)
-    if result.usage:  # the web-search QA's own model call (L5): counted to the agent that searched
+    if result.usage:  # the web-search QA's own model call: counted to the agent that searched
         tokens_in, tokens_out = result.usage.get("prompt_tokens", 0), result.usage.get("completion_tokens", 0)
         model = getattr(turn.rt.kb, "model", "")
         turn.rt.harness.traces.write(

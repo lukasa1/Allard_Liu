@@ -14,14 +14,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from agent import config
+from agent import clock, config
 
 CONDITION_HELP = (
-    "ask_no_probes | ask | cfile, comma-separated, or 'all' (L32). ask_no_probes = no verification "
+    "ask_no_probes | ask | cfile, comma-separated, or 'all'. ask_no_probes = no verification "
     "probes, no C-file prefill; ask = probes, no prefill; cfile = probes + C-file prefill + confirmation"
 )
 NO_KEY = ("This needs OPENROUTER_API_KEY (in your shell or the repo's .env): the agents and the simulated "
-          "veteran run on Claude Haiku 5.5 through OpenRouter. There are no offline agents (D7).")  # fmt: skip
+          "veteran run on Claude Haiku 5.5 through OpenRouter. There are no offline agents.")  # fmt: skip
 
 
 def _conditions(text: str) -> list[str]:
@@ -111,7 +111,10 @@ def cmd_eval(args: argparse.Namespace) -> None:
     runs = len(personas) * len(conditions) * args.trials
     print(f"{len(personas)} persona(s) x {len(conditions)} condition(s) x {args.trials} trial(s): "
           f"{estimated_calls(runs)}" + (f"; stops past ${args.max_cost:.2f}" if args.max_cost else ""), flush=True)  # fmt: skip
-    out, scores = run_eval(personas, conditions, make_rt, make_sim, args.name, args.trials, args.max_cost)
+    from intake_eval.judge import KbAnswerJudge
+
+    judge = KbAnswerJudge(config.make_lm(role="simulator"))  # one call per run with a persona question
+    out, scores = run_eval(personas, conditions, make_rt, make_sim, args.name, args.trials, args.max_cost, judge)
     print("\nHeadline (counts only with zero critical errors and field accuracy held):")
     for cond in conditions:
         if sub := [s for s in scores if s.condition == cond]:
@@ -124,22 +127,30 @@ def cmd_eval(args: argparse.Namespace) -> None:
 
 def cmd_support_eval(args: argparse.Namespace) -> None:
     import json
+    import re
 
+    from intake_eval.evaluate import RESULTS_DIR
     from intake_eval.support_eval import (
         estimated_calls,
         load_messages,
         misses,
         run_support_eval,
         summarize,
+        write_results,
     )
 
+    if args.name and (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.name) or ".." in args.name):
+        raise SystemExit(f"--name must be a plain folder name (letters, digits, . _ -), not {args.name!r}")
     if not config.os.environ.get("OPENROUTER_API_KEY"):
         raise SystemExit(NO_KEY)
     check_prices(args.max_cost, simulator=False)
-    messages = load_messages(luke_only=args.luke)
+    messages = load_messages(core_only=args.core)
     print(estimated_calls(len(messages)) + (f"; stops past ${args.max_cost:.2f}" if args.max_cost else ""), flush=True)
     scores = run_support_eval(messages, max_cost=args.max_cost)
+    out = RESULTS_DIR / (args.name or f"support-{clock.now():%Y%m%d-%H%M%S}")
+    write_results(out, scores)
     print(json.dumps(summarize(scores), indent=2))
+    print(f"Results: {out / 'summary.json'}")
     wrong = misses(scores)
     print("\nMisses:" if wrong else "\nNo misses.")
     for line in wrong:
@@ -192,7 +203,8 @@ def main(argv: list[str] | None = None) -> None:
     p.set_defaults(func=cmd_eval)
 
     p = sub.add_parser("support-eval", help="score the customer-support sub-agent (live model)")
-    p.add_argument("--luke", action="store_true", help="only the subset matching Luke's 50 messages")
+    p.add_argument("--name", default=None, help="results folder name (default: support-<timestamp>)")
+    p.add_argument("--core", action="store_true", help="only the 50-message core set (30 questions, 10 status checks, 5 complaints, 5 changes)")
     p.add_argument("--strict", action="store_true", help="exit 1 if any message is mishandled")
     max_cost_arg(p)
     p.set_defaults(func=cmd_support_eval)

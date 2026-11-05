@@ -78,11 +78,14 @@ def _combined(conditions: list[RatedCondition]) -> int:
     remaining = 100.0
     for pct in sorted((c.rating_pct or 0 for c in conditions), reverse=True):
         remaining -= remaining * pct / 100
-    return int(round((100 - remaining) / 10.0) * 10)
+    return int((100 - remaining) / 10.0 + 0.5) * 10  # half up (VA: 25 -> 30), not Python's half-to-even
 
 
 def build_documents(p: Persona, facts: CfileFacts | None = None) -> list[tuple[str, str, bytes]]:
-    """[(doc_type, subject, pdf_bytes)] for the persona's synthetic C-file."""
+    """[(doc_type, subject, pdf_bytes)] for the persona's synthetic C-file (none for someone who
+    never served: VA holds no claims file for them)."""
+    if p.truth.is_veteran is False:
+        return []
     f = facts or truth_facts(p)
     t = p.truth
     name = f"{(t.last_name or '').upper()}, {(t.first_name or '').upper()}"

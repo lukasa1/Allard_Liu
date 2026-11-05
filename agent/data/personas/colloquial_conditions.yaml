@@ -1,17 +1,49 @@
 id: colloquial_conditions
-summary: Describes every condition in everyday words ("ringing in my ears", "bad back"); the agent must record the VA-style names.
-behaviors: [colloquial_conditions]
+summary: Describes every condition in everyday words that are not in the code's synonym table
+  (agent/intake/conditions.py), so the model itself must turn them into the VA-style names.
+  Keep the phrases (and the stories' wording) out of that table.
+behaviors:
+- colloquial_conditions
 says:
-  tinnitus: ringing in my ears
-  lumbar strain: my bad back
-  sleep apnea: I stop breathing at night
+  tinnitus: my ears buzz all the time
+  lumbar strain: my spine's been wrecked since that fall
+  sleep apnea: my wife says I quit breathing in my sleep
 truth:
   first_name: Kevin
   last_name: Doyle
-  claim_conditions: [tinnitus, lumbar strain, sleep apnea]
+  claim_conditions:
+  - tinnitus
+  - lumbar strain
+  - sleep apnea
+  street: 88 Elm Street
+  city: Killeen
+  state: TX
+  zip: '76541'
+  cell_phone: 254-555-0119
+  email: kevin.doyle@example.com
+  next_of_kin: Amy Doyle, wife, 254-555-0131
+  marital_status: married
+  spouse_name: Amy Doyle
+  children_under_18: true
 stories:
+  tinnitus:  # the default story, reworded so it doesn't say "ringing" (a synonym-table word)
+    h02: A constant high-pitched buzz in both ears.
+    h03: On bad days it's so loud I can't concentrate or fall asleep.
+    h04: It started during service, after a convoy hit an IED near Baghdad in 2007.
+    h05: Every day.
+    h06: It never went away after I got out, and it's gotten a little worse.
+    h07: Camp Taji, Iraq.
+    h08: In a vehicle, on convoys through a combat zone.
+    h09: Constant engine noise, gunfire and explosions, usually without good hearing protection.
+    h10: The IED blast in 2007, plus years of truck and weapons noise.
+    h11: No. Everyone's ears buzzed and I didn't want to be pulled off missions.
+    h12: It's hard to follow what people say at work over the buzzing.
+    h13: I've left early a few times when it gets really bad, maybe once a month.
+    h14: I avoid restaurants and parties, and I sleep with a fan on to drown it out.
+    h15: Before the Army I had no hearing problems at all.
+    h16: No, I think that covers it.
   lumbar strain:
-    h02: Sharp pain in my lower back, and it goes stiff in the morning.
+    h02: A sharp pain low down in my spine, and it goes stiff in the morning.
     h03: Some days I can't bend over to tie my shoes.
     h04: After a fall off a truck bed in 2008.
     h05: Daily.
@@ -28,7 +60,22 @@ stories:
     h16: No.
   sleep apnea:
     h02: Loud snoring, gasping awake.
+    h03: Some nights I wake up choking five or six times and I'm wrecked the next day.
+    h04: It started in Iraq. Guys in my tent said I stopped breathing in my sleep.
     h05: Every night.
+    h06: Worse since I got out, and I've put on weight since my spine started acting up.
+    h07: Camp Taji, Iraq, and then Fort Hood.
+    h08: On a base, sleeping in tents and barracks.
+    h09: Dust, smoke and short broken sleep on night missions.
+    h10: I think it was the years of bad sleep and breathing that dust and smoke.
+    h11: No, I never went to medical for it.
+    h12: I nod off at work in the afternoon.
+    h13: I've been sent home a couple of times for falling asleep.
+    h14: My wife sleeps in another room because of the noise.
+    h15: I slept fine before the Army.
+    h16: No.
 expected:
   decision: eligible
   fee_pct: 30
+identity:
+  dob: '1982-08-17'  # explicit: the id-hashed DOB made the enlistment age implausible

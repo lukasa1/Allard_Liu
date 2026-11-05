@@ -5,8 +5,10 @@ description: When to flag the orchestrator, when to escalate to a person, and wh
 
 # Hand to a person
 
-**Code handles these before you see a message** (you never get them):
-- crisis language: the Veterans Crisis Line (dial 988, then press 1) and an urgent hand-off;
+**Code handles these before you see a message** (you rarely get them):
+- crisis language: the Veterans Crisis Line (dial 988, then press 1) and an urgent hand-off. If
+  one reaches you anyway (code's check missed the wording), call `crisis_to_person` at once:
+  it sends the Crisis Line from code and hands the case to a person;
 - a request to talk to a person, or to end our representation (revoke the 21-22a, cancel the case):
   a person, by rule.
 

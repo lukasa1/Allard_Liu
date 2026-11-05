@@ -1,13 +1,56 @@
 id: two_service_periods
-summary: Two periods of service (active Army, later Army Reserve), but mentions only the first unless asked. Intake misses like this leave a second DD-214 unfound.
-behaviors: [omit_second_period]
+summary: Two periods of service (active Army, later Army Reserve), but mentions only the first unless asked. In a real
+  case a missed period leaves a second DD-214 unfound; here the C-file holds both, so the probe or prefill catches it.
+behaviors:
+- omit_second_period
+- Your Reserve period (2003-2004) was a mobilization to Fort McCoy, Wisconsin; you stayed stateside and never deployed
+  then.
 truth:
   first_name: Dale
   last_name: Whitaker
   service_periods:
-    - {branch: army, component: active, start: "1990-06", end: "1994-06", discharge: honorable}
-    - {branch: army, component: reserve, start: "2003-01", end: "2004-12", discharge: honorable}
-  mos: [88M Motor Transport Operator, 92Y Unit Supply Specialist]
+  - branch: army
+    component: active
+    start: 1990-06
+    end: 1994-06
+    discharge: honorable
+  - branch: army
+    component: reserve
+    start: 2003-01
+    end: 2004-12
+    discharge: honorable
+  exposures:
+  - gulf war hazards
+  litigation_contact: false
+  mos:
+  - 88M Motor Transport Operator
+  - 92Y Unit Supply Specialist
+  street: 408 Main Street
+  city: Beloit
+  state: WI
+  zip: '53511'
+  cell_phone: 608-555-0115
+  email: dale.whitaker@example.com
+  next_of_kin: Joan Whitaker, wife, 608-555-0116
+  marital_status: married
+  spouse_name: Joan Whitaker
+stories:
+  tinnitus:
+    h02: A constant ringing in both ears, louder at night.
+    h03: When it's bad I can't follow a conversation or get to sleep.
+    h04: It started in 1991, on convoys into Kuwait during Desert Storm.
+    h05: Every day.
+    h06: It never went away, and it's gotten worse over the years.
+    h07: Kuwait and southern Iraq.
+    h08: Driving trucks in convoys.
+    h09: Diesel engines all day, artillery firing nearby, no real hearing protection.
+    h10: An artillery battery firing right next to our convoy in February 1991.
+    h11: No, nobody reported ringing ears back then.
+    h12: I manage a parts counter now and I keep asking customers to repeat themselves.
+    h13: I haven't missed work for it.
+    h14: I avoid restaurants and I can't hear my grandkids well.
+    h15: My hearing was fine before the Army.
+    h16: No.
 expected:
   decision: eligible
   fee_pct: 30

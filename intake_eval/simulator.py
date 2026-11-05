@@ -18,14 +18,13 @@ BEHAVIOR_TEXT = {
     "omit_second_period": "When first asked about your service, describe ONLY your first service period. Mention the later period(s) only if the assistant asks specifically about other service, a second enlistment, Reserves or Guard, or shows you a list of your service and asks if anything is missing.",
     "deny_prior_claim_first": "You forgot that you filed a VA claim years ago. If asked whether you've filed before, say no. If asked about ever getting any letter from the VA about a claim or decision, remember it and say yes.",
     "colloquial_conditions": "Describe your conditions in everyday words (as listed under 'how you describe your conditions'), never with medical names.",
-    "crisis": "When describing how bad your symptoms get, reveal that some days you don't want to live anymore.",
     "volunteers_info": "You tend to answer several things at once, e.g. giving your name, branch and dates in one reply.",
     "vague_dates": "You don't remember exact months; give years or approximate times ('around 2004').",
     "new_condition_during_prep": "Your last listed claim condition was diagnosed only last week. Leave it out until your forms are filed: the app tells the firm about it for you while they read your VA file. If the assistant asks about it after that, confirm it and describe it.",
 }
 
 
-SIM_BRIEF = """You are role-playing a U.S. military veteran who is texting with a law firm's intake \
+SIM_BRIEF = """You are role-playing {who} who is texting with a law firm's intake \
 assistant about a VA disability claim. Stay in character the whole time.
 
 Who you are (the facts are hidden from the assistant; reveal them only when asked or when it's natural):
@@ -42,7 +41,7 @@ Behaviours to act out:
 When the assistant asks you to sign the form that lets its attorney represent you:
 - may the attorney see VA records about drug or alcohol treatment, HIV or sickle cell anemia: {item20}
 - may the attorney update your mailing address with VA: {item22}
-- when it shows you the form and asks if it looks right, say it looks right.
+- when it shows you the form and asks if it looks right, say it looks right (unless a behaviour above says otherwise).
 - when it shows you the fee agreement and asks whether you agree, say yes.
 (The app fills the secure form, draws your signature and clicks Sign for you; just reply to messages.)
 
@@ -58,8 +57,11 @@ behaviour says to.
 
 
 def persona_brief(persona: Persona) -> str:
-    truth = persona.truth.model_dump(exclude_none=True)
+    truth = persona.believed_truth.model_dump(exclude_none=True)  # what the veteran remembers
+    who = ("a U.S. military veteran" if persona.truth.is_veteran is not False
+           else "a person who never served in the military (not a veteran)")
     return SIM_BRIEF.format(
+        who=who,
         truth=json.dumps(truth, indent=2),
         stories=json.dumps(persona.stories, indent=2),
         says=json.dumps(persona.says) if persona.says else "(use the names above)",
@@ -78,7 +80,7 @@ def _yn(v) -> str:
 def character_card(persona: Persona) -> list[dict]:
     """The demo's Character tab: the same facts the simulated veteran plays from, in plain words,
     so a person playing the veteran knows how to answer. Sections of (label, text) rows."""
-    t = persona.truth
+    t = persona.believed_truth
     period = lambda p: (f"{p.branch.title()} {p.component or ''}, {p.start or '?'} to {p.end or '?'}, "
                         f"{DISCHARGE_LABEL.get(p.discharge or '', 'unknown').lower()} discharge")  # fmt: skip
     service = [("Served", _yn(t.is_veteran))]

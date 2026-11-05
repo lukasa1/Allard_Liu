@@ -1,9 +1,9 @@
-"""Tool registry and guard hook (L2).
+"""Tool registry and guard hook.
 
 A tool is a name, a description, a Pydantic argument schema and its code. Every call goes:
 `on_call` (the harness checks the turn's deadline) -> validate the arguments (`invalid_args: <field>: <why>` on failure) -> guard hook (`refused:
 <reason>` on refusal, logged through `on_refused`) -> run. Whatever happens comes back to the
-model as a string observation, so it can correct itself (L4). Tool code that raises returns
+model as a string observation, so it can correct itself. Tool code that raises returns
 `error: ...` the same way.
 """
 
@@ -78,7 +78,7 @@ class Registry:
             return f"refused: {reason}"
         try:
             return _observation(spec.fn(args))
-        except Exception as err:  # noqa: BLE001 - tool errors are observations, not crashes (L4)
+        except Exception as err:  # noqa: BLE001 - tool errors are observations, not crashes
             return f"error: {type(err).__name__}: {err}"
 
     def dspy_tools(self) -> list[dspy.Tool]:

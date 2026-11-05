@@ -1,4 +1,4 @@
-"""The case's representation documents (L20) and the host-side actions on them.
+"""The case's representation documents and the host-side actions on them.
 
 Each case has one PoaService (poa_skill: the encrypted vault, the document store, the audit log)
 named after the case. Intake's tools prepare and show documents; only these host actions, called
@@ -155,7 +155,7 @@ def sign(rt, case_id: str, form: str, consent_text: str, ip: str = "", user_agen
 
 
 def countersign(rt, case_id: str, by: str) -> None:
-    """Staff: the attorney countersigns both documents in one action (D6). Each gets a stamped
+    """Staff: the attorney countersigns both documents in one action. Each gets a stamped
     new version; the case records who and when, and a deadline task tracks the OGC fax."""
     svc, attorney = service(rt, case_id), attorney_name()
     docs = {f: svc.live(f) for f in FORM_KEYS}

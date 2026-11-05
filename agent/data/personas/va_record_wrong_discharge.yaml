@@ -1,7 +1,0 @@
-id: va_record_wrong_discharge
-split: heldout  # never tuned against (see intake_eval/evaluate.py NOTES['split'])
-summary: One period of honorable Army service, never filed, one condition; the DD-214 in the C-file shows honorable. (Named for the deleted VA-records fetch, whose data listed the discharge wrongly; it now runs like baseline_clean.)
-truth: {}
-expected:
-  decision: eligible
-  fee_pct: 30
