@@ -81,20 +81,20 @@
   },
   "by_split": {
     "cfile/dev": {
-      "runs": 14,
-      "completed_runs": 14,
+      "runs": 20,
+      "completed_runs": 20,
       "scenario_pass_rate": 1.0,
       "runs_with_critical_errors": 0,
       "critical_errors": 0,
       "pass_hat_k": 1,
-      "field_accuracy": 0.986038961038961,
-      "structured_questions": 18.857142857142858,
-      "clarifications": 0.8571428571428571,
-      "narrative_answers": 13.928571428571429,
-      "veteran_messages": 19.928571428571427,
-      "prefill_share": 0.046072617858332145,
-      "turns_to_signed_poa": 9.75,
-      "kb_calls": 1,
+      "field_accuracy": 0.9902272727272727,
+      "structured_questions": 17.75,
+      "clarifications": 1.2,
+      "narrative_answers": 12.75,
+      "veteran_messages": 18.8,
+      "prefill_share": 0.04148784548784549,
+      "turns_to_signed_poa": 9.625,
+      "kb_calls": 2,
       "kb_sourced": 1,
       "resumed_after": 1.0,
       "scripted_sent": "5/5",
@@ -103,124 +103,52 @@
       "untested": 0,
       "flag_decisions_correct": "1/1",
       "refused": {
-        "intake": 9
+        "intake": 11
       },
-      "facenote_line_accuracy": 0.9916666666666667,
-      "facenote_fact_checks": 0.9880952380952381,
-      "verify_passed": "11/12",
+      "facenote_line_accuracy": 0.99375,
+      "facenote_fact_checks": 0.9910714285714286,
+      "verify_passed": "15/16",
       "citation_precision": 1.0,
       "uncertain_lines": 2,
-      "cost_total": 2.152728,
-      "cost_mean": 0.15376628571428572,
-      "model_failures": 1,
+      "cost_total": 2.8756721,
+      "cost_mean": 0.143783605,
+      "model_failures": 2,
       "per_agent": {
         "orchestrator": {
-          "calls_mean": 10.928571428571429,
-          "cost_total": 0.1249451,
-          "cost_mean": 0.008924650000000001,
-          "latency_per_call": 2.0475620915032677
+          "calls_mean": 10.7,
+          "cost_total": 0.1742316,
+          "cost_mean": 0.00871158,
+          "latency_per_call": 2.0402570093457943
         },
         "intake": {
-          "calls_mean": 102.64285714285714,
-          "cost_total": 1.6264892,
-          "cost_mean": 0.1161778,
-          "latency_per_call": 2.84577313848295
+          "calls_mean": 96.5,
+          "cost_total": 2.1606584,
+          "cost_mean": 0.10803292,
+          "latency_per_call": 2.8027202072538855
         },
         "claims_prep": {
-          "calls_mean": 10.571428571428571,
-          "cost_total": 0.2410457,
-          "cost_mean": 0.01721755,
-          "latency_per_call": 3.0244797297297294
+          "calls_mean": 10.2,
+          "cost_total": 0.3310586,
+          "cost_mean": 0.01655293,
+          "latency_per_call": 2.9400098039215683
         },
         "support": {
-          "calls_mean": 0.2857142857142857,
+          "calls_mean": 0.2,
           "cost_total": 0.001767,
-          "cost_mean": 0.0001262142857142857,
+          "cost_mean": 8.834999999999999e-05,
           "latency_per_call": 1.6495000000000002
         },
         "simulator": {
-          "calls_mean": 20.0,
-          "cost_total": 0.15813839999999998,
-          "cost_mean": 0.0112956,
+          "calls_mean": 18.85,
+          "cost_total": 0.2076139,
+          "cost_mean": 0.010380694999999999,
           "latency_per_call": 0.0
         },
         "judge": {
-          "calls_mean": 0.07142857142857142,
+          "calls_mean": 0.05,
           "cost_total": 0.0003426,
-          "cost_mean": 2.447142857142857e-05,
+          "cost_mean": 1.713e-05,
           "latency_per_call": 0.0
-        }
-      }
-    },
-    "cfile/heldout": {
-      "runs": 6,
-      "completed_runs": 6,
-      "scenario_pass_rate": 1.0,
-      "runs_with_critical_errors": 0,
-      "critical_errors": 0,
-      "pass_hat_k": 1,
-      "field_accuracy": 1.0,
-      "structured_questions": 15.166666666666666,
-      "clarifications": 2.0,
-      "narrative_answers": 10.0,
-      "veteran_messages": 16.166666666666668,
-      "prefill_share": 0.03079004329004329,
-      "turns_to_signed_poa": 9.25,
-      "kb_calls": 1,
-      "kb_sourced": 0,
-      "resumed_after": null,
-      "scripted_sent": "0/0",
-      "asked": 0,
-      "ask_answer_ok": "0/0",
-      "untested": 0,
-      "flag_decisions_correct": "0/0",
-      "refused": {
-        "intake": 2
-      },
-      "facenote_line_accuracy": 1.0,
-      "facenote_fact_checks": 1.0,
-      "verify_passed": "4/4",
-      "citation_precision": 1.0,
-      "uncertain_lines": 0,
-      "cost_total": 0.7229441,
-      "cost_mean": 0.12049068333333333,
-      "model_failures": 1,
-      "per_agent": {
-        "orchestrator": {
-          "calls_mean": 10.166666666666666,
-          "cost_total": 0.0492865,
-          "cost_mean": 0.008214416666666667,
-          "latency_per_call": 2.0219344262295085
-        },
-        "intake": {
-          "calls_mean": 82.16666666666667,
-          "cost_total": 0.5341692,
-          "cost_mean": 0.0890282,
-          "latency_per_call": 2.677229208924949
-        },
-        "claims_prep": {
-          "calls_mean": 9.333333333333334,
-          "cost_total": 0.09001289999999999,
-          "cost_mean": 0.015002149999999999,
-          "latency_per_call": 2.7167678571428566
-        },
-        "support": {
-          "calls_mean": 0.0,
-          "cost_total": 0,
-          "cost_mean": 0.0,
-          "latency_per_call": null
-        },
-        "simulator": {
-          "calls_mean": 16.166666666666668,
-          "cost_total": 0.0494755,
-          "cost_mean": 0.008245916666666667,
-          "latency_per_call": 0.0
-        },
-        "judge": {
-          "calls_mean": 0.0,
-          "cost_total": 0,
-          "cost_mean": 0.0,
-          "latency_per_call": null
         }
       }
     }
@@ -527,7 +455,7 @@
       "expected_end": "attorney_review",
       "end_state": "attorney_review",
       "scenario_pass": true,
-      "split": "heldout",
+      "split": "dev",
       "critical_errors": [],
       "completed": true,
       "error": "",
@@ -1918,7 +1846,7 @@
       "expected_end": "attorney_review",
       "end_state": "attorney_review",
       "scenario_pass": true,
-      "split": "heldout",
+      "split": "dev",
       "critical_errors": [],
       "completed": true,
       "error": "",
@@ -2476,7 +2404,7 @@
       "expected_end": "attorney_review",
       "end_state": "attorney_review",
       "scenario_pass": true,
-      "split": "heldout",
+      "split": "dev",
       "critical_errors": [],
       "completed": true,
       "error": "",
@@ -3846,7 +3774,7 @@
       "expected_end": "needs_human",
       "end_state": "needs_human",
       "scenario_pass": true,
-      "split": "heldout",
+      "split": "dev",
       "critical_errors": [],
       "completed": true,
       "error": "",
@@ -4383,7 +4311,7 @@
       "expected_end": "closed",
       "end_state": "closed",
       "scenario_pass": true,
-      "split": "heldout",
+      "split": "dev",
       "critical_errors": [],
       "completed": true,
       "error": "",
@@ -4918,7 +4846,7 @@
       "expected_end": "attorney_review",
       "end_state": "attorney_review",
       "scenario_pass": true,
-      "split": "heldout",
+      "split": "dev",
       "critical_errors": [],
       "completed": true,
       "error": "",

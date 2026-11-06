@@ -12,15 +12,6 @@ Structured intake questions settled from the veteran's chat answers (narratives 
 |---|---|---|---|---|---|---|---|---|
 | cfile | **17.8** | 20/20 | 0 of 20 | 99% | 4% | 1.2 | 9.6 | 100% |
 
-## By split
-
-`dev`: the 14 personas the system was developed against, so these numbers are optimistic. `heldout`: the 6 personas not fixed against directly; they are optimistic too, since earlier runs of them informed later changes, baseline_clean is the same veteran as dev's asks_question_mid_intake, and reserve_not_in_records shares two_service_periods' mechanism.
-
-| Condition | Split | Runs | Scenario pass | Runs w/ critical errors | Field acc. | Structured questions | Face-note lines | Cost / case |
-|---|---|---|---|---|---|---|---|---|
-| cfile | dev | 14 | 100% | 0 of 14 | 99% | 18.9 | 99% | $0.1538 |
-| cfile | heldout | 6 | 100% | 0 of 6 | 100% | 15.2 | 100% | $0.1205 |
-
 ## Intake
 
 KB: kb_search calls and those with a sourced answer. Persona question (asks_question_mid_intake, sent alone, answering nothing): `resumed after` = veteran replies until intake recorded an answer again (1 = it answered and asked its question again at once); `answer ok` = the LLM judge (intake_eval/judge.py) found every point of the persona's answer key and nothing wrong.

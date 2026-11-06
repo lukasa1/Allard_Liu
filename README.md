@@ -72,8 +72,8 @@ The midpoint run's results are in the repo:
 - **`results/midpoint/report.md`** has the tables:
   - the headline, with field accuracy, critical errors and scenario pass;
   - a section per agent;
-  - **By split**: `dev` = the 14 personas the system was developed against, `heldout` = 6 not fixed
-    against directly (both are optimistic);
+  - all 20 personas are development-set personas: each one informed the system over many runs,
+    so the numbers are optimistic;
   - every case's critical errors and field mismatches.
 - `results/midpoint/summary.json` holds the same numbers as data.
 - `results/midpoint/transcripts/` holds every conversation.

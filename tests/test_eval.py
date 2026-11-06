@@ -535,7 +535,7 @@ def test_the_report_shows_dev_and_heldout_apart():
     assert "## By split" in text and "| cfile | dev | 2 | 100% |" in text and "| cfile | heldout | 1 | 0% |" in text
     one = evaluate.render_report("r", ["cfile"], scores[:2], trials=1)
     assert "## By split" not in one  # a single split: no extra table
-    assert get_persona("rated_100").split == "heldout" and get_persona("prior_attorney").split == "dev"
+    assert get_persona("rated_100").split == "dev" and get_persona("prior_attorney").split == "dev"
 
 
 def test_scorer_reads_real_answer_shapes():

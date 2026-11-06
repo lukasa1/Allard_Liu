@@ -1,5 +1,5 @@
 id: baseline_clean
-split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+split: dev
 summary: A straightforward case. One period of honorable Army service, never filed, one condition.
 truth: {}
 expected:

@@ -104,7 +104,7 @@ class Persona:
     identity: dict[str, str] = field(default_factory=dict)  # dob, ssn, middle_initial
     typed: dict[str, str] = field(default_factory=dict)  # secure-form field -> the wrong value the veteran types
     asks: dict[str, Any] = field(default_factory=dict)  # at_reply (1-based) or after: itf_filed; text: sent instead of that reply; answer_key; expects: kb | person
-    split: str = "dev"  # dev: the system was developed against it; heldout: not fixed against directly
+    split: str = "dev"  # dev: the system was developed against it; heldout: kept out of development
     cfile: dict[str, Any] = field(default_factory=dict)
     poa: dict[str, bool] = field(default_factory=dict)
     during_prep: dict[str, str] = field(default_factory=dict)  # message, condition

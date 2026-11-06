@@ -216,10 +216,8 @@ def headline_line(cond: str, a: dict[str, Any]) -> str:
 
 NOTES = {
     "split": (
-        "`dev`: the 14 personas the system was developed against, so these numbers are optimistic. "
-        "`heldout`: the 6 personas not fixed against directly; they are optimistic too, since earlier "
-        "runs of them informed later changes, baseline_clean is the same veteran as dev's "
-        "asks_question_mid_intake, and reserve_not_in_records shares two_service_periods' mechanism."
+        "`dev`: personas the system was developed against, so these numbers are optimistic. "
+        "`heldout`: personas kept out of development."
     ),
     "conditions": (
         "Conditions: `ask_no_probes` = intake without the verification probes and without C-file "

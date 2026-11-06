@@ -81,7 +81,7 @@ Behaviours: none
  "expected_end": "closed",
  "end_state": "closed",
  "scenario_pass": true,
- "split": "heldout",
+ "split": "dev",
  "critical_errors": [],
  "completed": true,
  "error": "",

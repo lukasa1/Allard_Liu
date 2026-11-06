@@ -1,5 +1,5 @@
 id: reserve_not_in_records
-split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+split: dev
 summary: Active Navy service, then three years in the Navy Reserve. Mentions only the first period unless asked; the
   C-file holds a DD-214 for each period, so only the verification probe or the C-file prefill catches the second
   one.

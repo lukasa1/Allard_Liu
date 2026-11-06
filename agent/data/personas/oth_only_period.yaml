@@ -1,5 +1,5 @@
 id: oth_only_period
-split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+split: dev
 summary: The only period of service ended with an other-than-honorable discharge. Under the firm's rule an attorney
   decides whether to take such a case, so intake should stop and send it to attorney review rather than collect
   everything.

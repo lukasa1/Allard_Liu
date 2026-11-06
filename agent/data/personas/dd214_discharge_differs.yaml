@@ -1,5 +1,5 @@
 id: dd214_discharge_differs
-split: heldout  # not fixed against directly (see intake_eval/evaluate.py NOTES['split'])
+split: dev
 summary: The veteran says their discharge was honorable, but the DD-214 in the C-file says general (under
   honorable conditions). The DD-214 wins on discharge - prefill records general and a staff task
   notes the difference (scored in the cfile condition). General is not a stop rule, so the case stays eligible

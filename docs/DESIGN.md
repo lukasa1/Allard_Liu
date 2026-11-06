@@ -214,9 +214,9 @@ How to run it and the steps are in the README; this section covers how it works.
 
 ## Evaluation (`intake_eval/`)
 
-Synthetic veterans (`agent/data/personas/`, 20: 14 `dev`, the ones the system was developed
-against, and 6 `heldout`, not fixed against directly; both are optimistic, and the report shows
-them apart) go through **whole cases on the same runtime** the demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
+Synthetic veterans (`agent/data/personas/`, 20, all `dev`: every one informed development
+over many runs, so their numbers are optimistic; a persona marked `heldout` is reported apart, for
+a later held-out set) go through **whole cases on the same runtime** the demo uses. A model plays the veteran from a hidden record (`simulator.py`); the runner submits the
 secure form, signs, countersigns as the attorney and waits for the runtime to go idle between
 steps (`runner.py`).
 
