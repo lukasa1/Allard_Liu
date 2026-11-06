@@ -90,15 +90,26 @@ def letters(n: int) -> str:
 @contextmanager
 def pinned(seed: str, start: datetime = PINNED_START) -> Iterator[None]:
     """Run a case on the pinned clock and seeded IDs; back to live afterwards. One at a time."""
-    global _t, _rng
-    with _lock:
-        if _t is not None:
-            raise RuntimeError("the clock is already pinned: one case at a time")
-        _t, _rng = start, random.Random(seed)
-    poa_documents.CLOCK.update(now=now, token_hex=token_hex)
+    pin(seed, start)
     try:
         yield
     finally:
-        with _lock:
-            _t, _rng = None, None
-        poa_documents.CLOCK.update(poa_documents.LIVE_CLOCK)
+        unpin()
+
+
+def pin(seed: str, start: datetime = PINNED_START, again: bool = False) -> None:
+    """Pin the clock until `unpin()`. `again`: re-pin a pinned clock (the scripted demo pins each
+    new case as the eval pinned the run it replays, so its dates and IDs are the run's)."""
+    global _t, _rng
+    with _lock:
+        if _t is not None and not again:
+            raise RuntimeError("the clock is already pinned: one case at a time")
+        _t, _rng = start, random.Random(seed)
+    poa_documents.CLOCK.update(now=now, token_hex=token_hex)
+
+
+def unpin() -> None:
+    global _t, _rng
+    with _lock:
+        _t, _rng = None, None
+    poa_documents.CLOCK.update(poa_documents.LIVE_CLOCK)

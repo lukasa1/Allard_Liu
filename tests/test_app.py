@@ -228,10 +228,10 @@ def test_autoplay_waits_while_an_agent_is_mid_turn(client, rt, lm, monkeypatch):
     assert client.get(f"/api/cases/{cid}/updates").json()["busy"] is True
 
 
-def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_path, signature_uri):
-    """`intake serve --scripted`: no key, no model; Tab takes the suggestion, Enter sends it, and the
-    cards, as the page does."""
-    from agent.scripted import demo
+@pytest.fixture
+def scripted_demo(monkeypatch, tmp_path):
+    """`intake serve --scripted` on a fresh data dir; the clock is live again afterwards."""
+    from agent import clock
     from demo import app as app_module
 
     monkeypatch.setenv("DEMO_SCRIPTED", "1")
@@ -239,41 +239,86 @@ def test_the_scripted_demo_plays_one_case_to_attorney_review(monkeypatch, tmp_pa
     app_module._scripted_runtime.cache_clear()
     c = TestClient(app)
     cfg = c.get("/api/config").json()
-    assert cfg["ready"] and cfg["scripted"] and [p["id"] for p in cfg["personas"]] == [demo.PERSONA]
-    rt = app_module.get_runtime()
+    assert cfg["ready"] and cfg["scripted"]
+    yield c, app_module.get_runtime  # Start case builds a new runtime: get it after each Start
+    app_module.get_runtime().wait_until_idle()
+    app_module._scripted_runtime.cache_clear()
+    clock.unpin()
+
+
+def _play_scripted(c, get_rt, signature_uri):
+    """The presenter: send the line in the box, use each card as it appears, countersign."""
+    from agent.scripted import demo
+
     cid = c.post("/api/cases", json={"persona_id": demo.PERSONA}).json()["case_id"]
+    rt = get_rt()
+    rt.wait_until_idle()
+    d, used = Demo(c, rt, cid), set()
+    for _ in range(200):
+        d.poll()
+        if (line := d.post("/suggest")["text"]):
+            d.say(line)
+            continue
+        cards = [o for o in d.seen if o["kind"] == "card" and o["seq"] not in used]
+        p = d.panel()
+        if cards:
+            used.add(cards[0]["seq"])
+            card = cards[0]["payload"]
+            if card["type"] == "secure_form":
+                d.post(f"/secure/{card['request_id']}", {"values": c.get(f"/api/cases/{cid}/character").json()["secure"]})
+            elif card["type"] == "signature_pad":
+                d.post("/signature", {"data_uri": signature_uri})
+            elif card["type"] == "sign_button":
+                d.post(f"/sign/{card['form']}", {k: card[k] for k in ("consent_text", "document_id", "version")})
+        elif p["side_state"] == "waiting_on_attorney":
+            d.post("/countersign")
+        else:
+            return d, p, rt
+    raise AssertionError("the scripted demo never came to rest")
+
+
+def test_the_scripted_demo_replays_the_recorded_run_word_for_word(scripted_demo, signature_uri):
+    """No key, no model: the agents answer with the recorded run's model outputs, so the chat is
+    the run's chat, the face note verifies, and the dates and confirmation codes are the run's."""
+    from agent.scripted import demo
+
+    c, get_rt = scripted_demo
+    d, p, rt = _play_scripted(c, get_rt, signature_uri)
+    chat = [{"from": e.data["from"], "text": e.data["text"]} for e in rt.store.events(d.id, types=("message",))]
+    assert chat == demo.story().chat
+    assert (p["stage"], p["owner"], p["prep"]["verified"]) == (5, None, True)
+    assert any(line.startswith("   DEADLINE TO FILE AMA APPEAL 03/13/27") for line in p["face_note"])
+    case = rt.store.get_case(d.id)
+    said = " ".join(m["text"] for m in chat)
+    assert all(f.confirmation in said for f in case.filings.values() if f.confirmation)
+    assert rt.harness.lm.unused() == {} and p["cost"]["total"] == 0  # no model ran
+    assert d.post("/suggest") == {"text": ""}  # the story is over: nothing to send
+    rt.message(d.id, "Thank you.")  # past the recording (only a drifted replay gets here): a fixed note
+    rt.wait_until_idle()
+    assert d.poll()[-1]["payload"]["text"] == demo.OFF_SCRIPT
+
+
+def test_the_scripted_demo_takes_only_the_next_recorded_line(scripted_demo):
+    """The box holds the recorded line for the reply on screen; anything else is refused."""
+    from agent.scripted import demo
+    c, get_rt = scripted_demo
+    cid = c.post("/api/cases", json={"persona_id": demo.PERSONA}).json()["case_id"]
+    rt = get_rt()
     rt.wait_until_idle()
     d = Demo(c, rt, cid)
-
-    def next_line():
-        text = d.post("/suggest")["text"]
-        assert text, "no suggestion where the story has a line"
-        d.say(text)
-
-    for _ in range(4):
-        next_line()
-    assert d.post(
-        f"/secure/{d.card('secure_form')['request_id']}", {"values": c.get(f"/api/cases/{cid}/character").json()["secure"]}
-    ) == {"errors": {}}
-    next_line()
-    d.post("/signature", {"data_uri": signature_uri})
-    d.post("/sign/21-22a", {k: d.card("sign_button")[k] for k in ("consent_text", "document_id", "version")})
-    next_line()
-    d.post("/sign/fee_agreement", {k: d.card("sign_button")[k] for k in ("consent_text", "document_id", "version")})
-    d.post("/countersign")
-    for _ in demo.PASS2_LINES:
-        next_line()
-    p = d.panel()
-    assert (p["stage"], p["owner"], p["prep"]["verified"]) == (5, None, True)
-    assert any(
-        line.startswith("   DEADLINE TO FILE AMA APPEAL 03/13/27") for line in p["face_note"]
-    )
-    assert rt.harness.lm.unused() == {} and p["cost"]["total"] == 0  # no model ran
-    assert d.post("/suggest") == {"text": ""}  # the story is over: nothing to suggest
-    d.say("Thank you.")  # off the script: a fixed note, not the canned failure reply
-    assert d.poll()[-1]["payload"]["text"] == demo.OFF_SCRIPT
-    assert d.post("/suggest") == {"text": ""}  # off the script: no suggestion rather than a wrong one
-    app_module._scripted_runtime.cache_clear()
+    assert d.post("/suggest") == {"text": demo.story().veteran[0]}
+    assert "next line" in d.post("/messages", {"text": "Hold on, what is this?"}, status=409)["detail"]
+    assert d.post("/messages", {"text": demo.story().veteran[1]}, status=409)  # a later line: not yet
+    d.say(demo.story().veteran[0])
+    assert d.post("/suggest") == {"text": demo.story().veteran[1]}
+    rt.store.append_event(cid, "message", {"from": "veteran", "to": "intake", "text": "hm"}, actor="veteran")
+    assert d.post("/suggest") == {"text": ""}  # the veteran spoke last: nothing to answer yet
+    # Start case again: the story starts over on a clean store (the replay reuses the run's case id)
+    r = c.post("/api/cases", json={"persona_id": demo.PERSONA})
+    assert r.status_code == 200 and r.json()["case_id"] == cid
+    rt = get_rt()
+    rt.wait_until_idle()
+    assert Demo(c, rt, cid).post("/suggest") == {"text": demo.story().veteran[0]}
 
 
 def test_the_character_tab_shows_who_the_presenter_plays(client, rt, lm, monkeypatch):
@@ -289,27 +334,6 @@ def test_the_character_tab_shows_who_the_presenter_plays(client, rt, lm, monkeyp
     assert rows["Period 1"] == "Marine Corps active, 2002-06 to 2010-06, honorable discharge"
     assert "Your story: left knee condition" in [s["title"] for s in ch["sections"]]
     assert ch["secure"]["last_name"] == "Alvarez" and ch["secure"]["ssn"]
-
-
-def test_a_scripted_suggestion_follows_the_last_reply_not_a_count(monkeypatch, tmp_path):
-    """Off the script, the box suggests nothing (a count of lines would suggest the wrong one)."""
-    from agent.scripted import demo
-    from demo import app as app_module
-
-    monkeypatch.setenv("DEMO_SCRIPTED", "1")
-    monkeypatch.setenv("POA_DATA_DIR", str(tmp_path))
-    app_module._scripted_runtime.cache_clear()
-    c = TestClient(app)
-    rt = app_module.get_runtime()
-    cid = c.post("/api/cases", json={"persona_id": demo.PERSONA}).json()["case_id"]
-    rt.wait_until_idle()
-    d = Demo(c, rt, cid)
-    assert d.post("/suggest") == {"text": demo.story().veteran[0]}
-    d.say("Hold on, what is this?")  # off the script: intake takes its next scripted turn anyway
-    assert d.post("/suggest") == {"text": demo.story().veteran[1]}  # it answers that reply, not "line 2"
-    rt.store.append_event(cid, "message", {"from": "veteran", "to": "intake", "text": "hm"}, actor="veteran")
-    assert d.post("/suggest") == {"text": ""}  # the veteran spoke last: nothing to answer yet
-    app_module._scripted_runtime.cache_clear()
 
 
 def test_the_live_demo_plays_the_scripted_demos_veteran_only(rt):

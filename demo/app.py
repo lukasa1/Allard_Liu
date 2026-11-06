@@ -22,6 +22,8 @@ from __future__ import annotations
 import base64
 import binascii
 import os
+import shutil
+import threading
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
@@ -69,7 +71,23 @@ def _scripted_runtime() -> Runtime:
     from agent.scripted.lm import ScriptedLM
 
     # An unpriced model name: the traces cost nothing, as no model runs.
-    return make_runtime(config.data_dir() / "demo-scripted", ScriptedLM("scripted", fallback=OFF_SCRIPT), kb=FaqKB())
+    return make_runtime(_scripted_dir(), ScriptedLM("scripted", fallback=OFF_SCRIPT), kb=FaqKB())
+
+
+def _scripted_dir() -> Path:
+    return config.data_dir() / "demo-scripted"
+
+
+def _fresh_scripted_runtime() -> Runtime:
+    """A new story on an empty store: the replay pins the run's seed, so every case it opens has
+    the run's case id and document ids, and the last story's (this server's or an earlier one's)
+    would collide."""
+    _scripted_runtime.cache_clear()
+    shutil.rmtree(_scripted_dir(), ignore_errors=True)
+    return _scripted_runtime()
+
+
+_SCRIPTED_SEND = threading.Lock()  # scripted: a Start, or the check of the next line and its sending
 
 
 def get_runtime() -> Runtime | None:
@@ -132,8 +150,11 @@ def new_case(body: NewCase, rt: Live):
     if scripted():  # one case at a time: a new case starts the story over
         from agent.scripted import demo
 
-        rt.wait_until_idle()
-        demo.story().load(rt.harness.lm)
+        with _SCRIPTED_SEND:  # one Start at a time, and no send in between: the seeded IDs are global
+            rt.wait_until_idle()
+            rt = _fresh_scripted_runtime()
+            demo.story().load(rt.harness.lm)
+            return {"case_id": rt.open_case(body.persona_id).case_id}
     return {"case_id": rt.open_case(body.persona_id).case_id}
 
 
@@ -151,6 +172,14 @@ def chat(case_id: str, body: Chat, rt: Live):
     _case(rt, case_id)
     if not body.text.strip():
         raise HTTPException(400, "empty message")
+    if scripted():  # only the recorded run's next line: the agents' answers are the run's
+        from agent.scripted import demo
+
+        with _SCRIPTED_SEND:
+            if rt.busy(case_id) or body.text.strip() != _scripted_line(rt, case_id).strip():
+                raise HTTPException(409, demo.NOT_NEXT)
+            rt.message(case_id, body.text)
+        return {"text": redact_chat(body.text)[0]}
     rt.message(case_id, body.text)
     return {"text": redact_chat(body.text)[0]}
 
@@ -174,14 +203,19 @@ def suggest(case_id: str, rt: Live):
         running = ", ".join(sorted(rt.running(case_id))).replace("_", " ") or "a queued turn"
         raise HTTPException(409, f"Wait: {running} is still working.")
     if scripted():  # the story's line for the reply last shown; none once the chat left the script
-        from agent.scripted import demo
-
-        chat = rt.store.events(case_id, types=("message",))
-        last = chat[-1].data if chat else None  # the veteran spoke last: nothing to answer yet
-        return {"text": demo.story().suggestion(last["text"] if last and last["from"] != "veteran" else None)}
+        return {"text": _scripted_line(rt, case_id)}
     sim = DSPySimulator(get_persona(case.persona_id), simulator_lm())
     unread = load_chat(sim, [e.data for e in rt.store.events(case_id, types=("message",))])
     return {"text": sim.respond(unread or "(The assistant is waiting for you.)")}
+
+
+def _scripted_line(rt: Runtime, case_id: str) -> str:
+    """The recorded run's veteran line for the reply last shown ("" if the veteran spoke last)."""
+    from agent.scripted import demo
+
+    chat = rt.store.events(case_id, types=("message",))
+    last = chat[-1].data if chat else None
+    return demo.story().suggestion(last["text"] if last and last["from"] != "veteran" else None)
 
 
 @app.get("/api/cases/{case_id}/character")

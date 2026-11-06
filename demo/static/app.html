@@ -165,8 +165,9 @@ function showDoc(form) {
   const cfg = await api("/api/config");
   $("#persona").innerHTML = cfg.personas.map(p => `<option value="${p.id}" title="${esc(p.summary)}">${esc(p.name)} · ${p.id.replace(/_/g, " ")}</option>`).join("");
   if (!cfg.ready) { $("#banner").textContent = cfg.message; $("#banner").style.display = "block"; $("#start").disabled = true; }
-  if (cfg.scripted) {  // no model; the agents follow agent/scripted/demo.py
-    $("#banner").textContent = "Scripted demo: no model. Press Tab to take the suggested line, Enter to send, and use the cards as they appear. The agents follow a script; everything else is the real code.";
+  if (cfg.scripted) {  // no model; the agents replay a recorded run (agent/scripted/demo.py)
+    isScripted = true; $("#text").readOnly = true;
+    $("#banner").textContent = "Scripted demo: no model. The agents replay one recorded eval run word for word; everything else is the real code. The box holds the veteran's next line from that run: press Enter to send it, and use the cards as they appear.";
     $("#banner").style.display = "block";
   }
 })();
@@ -210,21 +211,29 @@ $("#chat").addEventListener("submit", async (e) => {
   // Shown before the POST returns, so a reply (a crisis line) can't land above it; the server's
   // redacted text (ID numbers hidden) replaces it when the POST returns.
   const mine = say(t, "user");
-  try { mine.textContent = (await api(casePath("/messages"), {text: t})).text; poll(); } catch (err) { mine.remove(); say(err.message, "sys"); }
+  try { mine.textContent = (await api(casePath("/messages"), {text: t})).text; poll(); }
+  catch (err) { mine.remove(); say(err.message, "sys"); suggestedAt = -1; }  // ask for the line again
 });
 
-// The suggestion: grey text in the empty box; Tab takes it. Asked for once per idle (keyed by the
+// The suggestion: grey text in the empty box; Tab takes it (scripted: the box holds the line itself,
+// read-only). Asked for once per idle (keyed by the
 // outbox position), so it always answers what is on screen; none when the server has none.
 const PLACEHOLDER = "Type a message as the veteran";
-let suggestion = "", suggestedAt = -1;
-function clearSuggestion() { suggestion = ""; $("#text").placeholder = PLACEHOLDER; }
+let suggestion = "", suggestedAt = -1, isScripted = false;
+// Scripted: the box is read-only and holds the next line itself, not a Tab suggestion.
+function clearSuggestion() {
+  suggestion = "";
+  $("#text").placeholder = isScripted ? "The veteran's next line appears here when the agents are done" : PLACEHOLDER;
+  if (isScripted) $("#text").value = "";
+}
 async function suggest(id) {
   suggestedAt = since; clearSuggestion();
   try {
     const text = (await api(casePath("/suggest"), {})).text || "";
     if (id !== caseId || suggestedAt !== since) return;  // the chat moved on meanwhile
     suggestion = text;
-    $("#text").placeholder = text ? `${text}   ⇥ Tab` : PLACEHOLDER;
+    if (isScripted) $("#text").value = text;
+    else $("#text").placeholder = text ? `${text}   ⇥ Tab` : PLACEHOLDER;
   } catch (e) { /* busy again (409) or no model: no suggestion */ }
 }
 $("#text").addEventListener("keydown", (e) => {

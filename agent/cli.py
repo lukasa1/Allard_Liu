@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--scripted", action="store_true",
-                   help="play one scripted case with no model (agent/scripted/demo.py): no key, no cost")
+                   help="replay one recorded eval case with no model (agent/scripted/demo.py): no key, no cost")
     p.set_defaults(func=cmd_serve)
 
     def max_cost_arg(p: argparse.ArgumentParser) -> None:
