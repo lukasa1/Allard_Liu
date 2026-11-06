@@ -14,24 +14,8 @@ time:
 | **Customer support** (`agent/support/`) | Answers the veteran while nobody else is talking to them; read-only; flags changes to the orchestrator. | built |
 | **Claims investigation** | 526EZ / 0995 / 0996 / 4142, attorney-approved filing. | not built |
 
-Every agent runs on **Claude Haiku 5.5 through OpenRouter** (`openrouter/anthropic/claude-haiku-5.5`).
-VA, filing, eFax and the attorney are simulated. **Synthetic data only**: every veteran, C-file
-and number in the repo is made up, and `config/representative.json` holds placeholders.
-
-## Quick start
-
-```bash
-uv sync
-uv run pytest -q                 # about two minutes, no key, no network (scripted fake model)
-cp .env.example .env             # set OPENROUTER_API_KEY for anything live
-uv run intake serve              # the web demo: http://localhost:8000
-uv run intake serve --scripted   # the same demo with no model: no key, no cost
-uv run intake --help             # serve | simulate | eval | support-eval | personas
-```
-
-Without `OPENROUTER_API_KEY` the server still starts and the page says to set it; `simulate`,
-`eval` and `support-eval` exit with the same message. There are no offline agents: the tests use
-a scripted fake model through the real code, and the scripted demo replays one case.
+Model: `openrouter/anthropic/claude-haiku-5.5` for every agent. `config/representative.json` holds
+placeholders.
 
 ## Architecture
 
@@ -85,9 +69,6 @@ refused move is logged and its reason goes back to the model.
   malformed model output goes through DSPy's JSON adapter fallback, then one retry of the turn.
   An owner's turn that ends with no reply while the veteran waits is asked once more to answer
   (`[nudge]`); a second empty turn sends the canned reply.
-- **Skills in context:** the skills a step needs are put in the agent's context, chosen in code
-  from the case (intake by stage, the orchestrator's stage playbook, claims prep's two); others
-  load on demand with `read_skill`.
 
 ### Agents and their tools
 
@@ -190,9 +171,9 @@ pages it read this turn.
 
 ### Skills, memory, traces
 
-- **Skills** (`agent/skills/<agent>/<skill>/SKILL.md`): the index (name and description) and the
-  skills preloaded for the step (see the runtime protocol) are in a prompt; the model loads any other
-  with `read_skill`. Orchestrator: stage-playbook, routing, flags.
+- **Skills** (`agent/skills/<agent>/<skill>/SKILL.md`): the index (name and description) is in the
+  prompt, and code preloads the skills a step needs from the case (intake by stage, the
+  orchestrator's stage playbook, claims prep's two); the model loads any other with `read_skill`. Orchestrator: stage-playbook, routing, flags.
   Intake: screen-veteran, poa-and-fees, intent-to-file, close-gaps. Claims prep: face-note-format,
   cite-check. Support: answer-questions, case-status, hand-to-a-person.
 - **Memory store** (`agent/store.py`, SQLite): the `cases` table holds the case file as JSON plus
@@ -207,44 +188,29 @@ pages it read this turn.
 
 ## Built on
 
-The 21-22a tools wrap the POA skill (`poa_skill/`). The knowledge base is a web search limited to
+The knowledge base is a web search limited to
 official VA and federal sites plus `law.cornell.edu` for 38 CFR and 38 USC (`agent/qa.py`). Support
 returns no typed result: its flags and escalations are events.
 
 ## The demo
 
-`uv run intake serve` (needs the key), then http://localhost:8000:
+How to run it and the steps are in the README; this section covers how it works.
 
-**One test veteran:** the demo, live or scripted, currently plays one persona, Hector Alvarez
-(`recent_decision`). All 20 personas, Hector included, run in the eval (`intake simulate`, `intake eval`).
-
-**No key:** `uv run intake serve --scripted` plays the same case with no model. Press **Tab**
-to take the line the input box suggests and **Enter** to send it, submit the secure form (its test
-values are filled in), sign (draw, or choose Type for your name in a script font), and countersign
-as the cards appear. The agents follow the script, so typing something else won't change their
-answers; the box then suggests nothing rather than a line that no longer fits. One case at a time:
-Start case starts the story over.
-
-1. Press **Start case** (the test veteran's synthetic C-file is what claims prep pulls). The left
-   side is the **veteran's screen** (the chat and its cards, documents shown in the card); above
-   it, **You are playing…** lists who you play (the same facts and condition stories the eval's
-   simulated veteran plays from), and the secure form is filled in
-   with them. The right side is the **firm's, internal**: Attorney (countersign, the documents),
-   Case, Answers, Face note, Event log. You type as the veteran; whenever the agents are idle the
-   input box suggests a reply in grey (the eval's simulated veteran writes it from the chat so far,
-   about $0.0005), and **Tab** takes it. No suggestion while any turn is queued or running, claims
-   prep in the background included.
-2. Intake screens you, then shows the **secure form** for the ID numbers, the **21-22a preview**, a
-   signature pad and a **Sign** card, then the **fee agreement** preview and its Sign card.
-3. You also play the attorney: **Countersign both documents** in the staff box (refused at any
-   other time). Intake files the 21-22a and the intent to file and faxes the fee agreement to OGC;
-   the chat shows the simulated confirmation numbers.
-4. Claims prep reads the C-file in the background while support answers your messages. Pass 2
-   then asks only the gaps, a confirmation of each C-file conflict, and the narrative prompts. The
-   case ends at stage 5, ready for attorney review.
-5. The case panel shows the stage and owner, the orchestrator's decisions (refused moves
-   included), filings, tasks, flags, every answer with its source, the face note, the documents,
-   the event log and the cost per agent.
+- **One test veteran:** the demo, live or scripted, plays one persona, Hector Alvarez
+  (`recent_decision`); all 20 run in the eval. **You are playing…** shows the facts the eval's
+  simulated veteran plays from, and the secure form is filled in with them.
+- **Scripted mode** replays the midpoint eval's `recent_decision` run. Every model call is answered
+  with the text the model gave in that run (`agent/scripted/demo_story.json`, recorded by
+  `agent/scripted/record.py` from the run's traces), through the real harness, parsers, tools and
+  guards, on the clock and IDs the eval pinned, so the chat, dates and confirmation codes are the
+  run's. The server takes only the veteran's next recorded line. One case at a time: Start case
+  starts the story over.
+- **Live mode:** whenever the agents are idle, the input box suggests a reply in grey (the eval's
+  simulated veteran writes it from the chat so far, about $0.0005); **Tab** takes it. No suggestion
+  while any turn is queued or running, claims prep in the background included.
+- **Staff side:** countersigning is accepted only while the Attorney tab says it is waiting. The case panel shows the stage and owner, the orchestrator's decisions (refused moves
+  included), filings, tasks, flags, every answer with its source, the face note, the documents,
+  the event log and the cost per agent.
 
 ## Evaluation (`intake_eval/`)
 
@@ -278,14 +244,7 @@ steps (`runner.py`).
 - **Persona question** (`asks_question_mid_intake`): an LLM judge (`intake_eval/judge.py`) grades
   intake's answer against the persona's answer key.
 
-```bash
-uv run intake simulate --persona baseline_clean --max-cost 1    # one case, printed
-uv run intake eval --personas baseline_clean --conditions cfile --name smoke --max-cost 1
-uv run intake eval --name full --max-cost 20                    # 20 personas x 3 conditions
-uv run intake support-eval --max-cost 1
-```
-
-Each run prints an estimated number of model calls first (about 270 per case; about 4 per
+The commands are in the README. Each run prints an estimated number of model calls first (about 270 per case; about 4 per
 support message), and **`--max-cost`** (USD, from the traces: agents, kb_search and the simulated
 veteran) stops the run once it is passed. It is checked between steps (a case step, or a support
 message), so the step that crosses it finishes first. A model slug with no price in
@@ -339,7 +298,7 @@ agent/        runtime, harness, orchestrator, stages, casefile, store, traces, i
   skills/       SKILL.md files per agent
   data/personas/  the synthetic veterans
   scripted/     lm.py (scripted fake LM), kb.py (offline FAQ), prep.py (claims prep's correct reading),
-                demo.py (the scripted demo's story)
+                demo.py, demo_story.json, record.py (the scripted demo: a recorded run, replayed)
 poa_skill/    21-22a and fee agreement: vault, documents, PDF fill and signing
 demo/         app.py (FastAPI) and static/app.html
 intake_eval/  simulator, runner, scoring, evaluate (report), judge (LLM judge), support eval
